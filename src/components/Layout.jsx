@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Home, Trophy, Calendar, User, LogOut, Settings } from 'lucide-react'
+import { Home, Trophy, Calendar, User, LogOut, Settings, ClipboardList } from 'lucide-react'
 
 export default function Layout({ session }) {
   const navigate = useNavigate()
@@ -16,6 +16,7 @@ export default function Layout({ session }) {
     { to: '/rodada', icon: Calendar, label: 'Rodada' },
     { to: '/perfil', icon: User, label: 'Perfil' },
     { to: '/admin', icon: Settings, label: 'Admin' },
+    { to: '/confirmacao', icon: ClipboardList, label: 'Presença' },
   ]
 
   return (
@@ -140,4 +141,3 @@ export default function Layout({ session }) {
       </nav>
     </div>
   )
-}

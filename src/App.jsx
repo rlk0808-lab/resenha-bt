@@ -8,6 +8,8 @@ import Rodada from './pages/Rodada'
 import Perfil from './pages/Perfil'
 import Admin from './pages/Admin'
 import Layout from './components/Layout'
+import Confirmacao from './pages/Confirmacao'
+
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -46,8 +48,8 @@ export default function App() {
           <Route path="rodada" element={<Rodada />} />
           <Route path="admin" element={<Admin session={session} />} />
           <Route path="perfil" element={<Perfil />} />
+          <Route path="confirmacao" element={<Confirmacao session={session} />} />
         </Route>
       </Routes>
     </BrowserRouter>
   )
-}
