@@ -49,7 +49,9 @@ export default function App() {
           <Route path="admin" element={<Admin session={session} />} />
           <Route path="perfil" element={<Perfil />} />
           <Route path="confirmacao" element={<Confirmacao session={session} />} />
-        <Route path="cadastro" element={<Cadastro />} />
+          <Route path="cadastro" element={<Cadastro />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   )
+}
