@@ -9,7 +9,7 @@ import Perfil from './pages/Perfil'
 import Admin from './pages/Admin'
 import Layout from './components/Layout'
 import Confirmacao from './pages/Confirmacao'
-
+import Cadastro from './pages/Cadastro'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -49,7 +49,7 @@ export default function App() {
           <Route path="admin" element={<Admin session={session} />} />
           <Route path="perfil" element={<Perfil />} />
           <Route path="confirmacao" element={<Confirmacao session={session} />} />
-        </Route>
+        <Route path="cadastro" element={<Cadastro />} />
       </Routes>
     </BrowserRouter>
   )
