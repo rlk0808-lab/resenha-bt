@@ -101,7 +101,7 @@ export default function Admin({ session }) {
   }
 
   async function carregarJogadores() {
-    const { data } = await supabase.from("jogadores").select("*").order("nome", { ascending: true });
+    const { data } = await supabase.from("jogadores").select("*").eq("ativo", true).order("nome", { ascending: true });
     setJogadores(data || []);
   }
 
