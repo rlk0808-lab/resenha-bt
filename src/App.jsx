@@ -6,6 +6,7 @@ import Home from './pages/Home'
 import Classificacao from './pages/Classificacao'
 import Rodada from './pages/Rodada'
 import Perfil from './pages/Perfil'
+import Admin from './pages/Admin'
 import Layout from './components/Layout'
 
 export default function App() {
@@ -43,6 +44,7 @@ export default function App() {
           <Route index element={<Home />} />
           <Route path="classificacao" element={<Classificacao />} />
           <Route path="rodada" element={<Rodada />} />
+          <Route path="admin" element={<Admin session={session} />} />
           <Route path="perfil" element={<Perfil />} />
         </Route>
       </Routes>
