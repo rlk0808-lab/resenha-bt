@@ -331,7 +331,7 @@ export default function Admin({ session }) {
   }
 
   function copiarLink(token) {
-    const url = `${window.location.origin}/cadastro?token=${token}`;
+    const url = `https://resenha-bt.vercel.app/cadastro?token=${token}`;
     navigator.clipboard.writeText(url).then(() => {
       mostrarMensagem("✅ Link copiado!");
     });
