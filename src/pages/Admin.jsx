@@ -231,7 +231,14 @@ export default function Admin({ session }) {
 
   function calcularRankingLocal(jogosChave, chave) {
     const stats = {};
-    const addJogador = (nome) => { if (nome && !stats[nome]) stats[nome] = { nome, pts: 0, vitorias: 0, saldo: 0 }; };
+    const confrontos = {}; // confrontos[a][b] = vitórias de a contra b
+
+    const addJogador = (nome) => {
+      if (nome && !stats[nome]) {
+        stats[nome] = { nome, pts: 0, vitorias: 0, saldo: 0 };
+        confrontos[nome] = {};
+      }
+    };
 
     for (const jogo of jogosChave) {
       if (jogo.placar_a === null || jogo.placar_b === null) continue;
@@ -245,20 +252,54 @@ export default function Admin({ session }) {
       const ptsPerd = venceuA ? placar_b : placar_a;
       const vencedores = venceuA ? jogadoresA : jogadoresB;
       const perdedores = venceuA ? jogadoresB : jogadoresA;
-      vencedores.forEach(n => { stats[n].pts += ptsVenc; stats[n].vitorias += 1; stats[n].saldo += saldo; });
-      perdedores.forEach(n => { stats[n].pts += ptsPerd; stats[n].saldo -= saldo; });
+
+      vencedores.forEach(n => {
+        stats[n].pts += ptsVenc;
+        stats[n].vitorias += 1;
+        stats[n].saldo += saldo;
+      });
+      perdedores.forEach(n => {
+        stats[n].pts += ptsPerd;
+        stats[n].saldo -= saldo;
+      });
+
+      // Registra confronto direto entre jogadores das duplas oponentes
+      jogadoresA.forEach(a => {
+        jogadoresB.forEach(b => {
+          if (!confrontos[a]) confrontos[a] = {};
+          if (!confrontos[b]) confrontos[b] = {};
+          if (venceuA) {
+            confrontos[a][b] = (confrontos[a][b] || 0) + 1;
+          } else {
+            confrontos[b][a] = (confrontos[b][a] || 0) + 1;
+          }
+        });
+      });
     }
 
-    const ranking = Object.values(stats).sort((a, b) => b.pts - a.pts || b.saldo - a.saldo);
+    // Função de desempate por confronto direto: retorna vitórias de a contra b
+    function vitoriasDiretas(nomeA, nomeB) {
+      return (confrontos[nomeA]?.[nomeB] || 0) - (confrontos[nomeB]?.[nomeA] || 0);
+    }
+
+    const jogadoresList = Object.values(stats);
+
+    // Ordena pelos 3 critérios: 1) pts do dia, 2) saldo de games, 3) confronto direto
+    jogadoresList.sort((a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.saldo !== a.saldo) return b.saldo - a.saldo;
+      return vitoriasDiretas(b.nome, a.nome);
+    });
+
     const ehEspecial = rodadaSelecionada?.tipo === "especial";
-    ranking.forEach((j, idx) => {
+    jogadoresList.forEach((j, idx) => {
       const ptosFixos = chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8;
       const bonusVitorias = j.vitorias * 3;
       const bonusCampeao = (chave === "prata" && idx === 0 && !ehEspecial) ? 3 : 0;
       j.ptosLiga = ptosFixos + bonusVitorias + bonusCampeao;
       j.posicao = idx + 1;
     });
-    return ranking;
+    return jogadoresList;
   }
 
   async function calcularPontuacao() {
@@ -312,29 +353,18 @@ export default function Admin({ session }) {
     setGerandoConvite(true);
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
     const { error } = await supabase.from("convites").insert({
-      token,
-      email: "",
-      usado: false,
-      criado_por: session?.user?.id || null,
-      expires_at,
+      token, email: "", usado: false,
+      criado_por: session?.user?.id || null, expires_at,
     });
-
-    if (error) {
-      mostrarMensagem("Erro ao gerar convite: " + error.message, "erro");
-    } else {
-      mostrarMensagem("✅ Convite gerado!");
-      carregarConvites();
-    }
+    if (error) mostrarMensagem("Erro ao gerar convite: " + error.message, "erro");
+    else { mostrarMensagem("✅ Convite gerado!"); carregarConvites(); }
     setGerandoConvite(false);
   }
 
   function copiarLink(token) {
     const url = `https://resenha-bt.vercel.app/cadastro?token=${token}`;
-    navigator.clipboard.writeText(url).then(() => {
-      mostrarMensagem("✅ Link copiado!");
-    });
+    navigator.clipboard.writeText(url).then(() => mostrarMensagem("✅ Link copiado!"));
   }
 
   async function revogarConvite(id) {
@@ -348,45 +378,28 @@ export default function Admin({ session }) {
 
   async function carregarPendentes() {
     setLoadingPendentes(true);
-    const { data } = await supabase
-      .from("cadastros_pendentes")
-      .select("*")
-      .eq("status", "pendente")
-      .order("created_at", { ascending: true });
+    const { data } = await supabase.from("cadastros_pendentes").select("*")
+      .eq("status", "pendente").order("created_at", { ascending: true });
     setPendentes(data || []);
     setLoadingPendentes(false);
   }
 
   async function aprovarCadastro(pendente) {
     setAprovando(pendente.id);
-    const { error } = await supabase
-      .from("cadastros_pendentes")
-      .update({ status: "aprovado" })
-      .eq("id", pendente.id);
-
-    if (error) {
-      mostrarMensagem("Erro ao aprovar: " + error.message, "erro");
-    } else {
-      mostrarMensagem(`✅ ${pendente.nome} aprovado!`);
-      carregarPendentes();
-    }
+    const { error } = await supabase.from("cadastros_pendentes")
+      .update({ status: "aprovado" }).eq("id", pendente.id);
+    if (error) mostrarMensagem("Erro ao aprovar: " + error.message, "erro");
+    else { mostrarMensagem(`✅ ${pendente.nome} aprovado!`); carregarPendentes(); }
     setAprovando(null);
   }
 
   async function rejeitarCadastro(pendente) {
     if (!confirm(`Rejeitar cadastro de ${pendente.nome}?`)) return;
     setAprovando(pendente.id);
-    const { error } = await supabase
-      .from("cadastros_pendentes")
-      .update({ status: "rejeitado" })
-      .eq("id", pendente.id);
-
-    if (error) {
-      mostrarMensagem("Erro ao rejeitar: " + error.message, "erro");
-    } else {
-      mostrarMensagem(`${pendente.nome} rejeitado.`);
-      carregarPendentes();
-    }
+    const { error } = await supabase.from("cadastros_pendentes")
+      .update({ status: "rejeitado" }).eq("id", pendente.id);
+    if (error) mostrarMensagem("Erro ao rejeitar: " + error.message, "erro");
+    else { mostrarMensagem(`${pendente.nome} rejeitado.`); carregarPendentes(); }
     setAprovando(null);
   }
 
@@ -401,8 +414,6 @@ export default function Admin({ session }) {
 
   return (
     <div style={styles.container}>
-
-      {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerIcon}>⚙️</div>
         <div>
@@ -411,14 +422,12 @@ export default function Admin({ session }) {
         </div>
       </div>
 
-      {/* Mensagem */}
       {mensagem && (
         <div style={{ ...styles.mensagem, background: mensagem.tipo === "erro" ? "#c0392b" : "#27ae60" }}>
           {mensagem.texto}
         </div>
       )}
 
-      {/* Abas */}
       <div style={styles.abas}>
         <button onClick={() => setAbaAtiva("jogos")}
           style={{ ...styles.aba, ...(abaAtiva === "jogos" ? styles.abaAtiva : {}) }}>
@@ -434,10 +443,8 @@ export default function Admin({ session }) {
         </button>
       </div>
 
-      {/* ═══ ABA JOGOS ═══ */}
       {abaAtiva === "jogos" && (
         <>
-          {/* Seletor Rodada */}
           <div style={styles.card}>
             <label style={styles.label}>Rodada</label>
             <div style={styles.rodadasRow}>
@@ -453,7 +460,6 @@ export default function Admin({ session }) {
             </div>
           </div>
 
-          {/* Seletor Chave */}
           <div style={styles.chaveRow}>
             <button onClick={() => setChaveAtiva("ouro")}
               style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>
@@ -465,7 +471,6 @@ export default function Admin({ session }) {
             </button>
           </div>
 
-          {/* Sorteio */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>
               🎲 Sorteio
@@ -475,7 +480,6 @@ export default function Admin({ session }) {
             <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio</button>
           </div>
 
-          {/* Preview Sorteio */}
           {sorteioPreview && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>👀 Preview do Sorteio</h2>
@@ -501,7 +505,6 @@ export default function Admin({ session }) {
             </div>
           )}
 
-          {/* Formulário placar */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>
               {editandoId ? "✏️ Editando placar" : "➕ Inserir placar"}
@@ -535,7 +538,6 @@ export default function Admin({ session }) {
             </div>
           </div>
 
-          {/* Lista jogos */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>
               📋 Jogos da rodada
@@ -579,7 +581,6 @@ export default function Admin({ session }) {
               )}
           </div>
 
-          {/* Pontuação */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>🏆 Pontuação da Liga</h2>
             <p style={styles.infoText}>Calcule após inserir todos os placares das duas chaves.</p>
@@ -588,7 +589,6 @@ export default function Admin({ session }) {
             </button>
           </div>
 
-          {/* Preview Ranking */}
           {rankingPreview && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>👀 Preview — Confirmar antes de salvar</h2>
@@ -618,7 +618,6 @@ export default function Admin({ session }) {
         </>
       )}
 
-      {/* ═══ ABA CONVITES ═══ */}
       {abaAtiva === "convites" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>🔗 Gerar Convite</h2>
@@ -626,7 +625,6 @@ export default function Admin({ session }) {
           <button onClick={gerarNovoConvite} disabled={gerandoConvite} style={styles.btnSalvar}>
             {gerandoConvite ? "Gerando..." : "🔗 Gerar novo link de convite"}
           </button>
-
           <div style={{ marginTop: 20 }}>
             <div style={styles.label}>Convites recentes</div>
             {loadingConvites ? <p style={styles.loadingText}>Carregando...</p>
@@ -644,7 +642,7 @@ export default function Admin({ session }) {
                           Expira: {new Date(c.expires_at).toLocaleDateString("pt-BR")}
                         </div>
                         <div style={styles.conviteLink}>
-                          {window.location.origin}/cadastro?token={c.token.substring(0, 8)}...
+                          resenha-bt.vercel.app/cadastro?token={c.token.substring(0, 8)}...
                         </div>
                       </div>
                       <div style={styles.jogoAcoes}>
@@ -660,14 +658,12 @@ export default function Admin({ session }) {
         </div>
       )}
 
-      {/* ═══ ABA APROVAÇÕES ═══ */}
       {abaAtiva === "aprovacoes" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>
             👤 Cadastros Pendentes
             {pendentes.length > 0 && <span style={styles.badgeCount}>{pendentes.length}</span>}
           </h2>
-
           {loadingPendentes ? <p style={styles.loadingText}>Carregando...</p>
             : pendentes.length === 0 ? (
               <div style={styles.emptyAprovacao}>
@@ -685,18 +681,10 @@ export default function Admin({ session }) {
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <button
-                    onClick={() => aprovarCadastro(p)}
-                    disabled={aprovando === p.id}
-                    style={styles.btnAprovar}
-                  >
+                  <button onClick={() => aprovarCadastro(p)} disabled={aprovando === p.id} style={styles.btnAprovar}>
                     {aprovando === p.id ? "..." : "✅ Aprovar"}
                   </button>
-                  <button
-                    onClick={() => rejeitarCadastro(p)}
-                    disabled={aprovando === p.id}
-                    style={styles.btnRejeitar}
-                  >
+                  <button onClick={() => rejeitarCadastro(p)} disabled={aprovando === p.id} style={styles.btnRejeitar}>
                     {aprovando === p.id ? "..." : "✕ Rejeitar"}
                   </button>
                 </div>
@@ -704,7 +692,6 @@ export default function Admin({ session }) {
             ))}
         </div>
       )}
-
     </div>
   );
 }
