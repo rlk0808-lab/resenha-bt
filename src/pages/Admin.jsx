@@ -314,27 +314,49 @@ export default function Admin({ session }) {
   }
 
   async function salvarPontuacao() {
-    if (!rankingPreview) return;
-    setCalculando(true);
-    const todos = [...rankingPreview.ouro, ...rankingPreview.prata];
-    const erros = [];
-    for (const j of todos) {
-      const jogador = jogadores.find(jg => jg.nome === j.nome);
-      if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
-      const { data: existente } = await supabase.from("pontuacao").select("id")
-        .eq("jogador_id", jogador.id).eq("rodada_id", rodadaSelecionada.id).single().catch(() => ({ data: null }));
-      if (existente) {
-        const { error } = await supabase.from("pontuacao").update({ pontos: j.ptosLiga, vitorias: j.vitorias }).eq("id", existente.id);
-        if (error) erros.push(error.message);
-      } else {
-        const { error } = await supabase.from("pontuacao").insert({ jogador_id: jogador.id, rodada_id: rodadaSelecionada.id, pontos: j.ptosLiga, vitorias: j.vitorias });
-        if (error) erros.push(error.message);
-      }
+  if (!rankingPreview) return;
+  setCalculando(true);
+  const todos = [...rankingPreview.ouro, ...rankingPreview.prata];
+  const erros = [];
+
+  for (const j of todos) {
+    const jogador = jogadores.find(jg => jg.nome === j.nome);
+    if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
+
+    // Busca sem .single() para evitar erro 406
+    const { data: existentes, error: erroBusca } = await supabase
+      .from("pontuacao")
+      .select("id")
+      .eq("jogador_id", jogador.id)
+      .eq("rodada_id", rodadaSelecionada.id);
+
+    if (erroBusca) { erros.push(erroBusca.message); continue; }
+
+    const existente = existentes && existentes.length > 0 ? existentes[0] : null;
+
+    if (existente) {
+      const { error } = await supabase
+        .from("pontuacao")
+        .update({ pontos: j.ptosLiga, vitorias: j.vitorias })
+        .eq("id", existente.id);
+      if (error) erros.push(error.message);
+    } else {
+      const { error } = await supabase
+        .from("pontuacao")
+        .insert({
+          jogador_id: jogador.id,
+          rodada_id: rodadaSelecionada.id,
+          pontos: j.ptosLiga,
+          vitorias: j.vitorias
+        });
+      if (error) erros.push(error.message);
     }
-    if (erros.length > 0) mostrarMensagem("Erros: " + erros.join(", "), "erro");
-    else { mostrarMensagem("✅ Pontuação salva!"); setRankingPreview(null); }
-    setCalculando(false);
   }
+
+  if (erros.length > 0) mostrarMensagem("Erros: " + erros.join(", "), "erro");
+  else { mostrarMensagem("✅ Pontuação salva!"); setRankingPreview(null); }
+  setCalculando(false);
+}
 
   // ─── CONVITES ────────────────────────────────────────────────────────────
 
