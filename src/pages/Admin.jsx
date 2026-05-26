@@ -86,6 +86,8 @@ export default function Admin({ session }) {
   const [rankingPreview, setRankingPreview] = useState(null);
   const [sorteioPreview, setSorteioPreview] = useState(null);
   const [salvandoSorteio, setSalvandoSorteio] = useState(false);
+  const [fechandoLista, setFechandoLista] = useState(false);
+  const [previewFechamento, setPreviewFechamento] = useState(null);
   const [novoJogo, setNovoJogo] = useState({
     dupla_a_1: "", dupla_a_2: "", dupla_b_1: "", dupla_b_2: "", placar_a: "", placar_b: "",
   });
@@ -108,7 +110,7 @@ export default function Admin({ session }) {
 
   function mostrarMensagem(texto, tipo = "sucesso") {
     setMensagem({ texto, tipo });
-    setTimeout(() => setMensagem(null), 4000);
+    setTimeout(() => setMensagem(null), 5000);
   }
 
   async function carregarRodadas() {
@@ -219,6 +221,188 @@ export default function Admin({ session }) {
     setSalvandoSorteio(false);
   }
 
+  // ─── FECHAR LISTA E SORTEAR ──────────────────────────────────────────────
+  async function prepararFechamento() {
+    const agora = new Date();
+    const diaSemana = agora.getDay(); // 5 = sexta
+    const hora = agora.getHours();
+    const foraDoPrazo = diaSemana !== 5 || hora < 14;
+
+    const { data: proximasRodadas } = await supabase
+      .from("rodadas").select("*").eq("status", "proxima").limit(1);
+    const rodadaAlvo = proximasRodadas?.[0];
+
+    if (!rodadaAlvo) {
+      mostrarMensagem("Nenhuma rodada com status 'proxima' encontrada.", "erro");
+      return;
+    }
+
+    const { data: confirmacoes } = await supabase
+      .from("confirmacoes")
+      .select("*, jogadores(id, nome, chave)")
+      .eq("rodada_id", rodadaAlvo.id)
+      .eq("status", "confirmado")
+      .order("created_at", { ascending: true });
+
+    if (!confirmacoes || confirmacoes.length < 8) {
+      mostrarMensagem("Confirmados insuficientes para sortear (mínimo 8).", "erro");
+      return;
+    }
+
+    // Busca ranking da rodada anterior
+    const { data: rodadaAnterior } = await supabase
+      .from("rodadas").select("*").eq("status", "finalizada")
+      .order("numero", { ascending: false }).limit(1);
+    const rodAnt = rodadaAnterior?.[0];
+
+    let rankAnt = { ouro: [], prata: [] };
+    if (rodAnt) {
+      const { data: rank } = await supabase
+        .from("ranking_rodada")
+        .select("*, jogadores(id, nome)")
+        .eq("rodada_id", rodAnt.id)
+        .order("posicao", { ascending: true });
+      if (rank) {
+        rankAnt.ouro = rank.filter(r => r.chave === "ouro");
+        rankAnt.prata = rank.filter(r => r.chave === "prata");
+      }
+    }
+
+    const confirmadosNomes = new Set(confirmacoes.map(c => c.jogadores?.nome));
+
+    let jogadoresOuro = [];
+    let jogadoresPrata = [];
+
+    if (rankAnt.ouro.length === 0 && rankAnt.prata.length === 0) {
+      // Primeira rodada: usa chave atual do jogador
+      jogadoresOuro = confirmacoes
+        .filter(c => c.jogadores?.chave === "ouro")
+        .map(c => c.jogadores?.nome);
+      jogadoresPrata = confirmacoes
+        .filter(c => c.jogadores?.chave === "prata")
+        .map(c => c.jogadores?.nome);
+    } else {
+      // Regra normal: 3 últimos descem, 3 primeiros da prata sobem
+      const ouroDescem = rankAnt.ouro.slice(-3).map(r => r.jogadores?.nome);
+      const prataSobem = rankAnt.prata.slice(0, 3).map(r => r.jogadores?.nome);
+
+      const ouroFicam = rankAnt.ouro
+        .filter(r => !ouroDescem.includes(r.jogadores?.nome) && confirmadosNomes.has(r.jogadores?.nome))
+        .map(r => r.jogadores?.nome);
+
+      const prataSobemConf = prataSobem.filter(n => confirmadosNomes.has(n));
+
+      jogadoresOuro = [...ouroFicam, ...prataSobemConf];
+
+      const nomesOuro = new Set(jogadoresOuro);
+      jogadoresPrata = confirmacoes
+        .filter(c => !nomesOuro.has(c.jogadores?.nome))
+        .map(c => c.jogadores?.nome);
+    }
+
+    if (jogadoresOuro.length < 4) {
+      mostrarMensagem(`Ouro com apenas ${jogadoresOuro.length} confirmados. Mínimo 4.`, "erro");
+      return;
+    }
+    if (jogadoresPrata.length < 4) {
+      mostrarMensagem(`Prata com apenas ${jogadoresPrata.length} confirmados. Mínimo 4.`, "erro");
+      return;
+    }
+
+    setPreviewFechamento({
+      rodada: rodadaAlvo,
+      ouro: jogadoresOuro,
+      prata: jogadoresPrata,
+      total: confirmacoes.length,
+      foraDoPrazo,
+    });
+  }
+
+  async function confirmarFechamento() {
+    if (!previewFechamento) return;
+    setFechandoLista(true);
+
+    const { rodada, ouro: jogOuro, prata: jogPrata } = previewFechamento;
+    const erros = [];
+
+    // 1. Atualiza chave de cada jogador confirmado
+    for (const nome of jogOuro) {
+      const jog = jogadores.find(j => j.nome === nome);
+      if (!jog) continue;
+      const { error } = await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jog.id);
+      if (error) erros.push(`chave ${nome}: ${error.message}`);
+    }
+    for (const nome of jogPrata) {
+      const jog = jogadores.find(j => j.nome === nome);
+      if (!jog) continue;
+      const { error } = await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
+      if (error) erros.push(`chave ${nome}: ${error.message}`);
+    }
+
+    if (erros.length > 0) {
+      mostrarMensagem("Erros ao atualizar chaves: " + erros.join(", "), "erro");
+      setFechandoLista(false);
+      return;
+    }
+
+    // 2. Gera sorteio para cada chave
+    const sorteioOuro = gerarSorteio(jogOuro);
+    const sorteioPrata = gerarSorteio(jogPrata);
+
+    if (!sorteioOuro || !sorteioPrata) {
+      mostrarMensagem("Erro ao gerar sorteio. Tente novamente.", "erro");
+      setFechandoLista(false);
+      return;
+    }
+
+    // 3. Salva jogos no banco
+    const insertsOuro = sorteioOuro.flatMap((rodadaJogos) =>
+      rodadaJogos.map(([a1, a2, b1, b2]) => ({
+        rodada_id: rodada.id,
+        numero_rodada: rodada.numero,
+        dupla_a_1: a1, dupla_a_2: a2,
+        dupla_b_1: b1, dupla_b_2: b2,
+        placar_a: null, placar_b: null,
+        chave: "ouro",
+      }))
+    );
+    const insertsPrata = sorteioPrata.flatMap((rodadaJogos) =>
+      rodadaJogos.map(([a1, a2, b1, b2]) => ({
+        rodada_id: rodada.id,
+        numero_rodada: rodada.numero,
+        dupla_a_1: a1, dupla_a_2: a2,
+        dupla_b_1: b1, dupla_b_2: b2,
+        placar_a: null, placar_b: null,
+        chave: "prata",
+      }))
+    );
+
+    // Apaga sorteios anteriores sem placar
+    await supabase.from("jogos").delete()
+      .eq("rodada_id", rodada.id).is("placar_a", null);
+
+    const { error: erroInsert } = await supabase.from("jogos")
+      .insert([...insertsOuro, ...insertsPrata]);
+
+    if (erroInsert) {
+      mostrarMensagem("Erro ao salvar jogos: " + erroInsert.message, "erro");
+      setFechandoLista(false);
+      return;
+    }
+
+    // 4. Muda status da rodada para 'ativa'
+    await supabase.from("rodadas").update({ status: "ativa" }).eq("id", rodada.id);
+
+    // 5. Recarrega tudo
+    await carregarJogadores();
+    await carregarRodadas();
+
+    setPreviewFechamento(null);
+    setFechandoLista(false);
+    mostrarMensagem(`✅ Lista fechada! Sorteio publicado para a Rodada ${rodada.numero}. Todos os jogadores já podem ver.`);
+  }
+
+  // ─── PONTUAÇÃO ───────────────────────────────────────────────────────────
   function calcularRankingLocal(jogosChave, chave) {
     const stats = {};
     const confrontos = {};
@@ -295,7 +479,6 @@ export default function Admin({ session }) {
     const todos = [...rankingPreview.ouro, ...rankingPreview.prata];
     const erros = [];
 
-    // 1. Salva pontuação (tabela pontuacao)
     for (const j of todos) {
       const jogador = jogadores.find(jg => jg.nome === j.nome);
       if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
@@ -325,14 +508,12 @@ export default function Admin({ session }) {
       return;
     }
 
-    // 2. Salva ranking_rodada
     for (const chave of ["ouro", "prata"]) {
       const lista = rankingPreview[chave] || [];
       for (const j of lista) {
         const jogador = jogadores.find(jg => jg.nome === j.nome);
         if (!jogador) continue;
 
-        // Remove registro anterior da mesma rodada/jogador se existir
         await supabase.from("ranking_rodada")
           .delete()
           .eq("rodada_id", rodadaSelecionada.id)
@@ -355,30 +536,22 @@ export default function Admin({ session }) {
       return;
     }
 
-    // 3. Atualiza chave dos jogadores (sobe/desce)
-    // Rodadas especiais não têm subida/descida
     if (rodadaSelecionada?.tipo !== "especial") {
       const ouroRanking = rankingPreview.ouro || [];
       const prataRanking = rankingPreview.prata || [];
-
-      // 3 últimos da Ouro descem
       const descem = ouroRanking.slice(-3).map(j => j.nome);
-      // 3 primeiros da Prata sobem
       const sobem = prataRanking.slice(0, 3).map(j => j.nome);
 
       for (const nome of descem) {
         const jogador = jogadores.find(jg => jg.nome === nome);
         if (!jogador) continue;
-        const { error } = await supabase.from("jogadores")
-          .update({ chave: "prata" }).eq("id", jogador.id);
+        const { error } = await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jogador.id);
         if (error) erros.push(`Descer ${nome}: ${error.message}`);
       }
-
       for (const nome of sobem) {
         const jogador = jogadores.find(jg => jg.nome === nome);
         if (!jogador) continue;
-        const { error } = await supabase.from("jogadores")
-          .update({ chave: "ouro" }).eq("id", jogador.id);
+        const { error } = await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jogador.id);
         if (error) erros.push(`Subir ${nome}: ${error.message}`);
       }
 
@@ -389,15 +562,10 @@ export default function Admin({ session }) {
       }
     }
 
-    // 4. Fecha a rodada atual
-    await supabase.from("rodadas")
-      .update({ status: "finalizada" })
-      .eq("id", rodadaSelecionada.id);
+    await supabase.from("rodadas").update({ status: "finalizada" }).eq("id", rodadaSelecionada.id);
 
-    // 5. Cria próxima rodada se não existir
     const { data: proximaExistente } = await supabase
-      .from("rodadas").select("id")
-      .eq("status", "proxima").limit(1);
+      .from("rodadas").select("id").eq("status", "proxima").limit(1);
 
     if (!proximaExistente || proximaExistente.length === 0) {
       const hoje = new Date();
@@ -405,35 +573,28 @@ export default function Admin({ session }) {
       const proximoSabado = new Date(hoje);
       proximoSabado.setDate(hoje.getDate() + diasParaSabado);
       const dataStr = proximoSabado.toISOString().split("T")[0];
-
       const proximoNumero = rodadaSelecionada.numero + 1;
       const tipo = (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal";
 
       await supabase.from("rodadas").insert({
-        numero: proximoNumero,
-        data: dataStr,
-        status: "proxima",
-        liga: rodadaSelecionada.liga,
-        tipo: tipo,
+        numero: proximoNumero, data: dataStr, status: "proxima",
+        liga: rodadaSelecionada.liga, tipo: tipo,
       });
-
       mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} (${tipo}) criada automaticamente.`);
     } else {
       mostrarMensagem("✅ Pontuação salva e chaves atualizadas!");
     }
 
-    // 6. Recarrega jogadores localmente para sorteio futuro usar chaves atualizadas
     await carregarJogadores();
-
     setRankingPreview(null);
     carregarRodadas();
     setCalculando(false);
   }
 
+  // ─── CONVITES ────────────────────────────────────────────────────────────
   async function carregarConvites() {
     setLoadingConvites(true);
-    const { data } = await supabase
-      .from("convites").select("*")
+    const { data } = await supabase.from("convites").select("*")
       .order("created_at", { ascending: false }).limit(20);
     setConvites(data || []);
     setLoadingConvites(false);
@@ -464,6 +625,7 @@ export default function Admin({ session }) {
     else { mostrarMensagem("Convite revogado."); carregarConvites(); }
   }
 
+  // ─── APROVAÇÕES ──────────────────────────────────────────────────────────
   async function carregarPendentes() {
     setLoadingPendentes(true);
     const { data } = await supabase.from("cadastros_pendentes").select("*")
@@ -498,6 +660,8 @@ export default function Admin({ session }) {
     </select>
   );
 
+  const rodadaProxima = rodadas.find(r => r.status === "proxima");
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -511,6 +675,80 @@ export default function Admin({ session }) {
       {mensagem && (
         <div style={{ ...styles.mensagem, background: mensagem.tipo === "erro" ? "#c0392b" : "#27ae60" }}>
           {mensagem.texto}
+        </div>
+      )}
+
+      {/* ── BOTÃO FECHAR LISTA E SORTEAR ── */}
+      {rodadaProxima && !previewFechamento && (
+        <div style={styles.cardDestaque}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 24 }}>🔒</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: ouro }}>Fechar Lista e Sortear</div>
+              <div style={{ fontSize: 12, color: "#7fb89a" }}>Rodada {rodadaProxima.numero} — Faça isso sexta-feira às 14h</div>
+            </div>
+          </div>
+          <p style={styles.infoText}>
+            Fecha as confirmações, monta as chaves com base no ranking anterior e publica o sorteio para todos os jogadores.
+          </p>
+          <button onClick={prepararFechamento} style={styles.btnFechar}>
+            🔒 Fechar Lista e Gerar Sorteio
+          </button>
+        </div>
+      )}
+
+      {/* ── PREVIEW DO FECHAMENTO ── */}
+      {previewFechamento && (
+        <div style={styles.cardDestaque}>
+          <h2 style={{ ...styles.cardTitulo, color: ouro }}>
+            🔒 Confirmar Fechamento — Rodada {previewFechamento.rodada.numero}
+          </h2>
+
+          {previewFechamento.foraDoPrazo && (
+            <div style={{ background: "#3a2000", border: "1px solid #c9a227", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#c9a227" }}>
+              ⚠️ Atenção: hoje não é sexta-feira após 14h. Você pode continuar mesmo assim.
+            </div>
+          )}
+
+          <div style={{ fontSize: 13, color: "#7fb89a", marginBottom: 12 }}>
+            <strong style={{ color: "#c8e6c9" }}>{previewFechamento.total}</strong> jogadores confirmados
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+                🥇 Ouro ({previewFechamento.ouro.length})
+              </div>
+              {previewFechamento.ouro.map((nome, i) => (
+                <div key={i} style={{ fontSize: 12, color: "#e8f5e9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>
+                  {i + 1}. {nome}
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+                🥈 Prata ({previewFechamento.prata.length})
+              </div>
+              {previewFechamento.prata.map((nome, i) => (
+                <div key={i} style={{ fontSize: 12, color: "#e8f5e9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>
+                  {i + 1}. {nome}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, color: "#7fb89a", marginBottom: 16, background: "#0f2d1e", borderRadius: 8, padding: "8px 12px" }}>
+            Ao confirmar: chaves atualizadas, sorteio gerado e publicado imediatamente para todos.
+          </div>
+
+          <div style={styles.botoesForm}>
+            <button onClick={confirmarFechamento} disabled={fechandoLista} style={styles.btnSalvar}>
+              {fechandoLista ? "Processando..." : "✅ Confirmar e Publicar"}
+            </button>
+            <button onClick={() => setPreviewFechamento(null)} disabled={fechandoLista} style={styles.btnCancelar}>
+              ✕ Cancelar
+            </button>
+          </div>
         </div>
       )}
 
@@ -538,16 +776,11 @@ export default function Admin({ session }) {
                 <button key={r.id} onClick={() => setRodadaSelecionada(r)}
                   style={{ ...styles.btnRodada, ...(rodadaSelecionada?.id === r.id ? styles.btnRodadaAtivo : {}) }}>
                   R{r.numero}
-                  <span style={styles.rodadaTipo}>
-                    {r.tipo === "especial" ? "⭐" : ""}
-                  </span>
+                  <span style={styles.rodadaTipo}>{r.tipo === "especial" ? "⭐" : ""}</span>
                   <span style={styles.rodadaData}>
                     {new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                   </span>
-                  <span style={{
-                    fontSize: 9,
-                    color: r.status === "finalizada" ? "#5a8a6a" : r.status === "ativa" ? "#c9a227" : "#7fb89a"
-                  }}>
+                  <span style={{ fontSize: 9, color: r.status === "finalizada" ? "#5a8a6a" : r.status === "ativa" ? "#c9a227" : "#7fb89a" }}>
                     {r.status}
                   </span>
                 </button>
@@ -568,11 +801,11 @@ export default function Admin({ session }) {
 
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>
-              🎲 Sorteio
+              🎲 Sorteio Manual
               {rodadaSelecionada && <span style={styles.badgeRodada}>R{rodadaSelecionada.numero} — {chaveAtiva}</span>}
             </h2>
-            <p style={styles.infoText}>Gera as partidas garantindo que nenhum jogador repita parceiro.</p>
-            <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio</button>
+            <p style={styles.infoText}>Use apenas para sorteios manuais pontuais. Para fechar a rodada use o botão acima.</p>
+            <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio Manual</button>
           </div>
 
           {sorteioPreview && (
@@ -659,7 +892,7 @@ export default function Admin({ session }) {
                                 <span style={styles.placarSep}>×</span>
                                 <span style={!venceuA ? styles.placarVencedor : styles.placarPerdedor}>{jogo.placar_b}</span>
                               </>
-                            ) : <span style={styles.semPlacar}>× ?</span>}
+                            ) : <span style={styles.semPlacar}>–</span>}
                           </div>
                           <div style={{ ...styles.dupla, ...(!venceuA ? styles.vencedor : {}), textAlign: "right" }}>
                             {jogo.dupla_b_1}{jogo.dupla_b_2 ? ` / ${jogo.dupla_b_2}` : ""}
@@ -825,6 +1058,7 @@ const styles = {
   titulo: { margin: 0, fontSize: 22, fontWeight: 700, color: ouro },
   subtitulo: { margin: 0, fontSize: 13, color: "#7fb89a", marginTop: 2 },
   mensagem: { padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 14, fontWeight: 600, color: "#fff" },
+  cardDestaque: { background: "#1a3020", border: `2px solid ${ouro}`, borderRadius: 12, padding: 16, marginBottom: 16 },
   abas: { display: "flex", gap: 8, marginBottom: 16 },
   aba: { flex: 1, padding: "10px 4px", borderRadius: 10, border: `1px solid ${borda}`, background: "#1e3d2a", color: "#5a8a6a", cursor: "pointer", fontWeight: 600, fontSize: 13 },
   abaAtiva: { background: verde, border: `1px solid ${ouro}`, color: ouro },
@@ -854,6 +1088,7 @@ const styles = {
   btnCancelar: { background: "transparent", border: `1px solid #c0392b`, color: "#e74c3c", borderRadius: 10, padding: "12px 16px", fontWeight: 600, fontSize: 14, cursor: "pointer" },
   btnCalcular: { width: "100%", background: "#1a5c3a", border: `1px solid ${ouro}`, color: ouro, borderRadius: 10, padding: "14px 0", fontWeight: 700, fontSize: 15, cursor: "pointer" },
   btnSortear: { width: "100%", background: "#0f3d2a", border: `1px solid #4a9a6a`, color: "#7fd8a0", borderRadius: 10, padding: "14px 0", fontWeight: 700, fontSize: 15, cursor: "pointer" },
+  btnFechar: { width: "100%", background: "#3a2000", border: `2px solid ${ouro}`, color: ouro, borderRadius: 10, padding: "14px 0", fontWeight: 700, fontSize: 15, cursor: "pointer" },
   btnRegerar: { background: "#1e3d2a", border: `1px solid ${borda}`, color: "#9dbfac", borderRadius: 10, padding: "12px 16px", fontWeight: 600, fontSize: 14, cursor: "pointer" },
   btnCopiar: { background: "#1a5c3a", border: `1px solid ${borda}`, color: "#7fd8a0", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 16 },
   btnAprovar: { background: "#1a5c3a", border: `1px solid #4a9a6a`, color: "#7fd8a0", borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" },
