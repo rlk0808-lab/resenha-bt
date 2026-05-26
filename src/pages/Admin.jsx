@@ -100,6 +100,7 @@ export default function Admin({ session }) {
   const [pendentes, setPendentes] = useState([]);
   const [loadingPendentes, setLoadingPendentes] = useState(false);
   const [aprovando, setAprovando] = useState(null);
+  const [vinculacoes, setVinculacoes] = useState({});
 
   const [mensagem, setMensagem] = useState(null);
 
@@ -224,7 +225,7 @@ export default function Admin({ session }) {
   // ─── FECHAR LISTA E SORTEAR ──────────────────────────────────────────────
   async function prepararFechamento() {
     const agora = new Date();
-    const diaSemana = agora.getDay(); // 5 = sexta
+    const diaSemana = agora.getDay();
     const hora = agora.getHours();
     const foraDoPrazo = diaSemana !== 5 || hora < 14;
 
@@ -249,7 +250,6 @@ export default function Admin({ session }) {
       return;
     }
 
-    // Busca ranking da rodada anterior
     const { data: rodadaAnterior } = await supabase
       .from("rodadas").select("*").eq("status", "finalizada")
       .order("numero", { ascending: false }).limit(1);
@@ -274,15 +274,9 @@ export default function Admin({ session }) {
     let jogadoresPrata = [];
 
     if (rankAnt.ouro.length === 0 && rankAnt.prata.length === 0) {
-      // Primeira rodada: usa chave atual do jogador
-      jogadoresOuro = confirmacoes
-        .filter(c => c.jogadores?.chave === "ouro")
-        .map(c => c.jogadores?.nome);
-      jogadoresPrata = confirmacoes
-        .filter(c => c.jogadores?.chave === "prata")
-        .map(c => c.jogadores?.nome);
+      jogadoresOuro = confirmacoes.filter(c => c.jogadores?.chave === "ouro").map(c => c.jogadores?.nome);
+      jogadoresPrata = confirmacoes.filter(c => c.jogadores?.chave === "prata").map(c => c.jogadores?.nome);
     } else {
-      // Regra normal: 3 últimos descem, 3 primeiros da prata sobem
       const ouroDescem = rankAnt.ouro.slice(-3).map(r => r.jogadores?.nome);
       const prataSobem = rankAnt.prata.slice(0, 3).map(r => r.jogadores?.nome);
 
@@ -291,7 +285,6 @@ export default function Admin({ session }) {
         .map(r => r.jogadores?.nome);
 
       const prataSobemConf = prataSobem.filter(n => confirmadosNomes.has(n));
-
       jogadoresOuro = [...ouroFicam, ...prataSobemConf];
 
       const nomesOuro = new Set(jogadoresOuro);
@@ -309,13 +302,7 @@ export default function Admin({ session }) {
       return;
     }
 
-    setPreviewFechamento({
-      rodada: rodadaAlvo,
-      ouro: jogadoresOuro,
-      prata: jogadoresPrata,
-      total: confirmacoes.length,
-      foraDoPrazo,
-    });
+    setPreviewFechamento({ rodada: rodadaAlvo, ouro: jogadoresOuro, prata: jogadoresPrata, total: confirmacoes.length, foraDoPrazo });
   }
 
   async function confirmarFechamento() {
@@ -325,7 +312,6 @@ export default function Admin({ session }) {
     const { rodada, ouro: jogOuro, prata: jogPrata } = previewFechamento;
     const erros = [];
 
-    // 1. Atualiza chave de cada jogador confirmado
     for (const nome of jogOuro) {
       const jog = jogadores.find(j => j.nome === nome);
       if (!jog) continue;
@@ -341,65 +327,47 @@ export default function Admin({ session }) {
 
     if (erros.length > 0) {
       mostrarMensagem("Erros ao atualizar chaves: " + erros.join(", "), "erro");
-      setFechandoLista(false);
-      return;
+      setFechandoLista(false); return;
     }
 
-    // 2. Gera sorteio para cada chave
     const sorteioOuro = gerarSorteio(jogOuro);
     const sorteioPrata = gerarSorteio(jogPrata);
 
     if (!sorteioOuro || !sorteioPrata) {
       mostrarMensagem("Erro ao gerar sorteio. Tente novamente.", "erro");
-      setFechandoLista(false);
-      return;
+      setFechandoLista(false); return;
     }
 
-    // 3. Salva jogos no banco
     const insertsOuro = sorteioOuro.flatMap((rodadaJogos) =>
       rodadaJogos.map(([a1, a2, b1, b2]) => ({
-        rodada_id: rodada.id,
-        numero_rodada: rodada.numero,
-        dupla_a_1: a1, dupla_a_2: a2,
-        dupla_b_1: b1, dupla_b_2: b2,
-        placar_a: null, placar_b: null,
-        chave: "ouro",
+        rodada_id: rodada.id, numero_rodada: rodada.numero,
+        dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
+        placar_a: null, placar_b: null, chave: "ouro",
       }))
     );
     const insertsPrata = sorteioPrata.flatMap((rodadaJogos) =>
       rodadaJogos.map(([a1, a2, b1, b2]) => ({
-        rodada_id: rodada.id,
-        numero_rodada: rodada.numero,
-        dupla_a_1: a1, dupla_a_2: a2,
-        dupla_b_1: b1, dupla_b_2: b2,
-        placar_a: null, placar_b: null,
-        chave: "prata",
+        rodada_id: rodada.id, numero_rodada: rodada.numero,
+        dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
+        placar_a: null, placar_b: null, chave: "prata",
       }))
     );
 
-    // Apaga sorteios anteriores sem placar
-    await supabase.from("jogos").delete()
-      .eq("rodada_id", rodada.id).is("placar_a", null);
+    await supabase.from("jogos").delete().eq("rodada_id", rodada.id).is("placar_a", null);
 
-    const { error: erroInsert } = await supabase.from("jogos")
-      .insert([...insertsOuro, ...insertsPrata]);
-
+    const { error: erroInsert } = await supabase.from("jogos").insert([...insertsOuro, ...insertsPrata]);
     if (erroInsert) {
       mostrarMensagem("Erro ao salvar jogos: " + erroInsert.message, "erro");
-      setFechandoLista(false);
-      return;
+      setFechandoLista(false); return;
     }
 
-    // 4. Muda status da rodada para 'ativa'
     await supabase.from("rodadas").update({ status: "ativa" }).eq("id", rodada.id);
-
-    // 5. Recarrega tudo
     await carregarJogadores();
     await carregarRodadas();
 
     setPreviewFechamento(null);
     setFechandoLista(false);
-    mostrarMensagem(`✅ Lista fechada! Sorteio publicado para a Rodada ${rodada.numero}. Todos os jogadores já podem ver.`);
+    mostrarMensagem(`✅ Lista fechada! Sorteio publicado para a Rodada ${rodada.numero}.`);
   }
 
   // ─── PONTUAÇÃO ───────────────────────────────────────────────────────────
@@ -485,8 +453,7 @@ export default function Admin({ session }) {
 
       const { data: existentes, error: erroBusca } = await supabase
         .from("pontuacao").select("id")
-        .eq("jogador_id", jogador.id)
-        .eq("rodada_id", rodadaSelecionada.id);
+        .eq("jogador_id", jogador.id).eq("rodada_id", rodadaSelecionada.id);
 
       if (erroBusca) { erros.push(erroBusca.message); continue; }
 
@@ -502,45 +469,27 @@ export default function Admin({ session }) {
       }
     }
 
-    if (erros.length > 0) {
-      mostrarMensagem("Erros ao salvar pontuação: " + erros.join(", "), "erro");
-      setCalculando(false);
-      return;
-    }
+    if (erros.length > 0) { mostrarMensagem("Erros ao salvar pontuação: " + erros.join(", "), "erro"); setCalculando(false); return; }
 
     for (const chave of ["ouro", "prata"]) {
       const lista = rankingPreview[chave] || [];
       for (const j of lista) {
         const jogador = jogadores.find(jg => jg.nome === j.nome);
         if (!jogador) continue;
-
-        await supabase.from("ranking_rodada")
-          .delete()
-          .eq("rodada_id", rodadaSelecionada.id)
-          .eq("jogador_id", jogador.id);
-
+        await supabase.from("ranking_rodada").delete().eq("rodada_id", rodadaSelecionada.id).eq("jogador_id", jogador.id);
         const { error } = await supabase.from("ranking_rodada").insert({
-          rodada_id: rodadaSelecionada.id,
-          jogador_id: jogador.id,
-          chave: chave,
-          posicao: j.posicao,
-          pontos_liga: j.ptosLiga,
+          rodada_id: rodadaSelecionada.id, jogador_id: jogador.id,
+          chave, posicao: j.posicao, pontos_liga: j.ptosLiga,
         });
         if (error) erros.push(`ranking_rodada ${j.nome}: ${error.message}`);
       }
     }
 
-    if (erros.length > 0) {
-      mostrarMensagem("Erros ao salvar ranking: " + erros.join(", "), "erro");
-      setCalculando(false);
-      return;
-    }
+    if (erros.length > 0) { mostrarMensagem("Erros ao salvar ranking: " + erros.join(", "), "erro"); setCalculando(false); return; }
 
     if (rodadaSelecionada?.tipo !== "especial") {
-      const ouroRanking = rankingPreview.ouro || [];
-      const prataRanking = rankingPreview.prata || [];
-      const descem = ouroRanking.slice(-3).map(j => j.nome);
-      const sobem = prataRanking.slice(0, 3).map(j => j.nome);
+      const descem = (rankingPreview.ouro || []).slice(-3).map(j => j.nome);
+      const sobem = (rankingPreview.prata || []).slice(0, 3).map(j => j.nome);
 
       for (const nome of descem) {
         const jogador = jogadores.find(jg => jg.nome === nome);
@@ -555,17 +504,12 @@ export default function Admin({ session }) {
         if (error) erros.push(`Subir ${nome}: ${error.message}`);
       }
 
-      if (erros.length > 0) {
-        mostrarMensagem("Erros ao atualizar chaves: " + erros.join(", "), "erro");
-        setCalculando(false);
-        return;
-      }
+      if (erros.length > 0) { mostrarMensagem("Erros ao atualizar chaves: " + erros.join(", "), "erro"); setCalculando(false); return; }
     }
 
     await supabase.from("rodadas").update({ status: "finalizada" }).eq("id", rodadaSelecionada.id);
 
-    const { data: proximaExistente } = await supabase
-      .from("rodadas").select("id").eq("status", "proxima").limit(1);
+    const { data: proximaExistente } = await supabase.from("rodadas").select("id").eq("status", "proxima").limit(1);
 
     if (!proximaExistente || proximaExistente.length === 0) {
       const hoje = new Date();
@@ -575,11 +519,7 @@ export default function Admin({ session }) {
       const dataStr = proximoSabado.toISOString().split("T")[0];
       const proximoNumero = rodadaSelecionada.numero + 1;
       const tipo = (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal";
-
-      await supabase.from("rodadas").insert({
-        numero: proximoNumero, data: dataStr, status: "proxima",
-        liga: rodadaSelecionada.liga, tipo: tipo,
-      });
+      await supabase.from("rodadas").insert({ numero: proximoNumero, data: dataStr, status: "proxima", liga: rodadaSelecionada.liga, tipo });
       mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} (${tipo}) criada automaticamente.`);
     } else {
       mostrarMensagem("✅ Pontuação salva e chaves atualizadas!");
@@ -594,8 +534,7 @@ export default function Admin({ session }) {
   // ─── CONVITES ────────────────────────────────────────────────────────────
   async function carregarConvites() {
     setLoadingConvites(true);
-    const { data } = await supabase.from("convites").select("*")
-      .order("created_at", { ascending: false }).limit(20);
+    const { data } = await supabase.from("convites").select("*").order("created_at", { ascending: false }).limit(20);
     setConvites(data || []);
     setLoadingConvites(false);
   }
@@ -604,10 +543,7 @@ export default function Admin({ session }) {
     setGerandoConvite(true);
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { error } = await supabase.from("convites").insert({
-      token, email: "", usado: false,
-      criado_por: session?.user?.id || null, expires_at,
-    });
+    const { error } = await supabase.from("convites").insert({ token, email: "", usado: false, criado_por: session?.user?.id || null, expires_at });
     if (error) mostrarMensagem("Erro ao gerar convite: " + error.message, "erro");
     else { mostrarMensagem("✅ Convite gerado!"); carregarConvites(); }
     setGerandoConvite(false);
@@ -635,11 +571,37 @@ export default function Admin({ session }) {
   }
 
   async function aprovarCadastro(pendente) {
+    const jogadorId = vinculacoes[pendente.id];
+    if (!jogadorId) {
+      mostrarMensagem("Selecione o jogador para vincular antes de aprovar.", "erro");
+      return;
+    }
     setAprovando(pendente.id);
+
+    // Vincula user_id e salva nome completo no campo apelido
+    const { error: erroVinculo } = await supabase
+      .from("jogadores")
+      .update({ user_id: pendente.user_id, apelido: pendente.nome })
+      .eq("id", jogadorId);
+
+    if (erroVinculo) {
+      mostrarMensagem("Erro ao vincular jogador: " + erroVinculo.message, "erro");
+      setAprovando(null);
+      return;
+    }
+
+    // Aprova o cadastro pendente
     const { error } = await supabase.from("cadastros_pendentes")
       .update({ status: "aprovado" }).eq("id", pendente.id);
+
     if (error) mostrarMensagem("Erro ao aprovar: " + error.message, "erro");
-    else { mostrarMensagem(`✅ ${pendente.nome} aprovado!`); carregarPendentes(); }
+    else {
+      mostrarMensagem(`✅ ${pendente.nome} aprovado e vinculado!`);
+      // Remove vinculação local e recarrega
+      setVinculacoes(v => { const n = { ...v }; delete n[pendente.id]; return n; });
+      carregarPendentes();
+      carregarJogadores();
+    }
     setAprovando(null);
   }
 
@@ -753,20 +715,18 @@ export default function Admin({ session }) {
       )}
 
       <div style={styles.abas}>
-        <button onClick={() => setAbaAtiva("jogos")}
-          style={{ ...styles.aba, ...(abaAtiva === "jogos" ? styles.abaAtiva : {}) }}>
+        <button onClick={() => setAbaAtiva("jogos")} style={{ ...styles.aba, ...(abaAtiva === "jogos" ? styles.abaAtiva : {}) }}>
           🎾 Jogos
         </button>
-        <button onClick={() => setAbaAtiva("convites")}
-          style={{ ...styles.aba, ...(abaAtiva === "convites" ? styles.abaAtiva : {}) }}>
+        <button onClick={() => setAbaAtiva("convites")} style={{ ...styles.aba, ...(abaAtiva === "convites" ? styles.abaAtiva : {}) }}>
           🔗 Convites
         </button>
-        <button onClick={() => setAbaAtiva("aprovacoes")}
-          style={{ ...styles.aba, ...(abaAtiva === "aprovacoes" ? styles.abaAtiva : {}) }}>
+        <button onClick={() => setAbaAtiva("aprovacoes")} style={{ ...styles.aba, ...(abaAtiva === "aprovacoes" ? styles.abaAtiva : {}) }}>
           👤 Aprovações {pendentes.length > 0 && <span style={styles.badge}>{pendentes.length}</span>}
         </button>
       </div>
 
+      {/* ── ABA JOGOS ── */}
       {abaAtiva === "jogos" && (
         <>
           <div style={styles.card}>
@@ -789,12 +749,10 @@ export default function Admin({ session }) {
           </div>
 
           <div style={styles.chaveRow}>
-            <button onClick={() => setChaveAtiva("ouro")}
-              style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>
+            <button onClick={() => setChaveAtiva("ouro")} style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>
               🥇 Chave Ouro
             </button>
-            <button onClick={() => setChaveAtiva("prata")}
-              style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>
+            <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>
               🥈 Chave Prata
             </button>
           </div>
@@ -834,9 +792,7 @@ export default function Admin({ session }) {
           )}
 
           <div style={styles.card}>
-            <h2 style={styles.cardTitulo}>
-              {editandoId ? "✏️ Editando placar" : "➕ Inserir placar"}
-            </h2>
+            <h2 style={styles.cardTitulo}>{editandoId ? "✏️ Editando placar" : "➕ Inserir placar"}</h2>
             <div style={styles.duplaSection}>
               <div style={styles.duplaLabel}>🎾 Dupla A</div>
               <div style={styles.duplaInputs}>
@@ -925,14 +881,12 @@ export default function Admin({ session }) {
           {rankingPreview && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>👀 Preview — Confirmar antes de salvar</h2>
-
               {rodadaSelecionada?.tipo !== "especial" && (
                 <div style={{ background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#7fb89a" }}>
-                  ↓ Descem para Prata: <strong style={{ color: "#e74c3c" }}>{(rankingPreview.ouro || []).slice(-3).map(j => j.nome).join(", ")}</strong>
-                  &nbsp;&nbsp;↑ Sobem para Ouro: <strong style={{ color: "#2ecc71" }}>{(rankingPreview.prata || []).slice(0, 3).map(j => j.nome).join(", ")}</strong>
+                  ↓ Descem: <strong style={{ color: "#e74c3c" }}>{(rankingPreview.ouro || []).slice(-3).map(j => j.nome).join(", ")}</strong>
+                  &nbsp;&nbsp;↑ Sobem: <strong style={{ color: "#2ecc71" }}>{(rankingPreview.prata || []).slice(0, 3).map(j => j.nome).join(", ")}</strong>
                 </div>
               )}
-
               {["ouro", "prata"].map(chave => (
                 <div key={chave} style={{ marginBottom: 16 }}>
                   <div style={{ ...styles.chaveHeader, color: chave === "ouro" ? ouro : prata }}>
@@ -966,6 +920,7 @@ export default function Admin({ session }) {
         </>
       )}
 
+      {/* ── ABA CONVITES ── */}
       {abaAtiva === "convites" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>🔗 Gerar Convite</h2>
@@ -1006,6 +961,7 @@ export default function Admin({ session }) {
         </div>
       )}
 
+      {/* ── ABA APROVAÇÕES ── */}
       {abaAtiva === "aprovacoes" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>
@@ -1014,7 +970,7 @@ export default function Admin({ session }) {
           </h2>
           {loadingPendentes ? <p style={styles.loadingText}>Carregando...</p>
             : pendentes.length === 0 ? (
-              <div style={styles.emptyAprovacao}>
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
                 <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
                 <p style={styles.emptyText}>Nenhum cadastro pendente.</p>
               </div>
@@ -1027,8 +983,28 @@ export default function Admin({ session }) {
                   <div style={styles.pendenteData}>
                     Solicitado: {new Date(p.created_at).toLocaleDateString("pt-BR")}
                   </div>
+                  {/* SELECT DE VINCULAÇÃO */}
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 11, color: "#7fb89a", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>
+                      Vincular ao jogador
+                    </div>
+                    <select
+                      value={vinculacoes[p.id] || ""}
+                      onChange={(e) => setVinculacoes({ ...vinculacoes, [p.id]: e.target.value })}
+                      style={{ ...styles.select, width: "100%" }}
+                    >
+                      <option value="">— selecionar jogador —</option>
+                      {jogadores
+                        .filter(j => !j.user_id)
+                        .sort((a, b) => a.nome.localeCompare(b.nome))
+                        .map(j => (
+                          <option key={j.id} value={j.id}>{j.nome} ({j.chave})</option>
+                        ))
+                      }
+                    </select>
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: 8 }}>
                   <button onClick={() => aprovarCadastro(p)} disabled={aprovando === p.id} style={styles.btnAprovar}>
                     {aprovando === p.id ? "..." : "✅ Aprovar"}
                   </button>
@@ -1095,7 +1071,6 @@ const styles = {
   btnRejeitar: { background: "transparent", border: `1px solid #c0392b`, color: "#e74c3c", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13, cursor: "pointer" },
   loadingText: { color: "#7fb89a", textAlign: "center", padding: 20 },
   emptyText: { color: "#5a8a6a", textAlign: "center", padding: 20, fontSize: 14 },
-  emptyAprovacao: { textAlign: "center", padding: "20px 0" },
   infoText: { color: "#7fb89a", fontSize: 13, marginBottom: 12, lineHeight: 1.5 },
   badgeRodada: { background: "#1e3d2a", border: `1px solid ${borda}`, borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#7fb89a", fontWeight: 400 },
   badgeCount: { background: "#1e3d2a", borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#7fb89a", fontWeight: 400 },

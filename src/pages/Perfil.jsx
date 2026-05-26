@@ -8,6 +8,7 @@ export default function Perfil() {
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
   const fileRef = useRef()
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -98,9 +99,16 @@ export default function Perfil() {
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFoto} />
 
           <div>
+            {/* Apelido — nome usado no torneio */}
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '28px', letterSpacing: '2px', lineHeight: 1, color: '#ffffff' }}>
               {perfil?.nome || 'Jogador'}
             </div>
+            {/* Nome completo — exibido abaixo se preenchido */}
+            {perfil?.apelido && (
+              <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 3 }}>
+                {perfil.apelido}
+              </div>
+            )}
             <div style={{ marginTop: '6px' }}>
               {perfil?.chave === 'ouro'
                 ? <span className="badge-ouro">Chave Ouro</span>
