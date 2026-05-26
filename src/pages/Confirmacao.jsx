@@ -34,7 +34,6 @@ export default function Confirmacao({ session }) {
   }
 
   async function carregarProximaRodada() {
-    // Busca rodada ativa OU próxima
     const { data } = await supabase
       .from("rodadas")
       .select("*")
@@ -190,7 +189,10 @@ export default function Confirmacao({ session }) {
                 <div style={styles.rodadaLabel}>Próxima Rodada</div>
                 <div style={styles.rodadaNumero}>Rodada {rodadaAtual.numero}</div>
                 <div style={styles.rodadaData}>
-                  📅 {new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+                  📅 {new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", {
+                    weekday: "long", day: "2-digit", month: "long",
+                    timeZone: "America/Sao_Paulo"
+                  })}
                 </div>
               </div>
               <div style={styles.contadorBox}>
@@ -250,7 +252,7 @@ export default function Confirmacao({ session }) {
                     <span style={styles.listaPos}>{idx + 1}</span>
                     <span style={styles.listaNome}>{c.jogadores?.nome}</span>
                     <span style={{ ...styles.listaChave, color: c.jogadores?.chave === "ouro" ? ouro : prata }}>{c.jogadores?.chave}</span>
-                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</span>
                   </div>
                 ))}
               </div>
@@ -265,7 +267,7 @@ export default function Confirmacao({ session }) {
                   <div key={c.id} style={{ ...styles.listaItem, ...(c.jogador_id === jogador?.id ? styles.listaItemMeu : {}) }}>
                     <span style={styles.listaPos}>{idx + 1}º</span>
                     <span style={styles.listaNome}>{c.jogadores?.nome}</span>
-                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</span>
                   </div>
                 ))}
               </div>
@@ -316,17 +318,4 @@ const styles = {
   statusConfirmado: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 0" },
   statusEspera: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 0" },
   statusIcon: { fontSize: 32 },
-  statusTexto: { fontSize: 15, color: "#c8e6c9", textAlign: "center" },
-  statusPos: { fontSize: 13, color: ouro, fontWeight: 700 },
-  statusInfo: { fontSize: 12, color: "#7fb89a", textAlign: "center" },
-  btnConfirmar: { background: ouro, color: "#0f2d1e", border: "none", borderRadius: 10, padding: "12px 32px", fontWeight: 700, fontSize: 15, cursor: "pointer", width: "100%", marginTop: 4 },
-  btnCancelar: { background: "transparent", border: `1px solid #c0392b`, color: "#e74c3c", borderRadius: 8, padding: "8px 20px", fontWeight: 600, fontSize: 13, cursor: "pointer", marginTop: 4 },
-  btnCancelarEspera: { background: "transparent", border: `1px solid #5a8a6a`, color: "#7fb89a", borderRadius: 8, padding: "8px 20px", fontWeight: 600, fontSize: 13, cursor: "pointer", marginTop: 4 },
-  lista: { display: "flex", flexDirection: "column", gap: 6 },
-  listaItem: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#0f2d1e", borderRadius: 8, border: `1px solid ${borda}` },
-  listaItemMeu: { border: `1px solid ${ouro}`, background: "#1a3a20" },
-  listaPos: { width: 24, fontSize: 12, color: "#7fb89a", fontWeight: 700, textAlign: "center" },
-  listaNome: { flex: 1, fontSize: 13, color: "#e8f5e9", fontWeight: 500 },
-  listaChave: { fontSize: 11, fontWeight: 600, textTransform: "uppercase" },
-  listaHora: { fontSize: 11, color: "#5a8a6a" },
-};
+  statusTexto: { fontSize: 15, color: "#c8e6c9", textAlign:
