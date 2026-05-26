@@ -5,26 +5,59 @@ import { Calendar, Trophy, Users, CheckCircle } from 'lucide-react'
 export default function Home() {
   const [proximaRodada, setProximaRodada] = useState(null)
   const [confirmado, setConfirmado] = useState(false)
+  const [cancelando, setCancelando] = useState(false)
+  const [confirmacaoId, setConfirmacaoId] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [totalConfirmados, setTotalConfirmados] = useState(0)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      const { data } = await supabase
+
+      // Busca próxima rodada
+      const { data: rodada } = await supabase
         .from('rodadas')
         .select('*')
         .eq('status', 'proxima')
-        .single()
-      setProximaRodada(data)
-      if (data && user) {
-        const { data: conf } = await supabase
+        .limit(1)
+      
+      const rod = rodada?.[0] || null
+      setProximaRodada(rod)
+
+      if (rod && user) {
+        // Busca jogador pelo user_id
+        const { data: jogadores } = await supabase
+          .from('jogadores')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1)
+        
+        const jogador = jogadores?.[0]
+
+        if (jogador) {
+          // Verifica se já confirmou
+          const { data: confs } = await supabase
+            .from('confirmacoes')
+            .select('id')
+            .eq('rodada_id', rod.id)
+            .eq('jogador_id', jogador.id)
+            .limit(1)
+          
+          if (confs && confs.length > 0) {
+            setConfirmado(true)
+            setConfirmacaoId(confs[0].id)
+          }
+        }
+
+        // Total confirmados
+        const { data: todos } = await supabase
           .from('confirmacoes')
-          .select('*')
-          .eq('rodada_id', data.id)
-          .eq('jogador_id', user.id)
-          .single()
-        setConfirmado(!!conf)
+          .select('id')
+          .eq('rodada_id', rod.id)
+          .eq('status', 'confirmado')
+        setTotalConfirmados(todos?.length || 0)
       }
+
       setLoading(false)
     }
     load()
@@ -33,11 +66,42 @@ export default function Home() {
   async function confirmarPresenca() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!proximaRodada || !user) return
-    await supabase.from('confirmacoes').upsert({
-      rodada_id: proximaRodada.id,
-      jogador_id: user.id
-    })
-    setConfirmado(true)
+
+    const { data: jogadores } = await supabase
+      .from('jogadores')
+      .select('id')
+      .eq('user_id', user.id)
+      .limit(1)
+    
+    const jogador = jogadores?.[0]
+    if (!jogador) return
+
+    const { data, error } = await supabase
+      .from('confirmacoes')
+      .insert({ rodada_id: proximaRodada.id, jogador_id: jogador.id, status: 'confirmado' })
+      .select('id')
+    
+    if (!error && data?.[0]) {
+      setConfirmado(true)
+      setConfirmacaoId(data[0].id)
+      setTotalConfirmados(t => t + 1)
+    }
+  }
+
+  async function cancelarPresenca() {
+    if (!confirmacaoId) return
+    setCancelando(true)
+    const { error } = await supabase
+      .from('confirmacoes')
+      .delete()
+      .eq('id', confirmacaoId)
+    
+    if (!error) {
+      setConfirmado(false)
+      setConfirmacaoId(null)
+      setTotalConfirmados(t => Math.max(0, t - 1))
+    }
+    setCancelando(false)
   }
 
   if (loading) return (
@@ -99,7 +163,7 @@ export default function Home() {
                 Rodada {proximaRodada.numero}
               </div>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', marginTop: '4px' }}>
-                📅 {new Date(proximaRodada.data).toLocaleDateString('pt-BR', {
+                📅 {new Date(proximaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', {
                   weekday: 'long', day: '2-digit', month: 'long'
                 })}
               </div>
@@ -109,20 +173,34 @@ export default function Home() {
             </div>
 
             {confirmado ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                background: 'rgba(45,122,69,0.15)',
-                border: '1px solid rgba(45,122,69,0.4)',
-                borderRadius: '10px',
-                padding: '14px 16px'
-              }}>
-                <CheckCircle size={20} color="#2d7a45" />
-                <div>
-                  <div style={{ fontWeight: 700, color: '#2d7a45' }}>Presença confirmada!</div>
-                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
-                    Você está confirmado para esta rodada
+              <div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  background: 'rgba(45,122,69,0.15)',
+                  border: '1px solid rgba(45,122,69,0.4)',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  marginBottom: '10px'
+                }}>
+                  <CheckCircle size={20} color="#2d7a45" />
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#2d7a45' }}>Presença confirmada!</div>
+                    <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+                      {totalConfirmados} confirmado{totalConfirmados !== 1 ? 's' : ''} de 24
+                    </div>
                   </div>
                 </div>
+                <button
+                  onClick={cancelarPresenca}
+                  disabled={cancelando}
+                  style={{
+                    width: '100%', background: 'transparent',
+                    border: '1px solid rgba(192,57,43,0.5)', color: '#e74c3c',
+                    borderRadius: '10px', padding: '10px 0',
+                    fontWeight: 600, fontSize: '14px', cursor: 'pointer'
+                  }}>
+                  {cancelando ? 'Cancelando...' : '✕ Cancelar confirmação'}
+                </button>
               </div>
             ) : (
               <div>
