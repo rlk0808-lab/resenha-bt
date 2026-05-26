@@ -12,21 +12,14 @@ export default function Confirmacao({ session }) {
   const [mensagem, setMensagem] = useState(null);
 
   const LIMITE_PRINCIPAL = 24;
-  const PRAZO_CONFIRMACAO = 3; // quarta-feira (0=dom, 1=seg... 3=qua)
-  const HORA_LIMITE = 10; // 10h
 
   useEffect(() => {
-    if (session?.user) {
-      carregarDados();
-    }
+    if (session?.user) carregarDados();
   }, [session]);
 
   async function carregarDados() {
     setLoading(true);
-    await Promise.all([
-      carregarJogador(),
-      carregarProximaRodada(),
-    ]);
+    await Promise.all([carregarJogador(), carregarProximaRodada()]);
     setLoading(false);
   }
 
@@ -35,25 +28,26 @@ export default function Confirmacao({ session }) {
       .from("jogadores")
       .select("*")
       .eq("user_id", session.user.id)
-      .single();
-    setJogador(data);
-    return data;
+      .limit(1);
+    setJogador(data?.[0] || null);
+    return data?.[0] || null;
   }
 
   async function carregarProximaRodada() {
+    // Busca rodada ativa OU próxima
     const { data } = await supabase
       .from("rodadas")
       .select("*")
-      .eq("status", "proxima")
+      .in("status", ["ativa", "proxima"])
       .order("numero", { ascending: true })
-      .limit(1)
-      .single();
-    
-    if (data) {
-      setRodadaAtual(data);
-      await carregarConfirmacoes(data.id);
+      .limit(1);
+
+    const rodada = data?.[0] || null;
+    if (rodada) {
+      setRodadaAtual(rodada);
+      await carregarConfirmacoes(rodada.id);
     }
-    return data;
+    return rodada;
   }
 
   async function carregarConfirmacoes(rodadaId) {
@@ -64,38 +58,21 @@ export default function Confirmacao({ session }) {
       .order("created_at", { ascending: true });
 
     if (data) {
-      const principal = data.filter(c => c.status === "confirmado");
-      const espera = data.filter(c => c.status === "espera");
-      setListaConfirmados(principal);
-      setListaEspera(espera);
+      setListaConfirmados(data.filter(c => c.status === "confirmado"));
+      setListaEspera(data.filter(c => c.status === "espera"));
 
-      // Verifica se o jogador logado já confirmou
       if (session?.user) {
-        const { data: jogadorData } = await supabase
+        const { data: jData } = await supabase
           .from("jogadores")
           .select("id")
           .eq("user_id", session.user.id)
-          .single();
-        
-        if (jogadorData) {
-          const minhaConf = data.find(c => c.jogador_id === jogadorData.id);
+          .limit(1);
+        if (jData?.[0]) {
+          const minhaConf = data.find(c => c.jogador_id === jData[0].id);
           setConfirmacao(minhaConf || null);
         }
       }
     }
-  }
-
-  function podeConfirmar() {
-    if (!rodadaAtual) return false;
-    // Abertura: sábado às 12h (após a rodada)
-    // Fechamento para lista principal: quarta às 10h
-    const agora = new Date();
-    const diaSemana = agora.getDay();
-    const hora = agora.getHours();
-
-    // Sempre pode confirmar para espera
-    // Para lista principal: até quarta às 10h
-    return true; // Simplificado — controle de tempo feito no servidor
   }
 
   function statusConfirmacao() {
@@ -115,46 +92,33 @@ export default function Confirmacao({ session }) {
     if (!jogador || !rodadaAtual) return;
     setProcessando(true);
 
-    // Verifica se já existe confirmação
-    const { data: existente } = await supabase
+    const { data: existentes } = await supabase
       .from("confirmacoes")
       .select("*")
       .eq("jogador_id", jogador.id)
-      .eq("rodada_id", rodadaAtual.id)
-      .single()
-      .catch(() => ({ data: null }));
+      .eq("rodada_id", rodadaAtual.id);
 
-    if (existente) {
+    if (existentes && existentes.length > 0) {
       mostrarMensagem("Você já está confirmado!", "info");
       setProcessando(false);
       return;
     }
 
-    // Determina status: principal ou espera
-    const totalPrincipal = listaConfirmados.length;
     const agora = new Date();
-    const dentroDoPrazo = agora.getDay() <= PRAZO_CONFIRMACAO || 
-      (agora.getDay() === PRAZO_CONFIRMACAO && agora.getHours() < HORA_LIMITE);
-    
-    const status = (totalPrincipal < LIMITE_PRINCIPAL && dentroDoPrazo) 
-      ? "confirmado" 
-      : "espera";
+    const dentroDoPrazo = agora.getDay() < 3 || (agora.getDay() === 3 && agora.getHours() < 10);
+    const status = (listaConfirmados.length < LIMITE_PRINCIPAL && dentroDoPrazo) ? "confirmado" : "espera";
 
-    const { error } = await supabase
-      .from("confirmacoes")
-      .insert({
-        jogador_id: jogador.id,
-        rodada_id: rodadaAtual.id,
-        status,
-      });
+    const { error } = await supabase.from("confirmacoes").insert({
+      jogador_id: jogador.id,
+      rodada_id: rodadaAtual.id,
+      status,
+    });
 
     if (error) {
       mostrarMensagem("Erro ao confirmar: " + error.message, "erro");
     } else {
       mostrarMensagem(
-        status === "confirmado" 
-          ? "✅ Presença confirmada na lista principal!" 
-          : "⏳ Você entrou na lista de espera!",
+        status === "confirmado" ? "✅ Presença confirmada!" : "⏳ Você entrou na lista de espera!",
         "sucesso"
       );
       await carregarConfirmacoes(rodadaAtual.id);
@@ -168,33 +132,19 @@ export default function Confirmacao({ session }) {
     setProcessando(true);
 
     const eraConfirmado = confirmacao.status === "confirmado";
-
-    const { error } = await supabase
-      .from("confirmacoes")
-      .delete()
-      .eq("id", confirmacao.id);
+    const { error } = await supabase.from("confirmacoes").delete().eq("id", confirmacao.id);
 
     if (error) {
       mostrarMensagem("Erro ao cancelar: " + error.message, "erro");
     } else {
-      // Se era confirmado, promove primeiro da espera
-      if (eraConfirmado) {
-        await promoverDaEspera();
+      if (eraConfirmado && listaEspera.length > 0) {
+        await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", listaEspera[0].id);
       }
       mostrarMensagem("Confirmação cancelada.", "info");
       setConfirmacao(null);
       await carregarConfirmacoes(rodadaAtual.id);
     }
     setProcessando(false);
-  }
-
-  async function promoverDaEspera() {
-    if (listaEspera.length === 0) return;
-    const primeiro = listaEspera[0];
-    await supabase
-      .from("confirmacoes")
-      .update({ status: "confirmado" })
-      .eq("id", primeiro.id);
   }
 
   function mostrarMensagem(texto, tipo = "sucesso") {
@@ -204,29 +154,20 @@ export default function Confirmacao({ session }) {
 
   const status = statusConfirmacao();
 
-  if (loading) {
-    return (
-      <div style={styles.container}>
-        <p style={styles.loadingText}>Carregando...</p>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={styles.container}><p style={styles.loadingText}>Carregando...</p></div>
+  );
 
-  if (!jogador) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <p style={styles.emptyText}>
-            Seu perfil ainda não está vinculado a um jogador. Entre em contato com o administrador.
-          </p>
-        </div>
+  if (!jogador) return (
+    <div style={styles.container}>
+      <div style={styles.card}>
+        <p style={styles.emptyText}>Seu perfil ainda não está vinculado a um jogador. Entre em contato com o administrador.</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerIcon}>📋</div>
         <div>
@@ -236,15 +177,11 @@ export default function Confirmacao({ session }) {
       </div>
 
       {mensagem && (
-        <div style={{
-          ...styles.mensagem,
-          background: mensagem.tipo === "erro" ? "#c0392b" : mensagem.tipo === "info" ? "#2980b9" : "#27ae60"
-        }}>
+        <div style={{ ...styles.mensagem, background: mensagem.tipo === "erro" ? "#c0392b" : mensagem.tipo === "info" ? "#2980b9" : "#27ae60" }}>
           {mensagem.texto}
         </div>
       )}
 
-      {/* Próxima Rodada */}
       {rodadaAtual ? (
         <>
           <div style={styles.card}>
@@ -253,9 +190,7 @@ export default function Confirmacao({ session }) {
                 <div style={styles.rodadaLabel}>Próxima Rodada</div>
                 <div style={styles.rodadaNumero}>Rodada {rodadaAtual.numero}</div>
                 <div style={styles.rodadaData}>
-                  📅 {new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", {
-                    weekday: "long", day: "2-digit", month: "long"
-                  })}
+                  📅 {new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
                 </div>
               </div>
               <div style={styles.contadorBox}>
@@ -264,68 +199,43 @@ export default function Confirmacao({ session }) {
                 <div style={styles.contadorMax}>de {LIMITE_PRINCIPAL}</div>
               </div>
             </div>
-
-            {/* Prazo */}
             <div style={styles.prazoBox}>
               <span style={styles.prazoIcon}>⏰</span>
-              <span style={styles.prazoTexto}>
-                Prazo para lista principal: <strong>Quarta-feira às 10h00</strong>
-              </span>
+              <span style={styles.prazoTexto}>Prazo para lista principal: <strong>Quarta-feira às 10h00</strong></span>
             </div>
           </div>
 
-          {/* Status do jogador */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>Minha situação</h2>
-            
             {!status ? (
               <div style={styles.semConfirmacao}>
                 <div style={styles.semConfirmacaoIcon}>❓</div>
                 <div style={styles.semConfirmacaoTexto}>Você ainda não confirmou presença</div>
-                <button
-                  onClick={confirmarPresenca}
-                  disabled={processando}
-                  style={styles.btnConfirmar}
-                >
+                <button onClick={confirmarPresenca} disabled={processando} style={styles.btnConfirmar}>
                   {processando ? "Processando..." : "✅ Confirmar Presença"}
                 </button>
               </div>
             ) : status.tipo === "confirmado" ? (
               <div style={styles.statusConfirmado}>
                 <div style={styles.statusIcon}>✅</div>
-                <div style={styles.statusTexto}>
-                  <strong>Confirmado!</strong> Você está na lista principal
-                </div>
+                <div style={styles.statusTexto}><strong>Confirmado!</strong> Você está na lista principal</div>
                 <div style={styles.statusPos}>#{status.pos} na lista</div>
-                <button
-                  onClick={cancelarPresenca}
-                  disabled={processando}
-                  style={styles.btnCancelar}
-                >
+                <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelar}>
                   {processando ? "..." : "Cancelar confirmação"}
                 </button>
               </div>
             ) : (
               <div style={styles.statusEspera}>
                 <div style={styles.statusIcon}>⏳</div>
-                <div style={styles.statusTexto}>
-                  <strong>Lista de espera</strong> — Posição #{status.pos}
-                </div>
-                <div style={styles.statusInfo}>
-                  Você será notificado se uma vaga abrir
-                </div>
-                <button
-                  onClick={cancelarPresenca}
-                  disabled={processando}
-                  style={styles.btnCancelarEspera}
-                >
+                <div style={styles.statusTexto}><strong>Lista de espera</strong> — Posição #{status.pos}</div>
+                <div style={styles.statusInfo}>Você será notificado se uma vaga abrir</div>
+                <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelarEspera}>
                   {processando ? "..." : "Sair da lista de espera"}
                 </button>
               </div>
             )}
           </div>
 
-          {/* Lista Principal */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>
               ✅ Lista Principal
@@ -336,45 +246,26 @@ export default function Confirmacao({ session }) {
             ) : (
               <div style={styles.lista}>
                 {listaConfirmados.map((c, idx) => (
-                  <div key={c.id} style={{
-                    ...styles.listaItem,
-                    ...(c.jogador_id === jogador?.id ? styles.listaItemMeu : {})
-                  }}>
+                  <div key={c.id} style={{ ...styles.listaItem, ...(c.jogador_id === jogador?.id ? styles.listaItemMeu : {}) }}>
                     <span style={styles.listaPos}>{idx + 1}</span>
                     <span style={styles.listaNome}>{c.jogadores?.nome}</span>
-                    <span style={{
-                      ...styles.listaChave,
-                      color: c.jogadores?.chave === "ouro" ? ouro : prata
-                    }}>
-                      {c.jogadores?.chave}
-                    </span>
-                    <span style={styles.listaHora}>
-                      {new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
+                    <span style={{ ...styles.listaChave, color: c.jogadores?.chave === "ouro" ? ouro : prata }}>{c.jogadores?.chave}</span>
+                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Lista de Espera */}
           {listaEspera.length > 0 && (
             <div style={styles.card}>
-              <h2 style={styles.cardTitulo}>
-                ⏳ Lista de Espera
-                <span style={styles.badge}>{listaEspera.length}</span>
-              </h2>
+              <h2 style={styles.cardTitulo}>⏳ Lista de Espera <span style={styles.badge}>{listaEspera.length}</span></h2>
               <div style={styles.lista}>
                 {listaEspera.map((c, idx) => (
-                  <div key={c.id} style={{
-                    ...styles.listaItem,
-                    ...(c.jogador_id === jogador?.id ? styles.listaItemMeu : {})
-                  }}>
+                  <div key={c.id} style={{ ...styles.listaItem, ...(c.jogador_id === jogador?.id ? styles.listaItemMeu : {}) }}>
                     <span style={styles.listaPos}>{idx + 1}º</span>
                     <span style={styles.listaNome}>{c.jogadores?.nome}</span>
-                    <span style={styles.listaHora}>
-                      {new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
+                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 ))}
               </div>
@@ -383,9 +274,7 @@ export default function Confirmacao({ session }) {
         </>
       ) : (
         <div style={styles.card}>
-          <p style={styles.emptyText}>
-            Nenhuma rodada agendada no momento. Volte após o sábado para confirmar presença na próxima rodada.
-          </p>
+          <p style={styles.emptyText}>Nenhuma rodada agendada no momento.</p>
         </div>
       )}
     </div>
@@ -397,7 +286,6 @@ const prata = "#8e9eab";
 const bg = "#0f2d1e";
 const cardBg = "#162f20";
 const borda = "#2a5a3a";
-const verde = "#1a4a2e";
 
 const styles = {
   container: { minHeight: "100vh", background: bg, padding: "20px 16px 100px", fontFamily: "'Segoe UI', sans-serif", color: "#e8f5e9", maxWidth: 600, margin: "0 auto" },
