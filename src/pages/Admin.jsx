@@ -75,7 +75,6 @@ function gerarSorteio(jogadores) {
 export default function Admin({ session }) {
   const [abaAtiva, setAbaAtiva] = useState("jogos");
 
-  // ── Estado Jogos ──
   const [rodadas, setRodadas] = useState([]);
   const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
   const [jogadores, setJogadores] = useState([]);
@@ -92,17 +91,14 @@ export default function Admin({ session }) {
   });
   const [editandoId, setEditandoId] = useState(null);
 
-  // ── Estado Convites ──
   const [convites, setConvites] = useState([]);
   const [loadingConvites, setLoadingConvites] = useState(false);
   const [gerandoConvite, setGerandoConvite] = useState(false);
 
-  // ── Estado Aprovações ──
   const [pendentes, setPendentes] = useState([]);
   const [loadingPendentes, setLoadingPendentes] = useState(false);
   const [aprovando, setAprovando] = useState(null);
 
-  // ── Mensagem global ──
   const [mensagem, setMensagem] = useState(null);
 
   useEffect(() => { carregarRodadas(); carregarJogadores(); }, []);
@@ -114,8 +110,6 @@ export default function Admin({ session }) {
     setMensagem({ texto, tipo });
     setTimeout(() => setMensagem(null), 4000);
   }
-
-  // ─── JOGOS ───────────────────────────────────────────────────────────────
 
   async function carregarRodadas() {
     const { data } = await supabase.from("rodadas").select("*").order("numero", { ascending: true });
@@ -189,8 +183,6 @@ export default function Admin({ session }) {
     setEditandoId(null);
   }
 
-  // ─── SORTEIO ─────────────────────────────────────────────────────────────
-
   function gerarSorteioLocal() {
     const jogadoresChave = jogadores.filter(j => j.chave === chaveAtiva).map(j => j.nome);
     if (jogadoresChave.length < 4) {
@@ -227,11 +219,9 @@ export default function Admin({ session }) {
     setSalvandoSorteio(false);
   }
 
-  // ─── PONTUAÇÃO ───────────────────────────────────────────────────────────
-
   function calcularRankingLocal(jogosChave, chave) {
     const stats = {};
-    const confrontos = {}; // confrontos[a][b] = vitórias de a contra b
+    const confrontos = {};
 
     const addJogador = (nome) => {
       if (nome && !stats[nome]) {
@@ -253,38 +243,24 @@ export default function Admin({ session }) {
       const vencedores = venceuA ? jogadoresA : jogadoresB;
       const perdedores = venceuA ? jogadoresB : jogadoresA;
 
-      vencedores.forEach(n => {
-        stats[n].pts += ptsVenc;
-        stats[n].vitorias += 1;
-        stats[n].saldo += saldo;
-      });
-      perdedores.forEach(n => {
-        stats[n].pts += ptsPerd;
-        stats[n].saldo -= saldo;
-      });
+      vencedores.forEach(n => { stats[n].pts += ptsVenc; stats[n].vitorias += 1; stats[n].saldo += saldo; });
+      perdedores.forEach(n => { stats[n].pts += ptsPerd; stats[n].saldo -= saldo; });
 
-      // Registra confronto direto entre jogadores das duplas oponentes
       jogadoresA.forEach(a => {
         jogadoresB.forEach(b => {
           if (!confrontos[a]) confrontos[a] = {};
           if (!confrontos[b]) confrontos[b] = {};
-          if (venceuA) {
-            confrontos[a][b] = (confrontos[a][b] || 0) + 1;
-          } else {
-            confrontos[b][a] = (confrontos[b][a] || 0) + 1;
-          }
+          if (venceuA) { confrontos[a][b] = (confrontos[a][b] || 0) + 1; }
+          else { confrontos[b][a] = (confrontos[b][a] || 0) + 1; }
         });
       });
     }
 
-    // Função de desempate por confronto direto: retorna vitórias de a contra b
     function vitoriasDiretas(nomeA, nomeB) {
       return (confrontos[nomeA]?.[nomeB] || 0) - (confrontos[nomeB]?.[nomeA] || 0);
     }
 
     const jogadoresList = Object.values(stats);
-
-    // Ordena pelos 3 critérios: 1) pts do dia, 2) saldo de games, 3) confronto direto
     jogadoresList.sort((a, b) => {
       if (b.pts !== a.pts) return b.pts - a.pts;
       if (b.saldo !== a.saldo) return b.saldo - a.saldo;
@@ -314,59 +290,87 @@ export default function Admin({ session }) {
   }
 
   async function salvarPontuacao() {
-  if (!rankingPreview) return;
-  setCalculando(true);
-  const todos = [...rankingPreview.ouro, ...rankingPreview.prata];
-  const erros = [];
+    if (!rankingPreview) return;
+    setCalculando(true);
+    const todos = [...rankingPreview.ouro, ...rankingPreview.prata];
+    const erros = [];
 
-  for (const j of todos) {
-    const jogador = jogadores.find(jg => jg.nome === j.nome);
-    if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
+    // 1. Salva pontuação de cada jogador
+    for (const j of todos) {
+      const jogador = jogadores.find(jg => jg.nome === j.nome);
+      if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
 
-    // Busca sem .single() para evitar erro 406
-    const { data: existentes, error: erroBusca } = await supabase
-      .from("pontuacao")
-      .select("id")
-      .eq("jogador_id", jogador.id)
-      .eq("rodada_id", rodadaSelecionada.id);
+      const { data: existentes, error: erroBusca } = await supabase
+        .from("pontuacao").select("id")
+        .eq("jogador_id", jogador.id)
+        .eq("rodada_id", rodadaSelecionada.id);
 
-    if (erroBusca) { erros.push(erroBusca.message); continue; }
+      if (erroBusca) { erros.push(erroBusca.message); continue; }
 
-    const existente = existentes && existentes.length > 0 ? existentes[0] : null;
+      const existente = existentes && existentes.length > 0 ? existentes[0] : null;
 
-    if (existente) {
-      const { error } = await supabase
-        .from("pontuacao")
-        .update({ pontos: j.ptosLiga, vitorias: j.vitorias })
-        .eq("id", existente.id);
-      if (error) erros.push(error.message);
-    } else {
-      const { error } = await supabase
-        .from("pontuacao")
-        .insert({
-          jogador_id: jogador.id,
-          rodada_id: rodadaSelecionada.id,
-          pontos: j.ptosLiga,
-          vitorias: j.vitorias
-        });
-      if (error) erros.push(error.message);
+      if (existente) {
+        const { error } = await supabase.from("pontuacao")
+          .update({ pontos: j.ptosLiga, vitorias: j.vitorias }).eq("id", existente.id);
+        if (error) erros.push(error.message);
+      } else {
+        const { error } = await supabase.from("pontuacao")
+          .insert({ jogador_id: jogador.id, rodada_id: rodadaSelecionada.id, pontos: j.ptosLiga, vitorias: j.vitorias });
+        if (error) erros.push(error.message);
+      }
     }
+
+    if (erros.length > 0) {
+      mostrarMensagem("Erros: " + erros.join(", "), "erro");
+      setCalculando(false);
+      return;
+    }
+
+    // 2. Fecha a rodada atual
+    await supabase.from("rodadas")
+      .update({ status: "finalizada" })
+      .eq("id", rodadaSelecionada.id);
+
+    // 3. Verifica se já existe próxima rodada com status 'proxima'
+    const { data: proximaExistente } = await supabase
+      .from("rodadas").select("id")
+      .eq("status", "proxima").limit(1);
+
+    if (!proximaExistente || proximaExistente.length === 0) {
+      // Calcula data do próximo sábado
+      const hoje = new Date();
+      const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
+      const proximoSabado = new Date(hoje);
+      proximoSabado.setDate(hoje.getDate() + diasParaSabado);
+      const dataStr = proximoSabado.toISOString().split("T")[0];
+
+      // Determina número e tipo da próxima rodada
+      const proximoNumero = rodadaSelecionada.numero + 1;
+      const tipo = (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal";
+
+      await supabase.from("rodadas").insert({
+        numero: proximoNumero,
+        data: dataStr,
+        status: "proxima",
+        liga: rodadaSelecionada.liga,
+        tipo: tipo,
+      });
+
+      mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} (${tipo}) criada automaticamente.`);
+    } else {
+      mostrarMensagem("✅ Pontuação salva! Próxima rodada já estava cadastrada.");
+    }
+
+    setRankingPreview(null);
+    carregarRodadas();
+    setCalculando(false);
   }
-
-  if (erros.length > 0) mostrarMensagem("Erros: " + erros.join(", "), "erro");
-  else { mostrarMensagem("✅ Pontuação salva!"); setRankingPreview(null); }
-  setCalculando(false);
-}
-
-  // ─── CONVITES ────────────────────────────────────────────────────────────
 
   async function carregarConvites() {
     setLoadingConvites(true);
     const { data } = await supabase
-      .from("convites")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(20);
+      .from("convites").select("*")
+      .order("created_at", { ascending: false }).limit(20);
     setConvites(data || []);
     setLoadingConvites(false);
   }
@@ -396,8 +400,6 @@ export default function Admin({ session }) {
     else { mostrarMensagem("Convite revogado."); carregarConvites(); }
   }
 
-  // ─── APROVAÇÕES ──────────────────────────────────────────────────────────
-
   async function carregarPendentes() {
     setLoadingPendentes(true);
     const { data } = await supabase.from("cadastros_pendentes").select("*")
@@ -424,8 +426,6 @@ export default function Admin({ session }) {
     else { mostrarMensagem(`${pendente.nome} rejeitado.`); carregarPendentes(); }
     setAprovando(null);
   }
-
-  // ─── RENDER ───────────────────────────────────────────────────────────────
 
   const SelectJogador = ({ value, onChange, placeholder }) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} style={styles.select}>
@@ -474,8 +474,17 @@ export default function Admin({ session }) {
                 <button key={r.id} onClick={() => setRodadaSelecionada(r)}
                   style={{ ...styles.btnRodada, ...(rodadaSelecionada?.id === r.id ? styles.btnRodadaAtivo : {}) }}>
                   R{r.numero}
+                  <span style={styles.rodadaTipo}>
+                    {r.tipo === "especial" ? "⭐" : ""}
+                  </span>
                   <span style={styles.rodadaData}>
                     {new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                  </span>
+                  <span style={{
+                    fontSize: 9,
+                    color: r.status === "finalizada" ? "#5a8a6a" : r.status === "ativa" ? "#c9a227" : "#7fb89a"
+                  }}>
+                    {r.status}
                   </span>
                 </button>
               ))}
@@ -606,6 +615,11 @@ export default function Admin({ session }) {
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>🏆 Pontuação da Liga</h2>
             <p style={styles.infoText}>Calcule após inserir todos os placares das duas chaves.</p>
+            {rodadaSelecionada?.tipo === "especial" && (
+              <div style={{ background: "#1a3a20", border: "1px solid #c9a227", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 13, color: "#c9a227" }}>
+                ⭐ Rodada Especial — pontuação dobrada aplicada automaticamente
+              </div>
+            )}
             <button onClick={calcularPontuacao} disabled={calculando} style={styles.btnCalcular}>
               {calculando ? "Calculando..." : "📊 Calcular Pontuação"}
             </button>
@@ -743,6 +757,7 @@ const styles = {
   btnRodada: { background: "transparent", border: `1px solid ${borda}`, borderRadius: 8, color: "#9dbfac", padding: "6px 12px", cursor: "pointer", fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
   btnRodadaAtivo: { background: verde, border: `1px solid ${ouro}`, color: ouro, fontWeight: 700 },
   rodadaData: { fontSize: 10, opacity: 0.7 },
+  rodadaTipo: { fontSize: 10 },
   chaveRow: { display: "flex", gap: 10, marginBottom: 16 },
   btnChave: { flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14 },
   btnOuroAtivo: { background: ouro, color: "#0f2d1e" },
