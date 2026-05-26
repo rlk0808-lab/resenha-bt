@@ -3,10 +3,13 @@ import { supabase } from "../lib/supabase";
 
 export default function Confirmacao({ session }) {
   const [rodadaAtual, setRodadaAtual] = useState(null);
+  const [rodadaAnterior, setRodadaAnterior] = useState(null);
   const [jogador, setJogador] = useState(null);
   const [confirmacao, setConfirmacao] = useState(null);
   const [listaConfirmados, setListaConfirmados] = useState([]);
   const [listaEspera, setListaEspera] = useState([]);
+  const [rankingAnterior, setRankingAnterior] = useState({ ouro: [], prata: [] });
+  const [previaChaves, setPreviaChaves] = useState({ ouro: [], prata: [] });
   const [loading, setLoading] = useState(true);
   const [processando, setProcessando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
@@ -25,25 +28,44 @@ export default function Confirmacao({ session }) {
 
   async function carregarJogador() {
     const { data } = await supabase
-      .from("jogadores")
-      .select("*")
-      .eq("user_id", session.user.id)
-      .limit(1);
+      .from("jogadores").select("*").eq("user_id", session.user.id).limit(1);
     setJogador(data?.[0] || null);
     return data?.[0] || null;
   }
 
   async function carregarProximaRodada() {
     const { data } = await supabase
-      .from("rodadas")
-      .select("*")
+      .from("rodadas").select("*")
       .in("status", ["ativa", "proxima"])
-      .order("numero", { ascending: true })
-      .limit(1);
+      .order("numero", { ascending: true }).limit(1);
 
     const rodada = data?.[0] || null;
     if (rodada) {
       setRodadaAtual(rodada);
+
+      // Busca rodada anterior
+      const { data: anterior } = await supabase
+        .from("rodadas").select("*")
+        .eq("status", "finalizada")
+        .order("numero", { ascending: false }).limit(1);
+      const rodAnt = anterior?.[0] || null;
+      setRodadaAnterior(rodAnt);
+
+      // Busca ranking da rodada anterior
+      if (rodAnt) {
+        const { data: rank } = await supabase
+          .from("ranking_rodada")
+          .select("*, jogadores(nome, chave)")
+          .eq("rodada_id", rodAnt.id)
+          .order("posicao", { ascending: true });
+
+        if (rank) {
+          const rankOuro = rank.filter(r => r.chave === "ouro");
+          const rankPrata = rank.filter(r => r.chave === "prata");
+          setRankingAnterior({ ouro: rankOuro, prata: rankPrata });
+        }
+      }
+
       await carregarConfirmacoes(rodada.id);
     }
     return rodada;
@@ -52,20 +74,19 @@ export default function Confirmacao({ session }) {
   async function carregarConfirmacoes(rodadaId) {
     const { data } = await supabase
       .from("confirmacoes")
-      .select("*, jogadores(nome, chave)")
+      .select("*, jogadores(id, nome, chave)")
       .eq("rodada_id", rodadaId)
       .order("created_at", { ascending: true });
 
     if (data) {
-      setListaConfirmados(data.filter(c => c.status === "confirmado"));
-      setListaEspera(data.filter(c => c.status === "espera"));
+      const confirmados = data.filter(c => c.status === "confirmado");
+      const espera = data.filter(c => c.status === "espera");
+      setListaConfirmados(confirmados);
+      setListaEspera(espera);
 
       if (session?.user) {
         const { data: jData } = await supabase
-          .from("jogadores")
-          .select("id")
-          .eq("user_id", session.user.id)
-          .limit(1);
+          .from("jogadores").select("id").eq("user_id", session.user.id).limit(1);
         if (jData?.[0]) {
           const minhaConf = data.find(c => c.jogador_id === jData[0].id);
           setConfirmacao(minhaConf || null);
@@ -73,6 +94,89 @@ export default function Confirmacao({ session }) {
       }
     }
   }
+
+  // Calcula a prévia das chaves com base nos confirmados e ranking anterior
+  function calcularPrevia(confirmados, rankingAnt) {
+    if (!rankingAnt.ouro.length && !rankingAnt.prata.length) {
+      // Primeira rodada — sem ranking anterior, usa chave atual
+      const ouro = confirmados.filter(c => c.jogadores?.chave === "ouro").map(c => ({ nome: c.jogadores?.nome, status: "normal" }));
+      const prata = confirmados.filter(c => c.jogadores?.chave === "prata").map(c => ({ nome: c.jogadores?.nome, status: "normal" }));
+      return { ouro, prata };
+    }
+
+    const nomeConfirmados = new Set(confirmados.map(c => c.jogadores?.nome));
+
+    // Jogadores da Ouro que confirmaram e que não confirmaram
+    const ouroConfirmados = rankingAnt.ouro.filter(r => nomeConfirmados.has(r.jogadores?.nome));
+    const ouroFaltando = rankingAnt.ouro.filter(r => !nomeConfirmados.has(r.jogadores?.nome));
+
+    // 3 últimos da Ouro descem (posições 10, 11, 12)
+    const ouroDescem = rankingAnt.ouro.filter(r => r.posicao >= 10).map(r => r.jogadores?.nome);
+    
+    // Ouro que ficam = confirmados que NÃO estão nos 3 últimos
+    const ouroFicam = ouroConfirmados
+      .filter(r => !ouroDescem.includes(r.jogadores?.nome))
+      .map(r => ({ nome: r.jogadores?.nome, status: "normal" }));
+
+    // Quantos faltam na Ouro para completar 12
+    const vagasOuro = 12 - ouroFicam.length;
+
+    // 3 primeiros da Prata sobem
+    const prataSobem = rankingAnt.prata.filter(r => r.posicao <= 3);
+    const prataSobemConfirmados = prataSobem.filter(r => nomeConfirmados.has(r.jogadores?.nome));
+
+    // Quantos da prata precisam subir além dos 3 (por faltas na ouro)
+    // Faltas = jogadores da Ouro (excluindo os 3 que descem) que não confirmaram
+    const ouroEfetivos = rankingAnt.ouro.filter(r => !ouroDescem.includes(r.jogadores?.nome));
+    const ouroFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
+
+    // Monta lista de quem sobe da Prata
+    const prataTodosOrdenados = rankingAnt.prata.filter(r => nomeConfirmados.has(r.jogadores?.nome))
+      .sort((a, b) => a.posicao - b.posicao);
+
+    // Quantos precisam subir: 3 normais + faltas da Ouro
+    let totalSubindo = Math.min(3 + ouroFaltasEfetivas, prataTodosOrdenados.length);
+
+    // Regra especial: se faltaram 4, 5 ou 6 da Ouro, os 10º/11º/12º da rodada anterior se mantêm
+    const ouroMantemPosicoes = [];
+    if (ouroFaltasEfetivas >= 4) {
+      const pos10 = rankingAnt.ouro.find(r => r.posicao === 10);
+      if (pos10 && nomeConfirmados.has(pos10.jogadores?.nome)) ouroMantemPosicoes.push(pos10.jogadores?.nome);
+    }
+    if (ouroFaltasEfetivas >= 5) {
+      const pos11 = rankingAnt.ouro.find(r => r.posicao === 11);
+      if (pos11 && nomeConfirmados.has(pos11.jogadores?.nome)) ouroMantemPosicoes.push(pos11.jogadores?.nome);
+    }
+    if (ouroFaltasEfetivas >= 6) {
+      const pos12 = rankingAnt.ouro.find(r => r.posicao === 12);
+      if (pos12 && nomeConfirmados.has(pos12.jogadores?.nome)) ouroMantemPosicoes.push(pos12.jogadores?.nome);
+    }
+
+    // Monta Ouro final
+    const ouroFinal = [
+      ...ouroFicam,
+      ...ouroMantemPosicoes.map(nome => ({ nome, status: "mantido" })),
+      ...prataTodosOrdenados.slice(0, totalSubindo).map(r => ({ nome: r.jogadores?.nome, status: "subiu" })),
+    ].slice(0, 12);
+
+    // Monta Prata final = confirmados que não estão na Ouro
+    const nomesOuro = new Set(ouroFinal.map(j => j.nome));
+    const prataFinal = confirmados
+      .filter(c => !nomesOuro.has(c.jogadores?.nome))
+      .map(c => {
+        const desceu = ouroDescem.includes(c.jogadores?.nome);
+        return { nome: c.jogadores?.nome, status: desceu ? "desceu" : "normal" };
+      });
+
+    return { ouro: ouroFinal, prata: prataFinal };
+  }
+
+  useEffect(() => {
+    if (listaConfirmados.length > 0 || rankingAnterior.ouro.length > 0) {
+      const previa = calcularPrevia(listaConfirmados, rankingAnterior);
+      setPreviaChaves(previa);
+    }
+  }, [listaConfirmados, rankingAnterior]);
 
   function statusConfirmacao() {
     if (!confirmacao) return null;
@@ -92,10 +196,8 @@ export default function Confirmacao({ session }) {
     setProcessando(true);
 
     const { data: existentes } = await supabase
-      .from("confirmacoes")
-      .select("*")
-      .eq("jogador_id", jogador.id)
-      .eq("rodada_id", rodadaAtual.id);
+      .from("confirmacoes").select("*")
+      .eq("jogador_id", jogador.id).eq("rodada_id", rodadaAtual.id);
 
     if (existentes && existentes.length > 0) {
       mostrarMensagem("Você já está confirmado!", "info");
@@ -108,18 +210,13 @@ export default function Confirmacao({ session }) {
     const status = (listaConfirmados.length < LIMITE_PRINCIPAL && dentroDoPrazo) ? "confirmado" : "espera";
 
     const { error } = await supabase.from("confirmacoes").insert({
-      jogador_id: jogador.id,
-      rodada_id: rodadaAtual.id,
-      status,
+      jogador_id: jogador.id, rodada_id: rodadaAtual.id, status,
     });
 
     if (error) {
       mostrarMensagem("Erro ao confirmar: " + error.message, "erro");
     } else {
-      mostrarMensagem(
-        status === "confirmado" ? "✅ Presença confirmada!" : "⏳ Você entrou na lista de espera!",
-        "sucesso"
-      );
+      mostrarMensagem(status === "confirmado" ? "✅ Presença confirmada!" : "⏳ Você entrou na lista de espera!", "sucesso");
       await carregarConfirmacoes(rodadaAtual.id);
     }
     setProcessando(false);
@@ -151,7 +248,23 @@ export default function Confirmacao({ session }) {
     setTimeout(() => setMensagem(null), 4000);
   }
 
+  function corStatus(status) {
+    if (status === "subiu") return "#2d7a45";
+    if (status === "desceu") return "#c0392b";
+    if (status === "mantido") return "#e8621a";
+    return "#e8f5e9";
+  }
+
+  function iconStatus(status) {
+    if (status === "subiu") return "↑";
+    if (status === "desceu") return "↓";
+    if (status === "mantido") return "=";
+    return "";
+  }
+
   const status = statusConfirmacao();
+  const vagasOuro = 12 - previaChaves.ouro.length;
+  const vagasPrata = 12 - previaChaves.prata.length;
 
   if (loading) return (
     <div style={styles.container}><p style={styles.loadingText}>Carregando...</p></div>
@@ -190,8 +303,7 @@ export default function Confirmacao({ session }) {
                 <div style={styles.rodadaNumero}>Rodada {rodadaAtual.numero}</div>
                 <div style={styles.rodadaData}>
                   📅 {new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", {
-                    weekday: "long", day: "2-digit", month: "long",
-                    timeZone: "America/Sao_Paulo"
+                    weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo"
                   })}
                 </div>
               </div>
@@ -237,6 +349,59 @@ export default function Confirmacao({ session }) {
               </div>
             )}
           </div>
+
+          {/* PRÉVIA DAS CHAVES */}
+          {listaConfirmados.length > 0 && (
+            <div style={styles.card}>
+              <h2 style={styles.cardTitulo}>
+                🔮 Prévia das Chaves
+                <span style={{ fontSize: 11, color: "#5a8a6a", fontWeight: 400 }}>atualiza em tempo real</span>
+              </h2>
+              <p style={{ fontSize: 12, color: "#5a8a6a", marginBottom: 14 }}>
+                ↑ subiu &nbsp;↓ desceu &nbsp;= mantido por falta na Ouro
+              </p>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {/* OURO */}
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+                    🥇 Ouro ({previaChaves.ouro.length}/12)
+                  </div>
+                  {previaChaves.ouro.map((j, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                      <span style={{ fontSize: 10, color: "#5a8a6a", width: 16 }}>{idx + 1}</span>
+                      <span style={{ flex: 1, fontSize: 12, color: corStatus(j.status), fontWeight: j.status !== "normal" ? 700 : 400 }}>{j.nome}</span>
+                      {j.status !== "normal" && <span style={{ fontSize: 11, color: corStatus(j.status), fontWeight: 700 }}>{iconStatus(j.status)}</span>}
+                    </div>
+                  ))}
+                  {vagasOuro > 0 && Array.from({ length: vagasOuro }).map((_, i) => (
+                    <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                      <span style={{ fontSize: 11, color: "#3a5a4a", fontStyle: "italic" }}>vaga aberta</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* PRATA */}
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+                    🥈 Prata ({previaChaves.prata.length}/12)
+                  </div>
+                  {previaChaves.prata.map((j, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                      <span style={{ fontSize: 10, color: "#5a8a6a", width: 16 }}>{idx + 1}</span>
+                      <span style={{ flex: 1, fontSize: 12, color: corStatus(j.status), fontWeight: j.status !== "normal" ? 700 : 400 }}>{j.nome}</span>
+                      {j.status !== "normal" && <span style={{ fontSize: 11, color: corStatus(j.status), fontWeight: 700 }}>{iconStatus(j.status)}</span>}
+                    </div>
+                  ))}
+                  {vagasPrata > 0 && Array.from({ length: vagasPrata }).map((_, i) => (
+                    <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                      <span style={{ fontSize: 11, color: "#3a5a4a", fontStyle: "italic" }}>vaga aberta</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>
@@ -297,7 +462,7 @@ const styles = {
   subtitulo: { margin: 0, fontSize: 13, color: "#7fb89a", marginTop: 2 },
   mensagem: { padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 14, fontWeight: 600, color: "#fff" },
   card: { background: cardBg, border: `1px solid ${borda}`, borderRadius: 12, padding: 16, marginBottom: 16 },
-  cardTitulo: { margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#c8e6c9", display: "flex", alignItems: "center", gap: 8 },
+  cardTitulo: { margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#c8e6c9", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
   badge: { background: "#1e3d2a", borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#7fb89a", fontWeight: 400 },
   loadingText: { color: "#7fb89a", textAlign: "center", padding: 40 },
   emptyText: { color: "#5a8a6a", textAlign: "center", padding: 20, fontSize: 14 },
