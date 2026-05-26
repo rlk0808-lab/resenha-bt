@@ -295,7 +295,7 @@ export default function Admin({ session }) {
     const todos = [...rankingPreview.ouro, ...rankingPreview.prata];
     const erros = [];
 
-    // 1. Salva pontuação de cada jogador
+    // 1. Salva pontuação (tabela pontuacao)
     for (const j of todos) {
       const jogador = jogadores.find(jg => jg.nome === j.nome);
       if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
@@ -308,7 +308,6 @@ export default function Admin({ session }) {
       if (erroBusca) { erros.push(erroBusca.message); continue; }
 
       const existente = existentes && existentes.length > 0 ? existentes[0] : null;
-
       if (existente) {
         const { error } = await supabase.from("pontuacao")
           .update({ pontos: j.ptosLiga, vitorias: j.vitorias }).eq("id", existente.id);
@@ -321,30 +320,92 @@ export default function Admin({ session }) {
     }
 
     if (erros.length > 0) {
-      mostrarMensagem("Erros: " + erros.join(", "), "erro");
+      mostrarMensagem("Erros ao salvar pontuação: " + erros.join(", "), "erro");
       setCalculando(false);
       return;
     }
 
-    // 2. Fecha a rodada atual
+    // 2. Salva ranking_rodada
+    for (const chave of ["ouro", "prata"]) {
+      const lista = rankingPreview[chave] || [];
+      for (const j of lista) {
+        const jogador = jogadores.find(jg => jg.nome === j.nome);
+        if (!jogador) continue;
+
+        // Remove registro anterior da mesma rodada/jogador se existir
+        await supabase.from("ranking_rodada")
+          .delete()
+          .eq("rodada_id", rodadaSelecionada.id)
+          .eq("jogador_id", jogador.id);
+
+        const { error } = await supabase.from("ranking_rodada").insert({
+          rodada_id: rodadaSelecionada.id,
+          jogador_id: jogador.id,
+          chave: chave,
+          posicao: j.posicao,
+          pontos_liga: j.ptosLiga,
+        });
+        if (error) erros.push(`ranking_rodada ${j.nome}: ${error.message}`);
+      }
+    }
+
+    if (erros.length > 0) {
+      mostrarMensagem("Erros ao salvar ranking: " + erros.join(", "), "erro");
+      setCalculando(false);
+      return;
+    }
+
+    // 3. Atualiza chave dos jogadores (sobe/desce)
+    // Rodadas especiais não têm subida/descida
+    if (rodadaSelecionada?.tipo !== "especial") {
+      const ouroRanking = rankingPreview.ouro || [];
+      const prataRanking = rankingPreview.prata || [];
+
+      // 3 últimos da Ouro descem
+      const descem = ouroRanking.slice(-3).map(j => j.nome);
+      // 3 primeiros da Prata sobem
+      const sobem = prataRanking.slice(0, 3).map(j => j.nome);
+
+      for (const nome of descem) {
+        const jogador = jogadores.find(jg => jg.nome === nome);
+        if (!jogador) continue;
+        const { error } = await supabase.from("jogadores")
+          .update({ chave: "prata" }).eq("id", jogador.id);
+        if (error) erros.push(`Descer ${nome}: ${error.message}`);
+      }
+
+      for (const nome of sobem) {
+        const jogador = jogadores.find(jg => jg.nome === nome);
+        if (!jogador) continue;
+        const { error } = await supabase.from("jogadores")
+          .update({ chave: "ouro" }).eq("id", jogador.id);
+        if (error) erros.push(`Subir ${nome}: ${error.message}`);
+      }
+
+      if (erros.length > 0) {
+        mostrarMensagem("Erros ao atualizar chaves: " + erros.join(", "), "erro");
+        setCalculando(false);
+        return;
+      }
+    }
+
+    // 4. Fecha a rodada atual
     await supabase.from("rodadas")
       .update({ status: "finalizada" })
       .eq("id", rodadaSelecionada.id);
 
-    // 3. Verifica se já existe próxima rodada com status 'proxima'
+    // 5. Cria próxima rodada se não existir
     const { data: proximaExistente } = await supabase
       .from("rodadas").select("id")
       .eq("status", "proxima").limit(1);
 
     if (!proximaExistente || proximaExistente.length === 0) {
-      // Calcula data do próximo sábado
       const hoje = new Date();
       const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
       const proximoSabado = new Date(hoje);
       proximoSabado.setDate(hoje.getDate() + diasParaSabado);
       const dataStr = proximoSabado.toISOString().split("T")[0];
 
-      // Determina número e tipo da próxima rodada
       const proximoNumero = rodadaSelecionada.numero + 1;
       const tipo = (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal";
 
@@ -358,8 +419,11 @@ export default function Admin({ session }) {
 
       mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} (${tipo}) criada automaticamente.`);
     } else {
-      mostrarMensagem("✅ Pontuação salva! Próxima rodada já estava cadastrada.");
+      mostrarMensagem("✅ Pontuação salva e chaves atualizadas!");
     }
+
+    // 6. Recarrega jogadores localmente para sorteio futuro usar chaves atualizadas
+    await carregarJogadores();
 
     setRankingPreview(null);
     carregarRodadas();
@@ -628,19 +692,34 @@ export default function Admin({ session }) {
           {rankingPreview && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>👀 Preview — Confirmar antes de salvar</h2>
+
+              {rodadaSelecionada?.tipo !== "especial" && (
+                <div style={{ background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#7fb89a" }}>
+                  ↓ Descem para Prata: <strong style={{ color: "#e74c3c" }}>{(rankingPreview.ouro || []).slice(-3).map(j => j.nome).join(", ")}</strong>
+                  &nbsp;&nbsp;↑ Sobem para Ouro: <strong style={{ color: "#2ecc71" }}>{(rankingPreview.prata || []).slice(0, 3).map(j => j.nome).join(", ")}</strong>
+                </div>
+              )}
+
               {["ouro", "prata"].map(chave => (
                 <div key={chave} style={{ marginBottom: 16 }}>
                   <div style={{ ...styles.chaveHeader, color: chave === "ouro" ? ouro : prata }}>
                     {chave === "ouro" ? "🥇 Chave Ouro" : "🥈 Chave Prata"}
                   </div>
-                  {(rankingPreview[chave] || []).map((j, idx) => (
-                    <div key={j.nome} style={styles.rankingRow}>
-                      <span style={styles.rankPos}>{idx + 1}º</span>
-                      <span style={styles.rankNome}>{j.nome}</span>
-                      <span style={styles.rankVit}>{j.vitorias}V</span>
-                      <span style={styles.rankPts}>{j.ptosLiga} pts</span>
-                    </div>
-                  ))}
+                  {(rankingPreview[chave] || []).map((j, idx) => {
+                    const total = (rankingPreview[chave] || []).length;
+                    const desce = chave === "ouro" && idx >= total - 3 && rodadaSelecionada?.tipo !== "especial";
+                    const sobe = chave === "prata" && idx < 3 && rodadaSelecionada?.tipo !== "especial";
+                    return (
+                      <div key={j.nome} style={{ ...styles.rankingRow, ...(desce ? { borderLeft: "3px solid #e74c3c" } : sobe ? { borderLeft: "3px solid #2ecc71" } : {}) }}>
+                        <span style={styles.rankPos}>{idx + 1}º</span>
+                        <span style={styles.rankNome}>{j.nome}</span>
+                        <span style={styles.rankVit}>{j.vitorias}V</span>
+                        <span style={styles.rankPts}>{j.ptosLiga} pts</span>
+                        {desce && <span style={{ fontSize: 11, color: "#e74c3c" }}>↓</span>}
+                        {sobe && <span style={{ fontSize: 11, color: "#2ecc71" }}>↑</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
               <div style={styles.botoesForm}>
@@ -804,7 +883,7 @@ const styles = {
   sorteioNomes: { flex: 1, fontSize: 13, color: "#c8e6c9" },
   sorteioVs: { fontSize: 12, color: "#5a8a6a", fontWeight: 700 },
   chaveHeader: { fontWeight: 700, fontSize: 14, marginBottom: 8 },
-  rankingRow: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${borda}` },
+  rankingRow: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${borda}`, paddingLeft: 4 },
   rankPos: { width: 24, fontSize: 12, color: "#7fb89a", fontWeight: 700 },
   rankNome: { flex: 1, fontSize: 13, color: "#e8f5e9" },
   rankVit: { fontSize: 12, color: "#7fb89a", width: 28 },
