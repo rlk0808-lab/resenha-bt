@@ -6,6 +6,7 @@ import Home from './pages/Home'
 import Classificacao from './pages/Classificacao'
 import Rodada from './pages/Rodada'
 import Perfil from './pages/Perfil'
+import PerfilJogador from './pages/PerfilJogador'
 import Admin from './pages/Admin'
 import Layout from './components/Layout'
 import Confirmacao from './pages/Confirmacao'
@@ -27,13 +28,7 @@ export default function App() {
   }, [])
 
   if (loading) return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#0a1628',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
+    <div style={{ minHeight: '100vh', background: '#0a1628', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div className="spinner" />
     </div>
   )
@@ -42,14 +37,15 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
+        <Route path="/cadastro" element={<Cadastro />} />
         <Route path="/" element={session ? <Layout session={session} /> : <Navigate to="/login" />}>
           <Route index element={<Home />} />
           <Route path="classificacao" element={<Classificacao />} />
           <Route path="rodada" element={<Rodada />} />
           <Route path="admin" element={<Admin session={session} />} />
           <Route path="perfil" element={<Perfil />} />
+          <Route path="jogador/:id" element={<PerfilJogador />} />
           <Route path="confirmacao" element={<Confirmacao session={session} />} />
-          <Route path="cadastro" element={<Cadastro />} />
         </Route>
       </Routes>
     </BrowserRouter>
