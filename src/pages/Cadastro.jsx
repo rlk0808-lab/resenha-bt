@@ -7,7 +7,7 @@ export default function Cadastro() {
   const navigate = useNavigate();
   const token = searchParams.get("token");
 
-  const [etapa, setEtapa] = useState("validando"); // validando | formulario | sucesso | erro
+  const [etapa, setEtapa] = useState("validando");
   const [convite, setConvite] = useState(null);
   const [mensagemErro, setMensagemErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -34,27 +34,29 @@ export default function Cadastro() {
       .from("convites")
       .select("*")
       .eq("token", token)
-      .single();
+      .limit(1);
 
-    if (error || !data) {
+    if (error || !data || data.length === 0) {
       setMensagemErro("Convite não encontrado. Solicite um novo convite ao organizador.");
       setEtapa("erro");
       return;
     }
 
-    if (data.usado) {
+    const conviteData = data[0];
+
+    if (conviteData.usado) {
       setMensagemErro("Este convite já foi utilizado.");
       setEtapa("erro");
       return;
     }
 
-    if (new Date(data.expires_at) < new Date()) {
+    if (new Date(conviteData.expires_at) < new Date()) {
       setMensagemErro("Este convite expirou. Solicite um novo convite ao organizador.");
       setEtapa("erro");
       return;
     }
 
-    setConvite(data);
+    setConvite(conviteData);
     setEtapa("formulario");
   }
 
@@ -134,8 +136,10 @@ export default function Cadastro() {
     return (
       <div style={styles.fullPage}>
         <div style={styles.card}>
-          <div style={styles.logo}>🎾</div>
-          <h1 style={styles.titulo}>Resenha BT</h1>
+          <div style={styles.logoRow}>
+            <span style={{ fontSize: 40 }}>🎾</span>
+            <h1 style={styles.titulo}>Resenha BT</h1>
+          </div>
           <div style={styles.erroBox}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>❌</div>
             <p style={styles.erroTexto}>{mensagemErro}</p>
@@ -153,8 +157,10 @@ export default function Cadastro() {
     return (
       <div style={styles.fullPage}>
         <div style={styles.card}>
-          <div style={styles.logo}>🎾</div>
-          <h1 style={styles.titulo}>Resenha BT</h1>
+          <div style={styles.logoRow}>
+            <span style={{ fontSize: 40 }}>🎾</span>
+            <h1 style={styles.titulo}>Resenha BT</h1>
+          </div>
           <div style={styles.sucessoBox}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
             <h2 style={styles.sucessoTitulo}>Cadastro enviado!</h2>
@@ -177,7 +183,6 @@ export default function Cadastro() {
   return (
     <div style={styles.fullPage}>
       <div style={styles.card}>
-        {/* Logo */}
         <div style={styles.logoRow}>
           <svg width="32" height="32" viewBox="0 0 64 64" fill="none">
             <ellipse cx="20" cy="22" rx="10" ry="13" fill="#f5c518" transform="rotate(-25 20 22)" />
@@ -192,7 +197,6 @@ export default function Cadastro() {
         <h2 style={styles.subtitulo}>Criar conta</h2>
         <p style={styles.infoText}>Preencha seus dados para entrar na liga.</p>
 
-        {/* Campos */}
         <div style={styles.campo}>
           <label style={styles.label}>Nome completo</label>
           <input
@@ -248,11 +252,7 @@ export default function Cadastro() {
           />
         </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={salvando}
-          style={styles.btnPrimario}
-        >
+        <button onClick={handleSubmit} disabled={salvando} style={styles.btnPrimario}>
           {salvando ? "Enviando..." : "📋 Enviar cadastro"}
         </button>
 
@@ -294,11 +294,6 @@ const styles = {
     gap: 10,
     marginBottom: 8,
   },
-  logo: {
-    fontSize: 48,
-    textAlign: "center",
-    marginBottom: 8,
-  },
   titulo: {
     margin: 0,
     fontSize: 26,
@@ -321,9 +316,7 @@ const styles = {
     color: "#7fb89a",
     textAlign: "center",
   },
-  campo: {
-    marginBottom: 14,
-  },
+  campo: { marginBottom: 14 },
   label: {
     display: "block",
     fontSize: 12,
