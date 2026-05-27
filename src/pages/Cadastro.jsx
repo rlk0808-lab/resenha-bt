@@ -112,10 +112,15 @@ export default function Cadastro() {
     }
 
     // 3. Marca convite como usado
-    await supabase
+    const { error: erroConvite } = await supabase
       .from("convites")
       .update({ usado: true })
       .eq("token", token);
+
+    if (erroConvite) {
+      console.error("Erro ao marcar convite como usado:", erroConvite);
+      console.error("Detalhes:", JSON.stringify(erroConvite));
+    }
 
     setSalvando(false);
     setEtapa("sucesso");
