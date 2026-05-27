@@ -46,44 +46,21 @@ export default function Login() {
 
       <div style={{ width: '100%', maxWidth: '400px', position: 'relative', zIndex: 1 }}>
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          {/* Logo principal */}
           <div style={{
-            width: '100px', height: '100px',
-            background: 'linear-gradient(135deg, #1a4d2e, #0d2b1a)',
-            borderRadius: '20px',
-            border: '2px solid rgba(245,197,24,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 20px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+            width: '160px',
+            height: '160px',
+            margin: '0 auto 24px',
+            borderRadius: '50%',
+            overflow: 'hidden',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 0 3px rgba(201,162,39,0.3)',
           }}>
-            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-              <ellipse cx="20" cy="22" rx="10" ry="13" fill="#f5c518" transform="rotate(-25 20 22)" />
-              <ellipse cx="20" cy="22" rx="7" ry="10" fill="#c9a010" transform="rotate(-25 20 22)" />
-              <line x1="26" y1="33" x2="14" y2="52" stroke="#f5c518" strokeWidth="3" strokeLinecap="round" />
-              <ellipse cx="44" cy="22" rx="10" ry="13" fill="#f5c518" transform="rotate(25 44 22)" />
-              <ellipse cx="44" cy="22" rx="7" ry="10" fill="#c9a010" transform="rotate(25 44 22)" />
-              <line x1="38" y1="33" x2="50" y2="52" stroke="#f5c518" strokeWidth="3" strokeLinecap="round" />
-              <circle cx="32" cy="32" r="8" fill="#e8621a" />
-              <path d="M26 28 Q32 22 38 28" stroke="#2d7a45" strokeWidth="1.5" fill="none" />
-              <path d="M26 36 Q32 42 38 36" stroke="#2d7a45" strokeWidth="1.5" fill="none" />
-            </svg>
+            <img
+              src="/logo.png"
+              alt="Resenha BT"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
-
-          <h1 style={{
-            fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: '48px',
-            letterSpacing: '4px',
-            lineHeight: 1,
-            background: 'linear-gradient(135deg, #f5c518, #ffffff)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
-          }}>RESENHA BT</h1>
-          <p style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: '14px',
-            letterSpacing: '4px',
-            color: '#2d7a45',
-            marginTop: '4px'
-          }}>BEACH TENNIS</p>
         </div>
 
         <div className="card" style={{ padding: '32px' }}>

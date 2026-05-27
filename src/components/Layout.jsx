@@ -24,7 +24,7 @@ export default function Layout({ session }) {
       <header style={{
         background: 'linear-gradient(90deg, #0d2b1a, #112918)',
         borderBottom: '1px solid #1e4030',
-        padding: '0 20px',
+        padding: '0 16px',
         height: '60px',
         display: 'flex',
         alignItems: 'center',
@@ -34,25 +34,26 @@ export default function Layout({ session }) {
         zIndex: 100,
         boxShadow: '0 2px 20px rgba(0,0,0,0.3)'
       }}>
+        {/* Logo no header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
-            width: '36px', height: '36px',
-            background: 'linear-gradient(135deg, #1a4d2e, #0d2b1a)',
-            borderRadius: '8px',
-            border: '1px solid rgba(245,197,24,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            overflow: 'hidden',
+            border: '1.5px solid rgba(201,162,39,0.5)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            flexShrink: 0,
           }}>
-            <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
-              <ellipse cx="20" cy="22" rx="10" ry="13" fill="#f5c518" transform="rotate(-25 20 22)" />
-              <line x1="26" y1="33" x2="14" y2="52" stroke="#f5c518" strokeWidth="3" strokeLinecap="round" />
-              <ellipse cx="44" cy="22" rx="10" ry="13" fill="#f5c518" transform="rotate(25 44 22)" />
-              <line x1="38" y1="33" x2="50" y2="52" stroke="#f5c518" strokeWidth="3" strokeLinecap="round" />
-              <circle cx="32" cy="32" r="8" fill="#e8621a" />
-            </svg>
+            <img
+              src="/logo.png"
+              alt="Resenha BT"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
           <span style={{
             fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: '24px',
+            fontSize: '22px',
             letterSpacing: '3px',
             background: 'linear-gradient(135deg, #f5c518, #ffffff)',
             WebkitBackgroundClip: 'text',
