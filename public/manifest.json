@@ -1,0 +1,24 @@
+{
+  "name": "Resenha BT",
+  "short_name": "Resenha BT",
+  "description": "Liga de Beach Tennis - Londrina",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f2d1e",
+  "theme_color": "#0f2d1e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
