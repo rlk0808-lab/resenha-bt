@@ -3,7 +3,6 @@ import { supabase } from "../lib/supabase";
 
 const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
 
-// ─── ALGORITMO DE SORTEIO ────────────────────────────────────────────────────
 function gerarSorteio(jogadores) {
   const n = jogadores.length;
   const todasDuplas = [];
@@ -16,7 +15,6 @@ function gerarSorteio(jogadores) {
   jogadores.forEach(j => { parceirosUsados[j] = new Set(); adversariosContador[j] = {}; });
 
   const rodadas = [];
-
   for (let r = 0; r < 4; r++) {
     let melhorRodada = null;
     let melhorScore = -Infinity;
@@ -71,10 +69,8 @@ function gerarSorteio(jogadores) {
   return rodadas;
 }
 
-// ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
 export default function Admin({ session }) {
   const [abaAtiva, setAbaAtiva] = useState("jogos");
-
   const [rodadas, setRodadas] = useState([]);
   const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
   const [jogadores, setJogadores] = useState([]);
@@ -92,16 +88,14 @@ export default function Admin({ session }) {
     dupla_a_1: "", dupla_a_2: "", dupla_b_1: "", dupla_b_2: "", placar_a: "", placar_b: "",
   });
   const [editandoId, setEditandoId] = useState(null);
-
   const [convites, setConvites] = useState([]);
   const [loadingConvites, setLoadingConvites] = useState(false);
   const [gerandoConvite, setGerandoConvite] = useState(false);
-
   const [pendentes, setPendentes] = useState([]);
   const [loadingPendentes, setLoadingPendentes] = useState(false);
   const [aprovando, setAprovando] = useState(null);
+  // vinculacoes: { pendente_id: { tipo: 'existente'|'novo', jogadorId, apelido } }
   const [vinculacoes, setVinculacoes] = useState({});
-
   const [mensagem, setMensagem] = useState(null);
 
   useEffect(() => { carregarRodadas(); carregarJogadores(); }, []);
@@ -145,12 +139,9 @@ export default function Admin({ session }) {
     const payload = {
       rodada_id: rodadaSelecionada.id,
       numero_rodada: rodadaSelecionada.numero,
-      dupla_a_1: novoJogo.dupla_a_1,
-      dupla_a_2: novoJogo.dupla_a_2 || null,
-      dupla_b_1: novoJogo.dupla_b_1,
-      dupla_b_2: novoJogo.dupla_b_2 || null,
-      placar_a: parseInt(novoJogo.placar_a),
-      placar_b: parseInt(novoJogo.placar_b),
+      dupla_a_1: novoJogo.dupla_a_1, dupla_a_2: novoJogo.dupla_a_2 || null,
+      dupla_b_1: novoJogo.dupla_b_1, dupla_b_2: novoJogo.dupla_b_2 || null,
+      placar_a: parseInt(novoJogo.placar_a), placar_b: parseInt(novoJogo.placar_b),
       chave: chaveAtiva,
     };
     let erro;
@@ -188,32 +179,21 @@ export default function Admin({ session }) {
 
   function gerarSorteioLocal() {
     const jogadoresChave = jogadores.filter(j => j.chave === chaveAtiva).map(j => j.nome);
-    if (jogadoresChave.length < 4) {
-      mostrarMensagem("Poucos jogadores cadastrados nesta chave.", "erro"); return;
-    }
+    if (jogadoresChave.length < 4) { mostrarMensagem("Poucos jogadores nesta chave.", "erro"); return; }
     const resultado = gerarSorteio(jogadoresChave);
-    if (!resultado) {
-      mostrarMensagem("Não foi possível gerar o sorteio. Tente novamente.", "erro"); return;
-    }
+    if (!resultado) { mostrarMensagem("Não foi possível gerar o sorteio.", "erro"); return; }
     setSorteioPreview(resultado);
   }
 
   async function salvarSorteio() {
     if (!sorteioPreview || !rodadaSelecionada) return;
     setSalvandoSorteio(true);
-    await supabase.from("jogos").delete()
-      .eq("rodada_id", rodadaSelecionada.id)
-      .eq("chave", chaveAtiva)
-      .is("placar_a", null);
-
+    await supabase.from("jogos").delete().eq("rodada_id", rodadaSelecionada.id).eq("chave", chaveAtiva).is("placar_a", null);
     const inserts = sorteioPreview.flatMap((rodadaJogos) =>
       rodadaJogos.map(([a1, a2, b1, b2]) => ({
-        rodada_id: rodadaSelecionada.id,
-        numero_rodada: rodadaSelecionada.numero,
-        dupla_a_1: a1, dupla_a_2: a2,
-        dupla_b_1: b1, dupla_b_2: b2,
-        placar_a: null, placar_b: null,
-        chave: chaveAtiva,
+        rodada_id: rodadaSelecionada.id, numero_rodada: rodadaSelecionada.numero,
+        dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
+        placar_a: null, placar_b: null, chave: chaveAtiva,
       }))
     );
     const { error } = await supabase.from("jogos").insert(inserts);
@@ -222,56 +202,32 @@ export default function Admin({ session }) {
     setSalvandoSorteio(false);
   }
 
-  // ─── FECHAR LISTA E SORTEAR ──────────────────────────────────────────────
+  // ─── FECHAR LISTA ────────────────────────────────────────────────────────
   async function prepararFechamento() {
     const agora = new Date();
-    const diaSemana = agora.getDay();
-    const hora = agora.getHours();
-    const foraDoPrazo = diaSemana !== 5 || hora < 14;
+    const foraDoPrazo = agora.getDay() !== 5 || agora.getHours() < 14;
 
-    const { data: proximasRodadas } = await supabase
-      .from("rodadas").select("*").eq("status", "proxima").limit(1);
+    const { data: proximasRodadas } = await supabase.from("rodadas").select("*").eq("status", "proxima").limit(1);
     const rodadaAlvo = proximasRodadas?.[0];
-
-    if (!rodadaAlvo) {
-      mostrarMensagem("Nenhuma rodada com status 'proxima' encontrada.", "erro");
-      return;
-    }
+    if (!rodadaAlvo) { mostrarMensagem("Nenhuma rodada 'proxima' encontrada.", "erro"); return; }
 
     const { data: confirmacoes } = await supabase
-      .from("confirmacoes")
-      .select("*, jogadores(id, nome, chave)")
-      .eq("rodada_id", rodadaAlvo.id)
-      .eq("status", "confirmado")
+      .from("confirmacoes").select("*, jogadores(id, nome, chave)")
+      .eq("rodada_id", rodadaAlvo.id).eq("status", "confirmado")
       .order("created_at", { ascending: true });
 
-    if (!confirmacoes || confirmacoes.length < 8) {
-      mostrarMensagem("Confirmados insuficientes para sortear (mínimo 8).", "erro");
-      return;
-    }
+    if (!confirmacoes || confirmacoes.length < 8) { mostrarMensagem("Confirmados insuficientes (mínimo 8).", "erro"); return; }
 
-    const { data: rodadaAnterior } = await supabase
-      .from("rodadas").select("*").eq("status", "finalizada")
-      .order("numero", { ascending: false }).limit(1);
+    const { data: rodadaAnterior } = await supabase.from("rodadas").select("*").eq("status", "finalizada").order("numero", { ascending: false }).limit(1);
     const rodAnt = rodadaAnterior?.[0];
-
     let rankAnt = { ouro: [], prata: [] };
     if (rodAnt) {
-      const { data: rank } = await supabase
-        .from("ranking_rodada")
-        .select("*, jogadores(id, nome)")
-        .eq("rodada_id", rodAnt.id)
-        .order("posicao", { ascending: true });
-      if (rank) {
-        rankAnt.ouro = rank.filter(r => r.chave === "ouro");
-        rankAnt.prata = rank.filter(r => r.chave === "prata");
-      }
+      const { data: rank } = await supabase.from("ranking_rodada").select("*, jogadores(id, nome)").eq("rodada_id", rodAnt.id).order("posicao", { ascending: true });
+      if (rank) { rankAnt.ouro = rank.filter(r => r.chave === "ouro"); rankAnt.prata = rank.filter(r => r.chave === "prata"); }
     }
 
     const confirmadosNomes = new Set(confirmacoes.map(c => c.jogadores?.nome));
-
-    let jogadoresOuro = [];
-    let jogadoresPrata = [];
+    let jogadoresOuro = [], jogadoresPrata = [];
 
     if (rankAnt.ouro.length === 0 && rankAnt.prata.length === 0) {
       jogadoresOuro = confirmacoes.filter(c => c.jogadores?.chave === "ouro").map(c => c.jogadores?.nome);
@@ -279,28 +235,15 @@ export default function Admin({ session }) {
     } else {
       const ouroDescem = rankAnt.ouro.slice(-3).map(r => r.jogadores?.nome);
       const prataSobem = rankAnt.prata.slice(0, 3).map(r => r.jogadores?.nome);
-
-      const ouroFicam = rankAnt.ouro
-        .filter(r => !ouroDescem.includes(r.jogadores?.nome) && confirmadosNomes.has(r.jogadores?.nome))
-        .map(r => r.jogadores?.nome);
-
+      const ouroFicam = rankAnt.ouro.filter(r => !ouroDescem.includes(r.jogadores?.nome) && confirmadosNomes.has(r.jogadores?.nome)).map(r => r.jogadores?.nome);
       const prataSobemConf = prataSobem.filter(n => confirmadosNomes.has(n));
       jogadoresOuro = [...ouroFicam, ...prataSobemConf];
-
       const nomesOuro = new Set(jogadoresOuro);
-      jogadoresPrata = confirmacoes
-        .filter(c => !nomesOuro.has(c.jogadores?.nome))
-        .map(c => c.jogadores?.nome);
+      jogadoresPrata = confirmacoes.filter(c => !nomesOuro.has(c.jogadores?.nome)).map(c => c.jogadores?.nome);
     }
 
-    if (jogadoresOuro.length < 4) {
-      mostrarMensagem(`Ouro com apenas ${jogadoresOuro.length} confirmados. Mínimo 4.`, "erro");
-      return;
-    }
-    if (jogadoresPrata.length < 4) {
-      mostrarMensagem(`Prata com apenas ${jogadoresPrata.length} confirmados. Mínimo 4.`, "erro");
-      return;
-    }
+    if (jogadoresOuro.length < 4) { mostrarMensagem(`Ouro com ${jogadoresOuro.length} confirmados. Mínimo 4.`, "erro"); return; }
+    if (jogadoresPrata.length < 4) { mostrarMensagem(`Prata com ${jogadoresPrata.length} confirmados. Mínimo 4.`, "erro"); return; }
 
     setPreviewFechamento({ rodada: rodadaAlvo, ouro: jogadoresOuro, prata: jogadoresPrata, total: confirmacoes.length, foraDoPrazo });
   }
@@ -308,7 +251,6 @@ export default function Admin({ session }) {
   async function confirmarFechamento() {
     if (!previewFechamento) return;
     setFechandoLista(true);
-
     const { rodada, ouro: jogOuro, prata: jogPrata } = previewFechamento;
     const erros = [];
 
@@ -324,47 +266,22 @@ export default function Admin({ session }) {
       const { error } = await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
       if (error) erros.push(`chave ${nome}: ${error.message}`);
     }
-
-    if (erros.length > 0) {
-      mostrarMensagem("Erros ao atualizar chaves: " + erros.join(", "), "erro");
-      setFechandoLista(false); return;
-    }
+    if (erros.length > 0) { mostrarMensagem("Erros: " + erros.join(", "), "erro"); setFechandoLista(false); return; }
 
     const sorteioOuro = gerarSorteio(jogOuro);
     const sorteioPrata = gerarSorteio(jogPrata);
+    if (!sorteioOuro || !sorteioPrata) { mostrarMensagem("Erro ao gerar sorteio.", "erro"); setFechandoLista(false); return; }
 
-    if (!sorteioOuro || !sorteioPrata) {
-      mostrarMensagem("Erro ao gerar sorteio. Tente novamente.", "erro");
-      setFechandoLista(false); return;
-    }
-
-    const insertsOuro = sorteioOuro.flatMap((rodadaJogos) =>
-      rodadaJogos.map(([a1, a2, b1, b2]) => ({
-        rodada_id: rodada.id, numero_rodada: rodada.numero,
-        dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
-        placar_a: null, placar_b: null, chave: "ouro",
-      }))
-    );
-    const insertsPrata = sorteioPrata.flatMap((rodadaJogos) =>
-      rodadaJogos.map(([a1, a2, b1, b2]) => ({
-        rodada_id: rodada.id, numero_rodada: rodada.numero,
-        dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
-        placar_a: null, placar_b: null, chave: "prata",
-      }))
-    );
+    const insertsOuro = sorteioOuro.flatMap(rj => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "ouro" })));
+    const insertsPrata = sorteioPrata.flatMap(rj => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "prata" })));
 
     await supabase.from("jogos").delete().eq("rodada_id", rodada.id).is("placar_a", null);
-
     const { error: erroInsert } = await supabase.from("jogos").insert([...insertsOuro, ...insertsPrata]);
-    if (erroInsert) {
-      mostrarMensagem("Erro ao salvar jogos: " + erroInsert.message, "erro");
-      setFechandoLista(false); return;
-    }
+    if (erroInsert) { mostrarMensagem("Erro ao salvar jogos: " + erroInsert.message, "erro"); setFechandoLista(false); return; }
 
     await supabase.from("rodadas").update({ status: "ativa" }).eq("id", rodada.id);
     await carregarJogadores();
     await carregarRodadas();
-
     setPreviewFechamento(null);
     setFechandoLista(false);
     mostrarMensagem(`✅ Lista fechada! Sorteio publicado para a Rodada ${rodada.numero}.`);
@@ -374,13 +291,7 @@ export default function Admin({ session }) {
   function calcularRankingLocal(jogosChave, chave) {
     const stats = {};
     const confrontos = {};
-
-    const addJogador = (nome) => {
-      if (nome && !stats[nome]) {
-        stats[nome] = { nome, pts: 0, vitorias: 0, saldo: 0 };
-        confrontos[nome] = {};
-      }
-    };
+    const addJogador = (nome) => { if (nome && !stats[nome]) { stats[nome] = { nome, pts: 0, vitorias: 0, saldo: 0 }; confrontos[nome] = {}; } };
 
     for (const jogo of jogosChave) {
       if (jogo.placar_a === null || jogo.placar_b === null) continue;
@@ -390,41 +301,19 @@ export default function Admin({ session }) {
       const jogadoresB = [dupla_b_1, dupla_b_2].filter(Boolean);
       const venceuA = placar_a > placar_b;
       const saldo = Math.abs(placar_a - placar_b);
-      const ptsVenc = 15 + saldo;
-      const ptsPerd = venceuA ? placar_b : placar_a;
       const vencedores = venceuA ? jogadoresA : jogadoresB;
       const perdedores = venceuA ? jogadoresB : jogadoresA;
-
-      vencedores.forEach(n => { stats[n].pts += ptsVenc; stats[n].vitorias += 1; stats[n].saldo += saldo; });
-      perdedores.forEach(n => { stats[n].pts += ptsPerd; stats[n].saldo -= saldo; });
-
-      jogadoresA.forEach(a => {
-        jogadoresB.forEach(b => {
-          if (!confrontos[a]) confrontos[a] = {};
-          if (!confrontos[b]) confrontos[b] = {};
-          if (venceuA) { confrontos[a][b] = (confrontos[a][b] || 0) + 1; }
-          else { confrontos[b][a] = (confrontos[b][a] || 0) + 1; }
-        });
-      });
-    }
-
-    function vitoriasDiretas(nomeA, nomeB) {
-      return (confrontos[nomeA]?.[nomeB] || 0) - (confrontos[nomeB]?.[nomeA] || 0);
+      vencedores.forEach(n => { stats[n].pts += 15 + saldo; stats[n].vitorias += 1; stats[n].saldo += saldo; });
+      perdedores.forEach(n => { stats[n].pts += venceuA ? placar_b : placar_a; stats[n].saldo -= saldo; });
+      jogadoresA.forEach(a => { jogadoresB.forEach(b => { if (venceuA) { confrontos[a][b] = (confrontos[a][b] || 0) + 1; } else { confrontos[b][a] = (confrontos[b][a] || 0) + 1; } }); });
     }
 
     const jogadoresList = Object.values(stats);
-    jogadoresList.sort((a, b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.saldo !== a.saldo) return b.saldo - a.saldo;
-      return vitoriasDiretas(b.nome, a.nome);
-    });
+    jogadoresList.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : b.saldo !== a.saldo ? b.saldo - a.saldo : ((confrontos[b.nome]?.[a.nome] || 0) - (confrontos[a.nome]?.[b.nome] || 0)));
 
     const ehEspecial = rodadaSelecionada?.tipo === "especial";
     jogadoresList.forEach((j, idx) => {
-      const ptosFixos = chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8;
-      const bonusVitorias = j.vitorias * 3;
-      const bonusCampeao = (chave === "prata" && idx === 0 && !ehEspecial) ? 3 : 0;
-      j.ptosLiga = ptosFixos + bonusVitorias + bonusCampeao;
+      j.ptosLiga = (chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === "prata" && idx === 0 && !ehEspecial ? 3 : 0);
       j.posicao = idx + 1;
     });
     return jogadoresList;
@@ -435,9 +324,10 @@ export default function Admin({ session }) {
     setCalculando(true);
     const { data: todosJogos, error } = await supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
     if (error) { mostrarMensagem("Erro ao buscar jogos.", "erro"); setCalculando(false); return; }
-    const rankingOuro = calcularRankingLocal(todosJogos.filter(j => j.chave === "ouro"), "ouro");
-    const rankingPrata = calcularRankingLocal(todosJogos.filter(j => j.chave === "prata"), "prata");
-    setRankingPreview({ ouro: rankingOuro, prata: rankingPrata });
+    setRankingPreview({
+      ouro: calcularRankingLocal(todosJogos.filter(j => j.chave === "ouro"), "ouro"),
+      prata: calcularRankingLocal(todosJogos.filter(j => j.chave === "prata"), "prata"),
+    });
     setCalculando(false);
   }
 
@@ -450,77 +340,45 @@ export default function Admin({ session }) {
     for (const j of todos) {
       const jogador = jogadores.find(jg => jg.nome === j.nome);
       if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
-
-      const { data: existentes, error: erroBusca } = await supabase
-        .from("pontuacao").select("id")
-        .eq("jogador_id", jogador.id).eq("rodada_id", rodadaSelecionada.id);
-
-      if (erroBusca) { erros.push(erroBusca.message); continue; }
-
-      const existente = existentes && existentes.length > 0 ? existentes[0] : null;
-      if (existente) {
-        const { error } = await supabase.from("pontuacao")
-          .update({ pontos: j.ptosLiga, vitorias: j.vitorias }).eq("id", existente.id);
-        if (error) erros.push(error.message);
-      } else {
-        const { error } = await supabase.from("pontuacao")
-          .insert({ jogador_id: jogador.id, rodada_id: rodadaSelecionada.id, pontos: j.ptosLiga, vitorias: j.vitorias });
-        if (error) erros.push(error.message);
-      }
+      const { data: existentes } = await supabase.from("pontuacao").select("id").eq("jogador_id", jogador.id).eq("rodada_id", rodadaSelecionada.id);
+      const existente = existentes?.[0];
+      if (existente) { await supabase.from("pontuacao").update({ pontos: j.ptosLiga, vitorias: j.vitorias }).eq("id", existente.id); }
+      else { await supabase.from("pontuacao").insert({ jogador_id: jogador.id, rodada_id: rodadaSelecionada.id, pontos: j.ptosLiga, vitorias: j.vitorias }); }
     }
 
-    if (erros.length > 0) { mostrarMensagem("Erros ao salvar pontuação: " + erros.join(", "), "erro"); setCalculando(false); return; }
+    if (erros.length > 0) { mostrarMensagem("Erros: " + erros.join(", "), "erro"); setCalculando(false); return; }
 
     for (const chave of ["ouro", "prata"]) {
-      const lista = rankingPreview[chave] || [];
-      for (const j of lista) {
+      for (const j of (rankingPreview[chave] || [])) {
         const jogador = jogadores.find(jg => jg.nome === j.nome);
         if (!jogador) continue;
         await supabase.from("ranking_rodada").delete().eq("rodada_id", rodadaSelecionada.id).eq("jogador_id", jogador.id);
-        const { error } = await supabase.from("ranking_rodada").insert({
-          rodada_id: rodadaSelecionada.id, jogador_id: jogador.id,
-          chave, posicao: j.posicao, pontos_liga: j.ptosLiga,
-        });
-        if (error) erros.push(`ranking_rodada ${j.nome}: ${error.message}`);
+        await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave, posicao: j.posicao, pontos_liga: j.ptosLiga });
       }
     }
 
-    if (erros.length > 0) { mostrarMensagem("Erros ao salvar ranking: " + erros.join(", "), "erro"); setCalculando(false); return; }
-
     if (rodadaSelecionada?.tipo !== "especial") {
-      const descem = (rankingPreview.ouro || []).slice(-3).map(j => j.nome);
-      const sobem = (rankingPreview.prata || []).slice(0, 3).map(j => j.nome);
-
-      for (const nome of descem) {
-        const jogador = jogadores.find(jg => jg.nome === nome);
-        if (!jogador) continue;
-        const { error } = await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jogador.id);
-        if (error) erros.push(`Descer ${nome}: ${error.message}`);
+      for (const nome of (rankingPreview.ouro || []).slice(-3).map(j => j.nome)) {
+        const jog = jogadores.find(jg => jg.nome === nome);
+        if (jog) await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
       }
-      for (const nome of sobem) {
-        const jogador = jogadores.find(jg => jg.nome === nome);
-        if (!jogador) continue;
-        const { error } = await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jogador.id);
-        if (error) erros.push(`Subir ${nome}: ${error.message}`);
+      for (const nome of (rankingPreview.prata || []).slice(0, 3).map(j => j.nome)) {
+        const jog = jogadores.find(jg => jg.nome === nome);
+        if (jog) await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jog.id);
       }
-
-      if (erros.length > 0) { mostrarMensagem("Erros ao atualizar chaves: " + erros.join(", "), "erro"); setCalculando(false); return; }
     }
 
     await supabase.from("rodadas").update({ status: "finalizada" }).eq("id", rodadaSelecionada.id);
 
     const { data: proximaExistente } = await supabase.from("rodadas").select("id").eq("status", "proxima").limit(1);
-
     if (!proximaExistente || proximaExistente.length === 0) {
       const hoje = new Date();
       const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
       const proximoSabado = new Date(hoje);
       proximoSabado.setDate(hoje.getDate() + diasParaSabado);
-      const dataStr = proximoSabado.toISOString().split("T")[0];
       const proximoNumero = rodadaSelecionada.numero + 1;
-      const tipo = (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal";
-      await supabase.from("rodadas").insert({ numero: proximoNumero, data: dataStr, status: "proxima", liga: rodadaSelecionada.liga, tipo });
-      mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} (${tipo}) criada automaticamente.`);
+      await supabase.from("rodadas").insert({ numero: proximoNumero, data: proximoSabado.toISOString().split("T")[0], status: "proxima", liga: rodadaSelecionada.liga, tipo: (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal" });
+      mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} criada.`);
     } else {
       mostrarMensagem("✅ Pontuação salva e chaves atualizadas!");
     }
@@ -564,40 +422,62 @@ export default function Admin({ session }) {
   // ─── APROVAÇÕES ──────────────────────────────────────────────────────────
   async function carregarPendentes() {
     setLoadingPendentes(true);
-    const { data } = await supabase.from("cadastros_pendentes").select("*")
-      .eq("status", "pendente").order("created_at", { ascending: true });
+    const { data } = await supabase.from("cadastros_pendentes").select("*").eq("status", "pendente").order("created_at", { ascending: true });
     setPendentes(data || []);
     setLoadingPendentes(false);
   }
 
+  function setVinculacao(pendenteId, campo, valor) {
+    setVinculacoes(v => ({ ...v, [pendenteId]: { ...v[pendenteId], [campo]: valor } }));
+  }
+
   async function aprovarCadastro(pendente) {
-    const jogadorId = vinculacoes[pendente.id];
-    if (!jogadorId) {
-      mostrarMensagem("Selecione o jogador para vincular antes de aprovar.", "erro");
+    const vinc = vinculacoes[pendente.id];
+    if (!vinc || (!vinc.jogadorId && !vinc.apelido)) {
+      mostrarMensagem("Selecione um jogador existente ou informe o apelido para criar novo.", "erro");
       return;
     }
+
     setAprovando(pendente.id);
+    let jogadorId = vinc.jogadorId;
 
-    // Vincula user_id e salva nome completo no campo apelido
-    const { error: erroVinculo } = await supabase
-      .from("jogadores")
-      .update({ user_id: pendente.user_id, apelido: pendente.nome })
-      .eq("id", jogadorId);
+    if (vinc.tipo === "novo") {
+      // Cria novo jogador na Prata
+      if (!vinc.apelido?.trim()) {
+        mostrarMensagem("Informe o apelido do novo jogador.", "erro");
+        setAprovando(null);
+        return;
+      }
+      const { data: novoJogador, error: erroNovo } = await supabase
+        .from("jogadores")
+        .insert({ nome: vinc.apelido.trim(), apelido: pendente.nome, chave: "prata", ativo: true, user_id: pendente.user_id })
+        .select().single();
 
-    if (erroVinculo) {
-      mostrarMensagem("Erro ao vincular jogador: " + erroVinculo.message, "erro");
-      setAprovando(null);
-      return;
+      if (erroNovo) {
+        mostrarMensagem("Erro ao criar jogador: " + erroNovo.message, "erro");
+        setAprovando(null);
+        return;
+      }
+      jogadorId = novoJogador.id;
+    } else {
+      // Vincula ao jogador existente
+      const { error: erroVinculo } = await supabase
+        .from("jogadores")
+        .update({ user_id: pendente.user_id, apelido: pendente.nome })
+        .eq("id", jogadorId);
+
+      if (erroVinculo) {
+        mostrarMensagem("Erro ao vincular: " + erroVinculo.message, "erro");
+        setAprovando(null);
+        return;
+      }
     }
 
-    // Aprova o cadastro pendente
-    const { error } = await supabase.from("cadastros_pendentes")
-      .update({ status: "aprovado" }).eq("id", pendente.id);
-
+    // Aprova o cadastro
+    const { error } = await supabase.from("cadastros_pendentes").update({ status: "aprovado" }).eq("id", pendente.id);
     if (error) mostrarMensagem("Erro ao aprovar: " + error.message, "erro");
     else {
       mostrarMensagem(`✅ ${pendente.nome} aprovado e vinculado!`);
-      // Remove vinculação local e recarrega
       setVinculacoes(v => { const n = { ...v }; delete n[pendente.id]; return n; });
       carregarPendentes();
       carregarJogadores();
@@ -608,8 +488,7 @@ export default function Admin({ session }) {
   async function rejeitarCadastro(pendente) {
     if (!confirm(`Rejeitar cadastro de ${pendente.nome}?`)) return;
     setAprovando(pendente.id);
-    const { error } = await supabase.from("cadastros_pendentes")
-      .update({ status: "rejeitado" }).eq("id", pendente.id);
+    const { error } = await supabase.from("cadastros_pendentes").update({ status: "rejeitado" }).eq("id", pendente.id);
     if (error) mostrarMensagem("Erro ao rejeitar: " + error.message, "erro");
     else { mostrarMensagem(`${pendente.nome} rejeitado.`); carregarPendentes(); }
     setAprovando(null);
@@ -640,7 +519,6 @@ export default function Admin({ session }) {
         </div>
       )}
 
-      {/* ── BOTÃO FECHAR LISTA E SORTEAR ── */}
       {rodadaProxima && !previewFechamento && (
         <div style={styles.cardDestaque}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -650,83 +528,47 @@ export default function Admin({ session }) {
               <div style={{ fontSize: 12, color: "#7fb89a" }}>Rodada {rodadaProxima.numero} — Faça isso sexta-feira às 14h</div>
             </div>
           </div>
-          <p style={styles.infoText}>
-            Fecha as confirmações, monta as chaves com base no ranking anterior e publica o sorteio para todos os jogadores.
-          </p>
-          <button onClick={prepararFechamento} style={styles.btnFechar}>
-            🔒 Fechar Lista e Gerar Sorteio
-          </button>
+          <p style={styles.infoText}>Fecha as confirmações, monta as chaves e publica o sorteio para todos.</p>
+          <button onClick={prepararFechamento} style={styles.btnFechar}>🔒 Fechar Lista e Gerar Sorteio</button>
         </div>
       )}
 
-      {/* ── PREVIEW DO FECHAMENTO ── */}
       {previewFechamento && (
         <div style={styles.cardDestaque}>
-          <h2 style={{ ...styles.cardTitulo, color: ouro }}>
-            🔒 Confirmar Fechamento — Rodada {previewFechamento.rodada.numero}
-          </h2>
-
+          <h2 style={{ ...styles.cardTitulo, color: ouro }}>🔒 Confirmar Fechamento — Rodada {previewFechamento.rodada.numero}</h2>
           {previewFechamento.foraDoPrazo && (
             <div style={{ background: "#3a2000", border: "1px solid #c9a227", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#c9a227" }}>
-              ⚠️ Atenção: hoje não é sexta-feira após 14h. Você pode continuar mesmo assim.
+              ⚠️ Hoje não é sexta-feira após 14h. Pode continuar mesmo assim.
             </div>
           )}
-
           <div style={{ fontSize: 13, color: "#7fb89a", marginBottom: 12 }}>
             <strong style={{ color: "#c8e6c9" }}>{previewFechamento.total}</strong> jogadores confirmados
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
-                🥇 Ouro ({previewFechamento.ouro.length})
-              </div>
-              {previewFechamento.ouro.map((nome, i) => (
-                <div key={i} style={{ fontSize: 12, color: "#e8f5e9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>
-                  {i + 1}. {nome}
-                </div>
-              ))}
+              <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥇 Ouro ({previewFechamento.ouro.length})</div>
+              {previewFechamento.ouro.map((nome, i) => <div key={i} style={{ fontSize: 12, color: "#e8f5e9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>{i + 1}. {nome}</div>)}
             </div>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
-                🥈 Prata ({previewFechamento.prata.length})
-              </div>
-              {previewFechamento.prata.map((nome, i) => (
-                <div key={i} style={{ fontSize: 12, color: "#e8f5e9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>
-                  {i + 1}. {nome}
-                </div>
-              ))}
+              <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥈 Prata ({previewFechamento.prata.length})</div>
+              {previewFechamento.prata.map((nome, i) => <div key={i} style={{ fontSize: 12, color: "#e8f5e9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>{i + 1}. {nome}</div>)}
             </div>
           </div>
-
-          <div style={{ fontSize: 12, color: "#7fb89a", marginBottom: 16, background: "#0f2d1e", borderRadius: 8, padding: "8px 12px" }}>
-            Ao confirmar: chaves atualizadas, sorteio gerado e publicado imediatamente para todos.
-          </div>
-
           <div style={styles.botoesForm}>
-            <button onClick={confirmarFechamento} disabled={fechandoLista} style={styles.btnSalvar}>
-              {fechandoLista ? "Processando..." : "✅ Confirmar e Publicar"}
-            </button>
-            <button onClick={() => setPreviewFechamento(null)} disabled={fechandoLista} style={styles.btnCancelar}>
-              ✕ Cancelar
-            </button>
+            <button onClick={confirmarFechamento} disabled={fechandoLista} style={styles.btnSalvar}>{fechandoLista ? "Processando..." : "✅ Confirmar e Publicar"}</button>
+            <button onClick={() => setPreviewFechamento(null)} disabled={fechandoLista} style={styles.btnCancelar}>✕ Cancelar</button>
           </div>
         </div>
       )}
 
       <div style={styles.abas}>
-        <button onClick={() => setAbaAtiva("jogos")} style={{ ...styles.aba, ...(abaAtiva === "jogos" ? styles.abaAtiva : {}) }}>
-          🎾 Jogos
-        </button>
-        <button onClick={() => setAbaAtiva("convites")} style={{ ...styles.aba, ...(abaAtiva === "convites" ? styles.abaAtiva : {}) }}>
-          🔗 Convites
-        </button>
+        <button onClick={() => setAbaAtiva("jogos")} style={{ ...styles.aba, ...(abaAtiva === "jogos" ? styles.abaAtiva : {}) }}>🎾 Jogos</button>
+        <button onClick={() => setAbaAtiva("convites")} style={{ ...styles.aba, ...(abaAtiva === "convites" ? styles.abaAtiva : {}) }}>🔗 Convites</button>
         <button onClick={() => setAbaAtiva("aprovacoes")} style={{ ...styles.aba, ...(abaAtiva === "aprovacoes" ? styles.abaAtiva : {}) }}>
           👤 Aprovações {pendentes.length > 0 && <span style={styles.badge}>{pendentes.length}</span>}
         </button>
       </div>
 
-      {/* ── ABA JOGOS ── */}
       {abaAtiva === "jogos" && (
         <>
           <div style={styles.card}>
@@ -737,42 +579,31 @@ export default function Admin({ session }) {
                   style={{ ...styles.btnRodada, ...(rodadaSelecionada?.id === r.id ? styles.btnRodadaAtivo : {}) }}>
                   R{r.numero}
                   <span style={styles.rodadaTipo}>{r.tipo === "especial" ? "⭐" : ""}</span>
-                  <span style={styles.rodadaData}>
-                    {new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                  </span>
-                  <span style={{ fontSize: 9, color: r.status === "finalizada" ? "#5a8a6a" : r.status === "ativa" ? "#c9a227" : "#7fb89a" }}>
-                    {r.status}
-                  </span>
+                  <span style={styles.rodadaData}>{new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>
+                  <span style={{ fontSize: 9, color: r.status === "finalizada" ? "#5a8a6a" : r.status === "ativa" ? "#c9a227" : "#7fb89a" }}>{r.status}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div style={styles.chaveRow}>
-            <button onClick={() => setChaveAtiva("ouro")} style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>
-              🥇 Chave Ouro
-            </button>
-            <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>
-              🥈 Chave Prata
-            </button>
+            <button onClick={() => setChaveAtiva("ouro")} style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🥇 Chave Ouro</button>
+            <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🥈 Chave Prata</button>
           </div>
 
           <div style={styles.card}>
-            <h2 style={styles.cardTitulo}>
-              🎲 Sorteio Manual
-              {rodadaSelecionada && <span style={styles.badgeRodada}>R{rodadaSelecionada.numero} — {chaveAtiva}</span>}
-            </h2>
-            <p style={styles.infoText}>Use apenas para sorteios manuais pontuais. Para fechar a rodada use o botão acima.</p>
+            <h2 style={styles.cardTitulo}>🎲 Sorteio Manual {rodadaSelecionada && <span style={styles.badgeRodada}>R{rodadaSelecionada.numero} — {chaveAtiva}</span>}</h2>
+            <p style={styles.infoText}>Use apenas para sorteios pontuais. Para fechar a rodada use o botão acima.</p>
             <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio Manual</button>
           </div>
 
           {sorteioPreview && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>👀 Preview do Sorteio</h2>
-              {sorteioPreview.map((rodadaJogos, r) => (
+              {sorteioPreview.map((rj, r) => (
                 <div key={r} style={{ marginBottom: 14 }}>
                   <div style={styles.rodadaJogosHeader}>Rodada {r + 1}</div>
-                  {rodadaJogos.map(([a1, a2, b1, b2], i) => (
+                  {rj.map(([a1, a2, b1, b2], i) => (
                     <div key={i} style={styles.sorteioJogoRow}>
                       <span style={styles.sorteioNomes}>{a1} / {a2}</span>
                       <span style={styles.sorteioVs}>×</span>
@@ -782,9 +613,7 @@ export default function Admin({ session }) {
                 </div>
               ))}
               <div style={styles.botoesForm}>
-                <button onClick={salvarSorteio} disabled={salvandoSorteio} style={styles.btnSalvar}>
-                  {salvandoSorteio ? "Salvando..." : "✅ Confirmar"}
-                </button>
+                <button onClick={salvarSorteio} disabled={salvandoSorteio} style={styles.btnSalvar}>{salvandoSorteio ? "Salvando..." : "✅ Confirmar"}</button>
                 <button onClick={() => { setSorteioPreview(null); setTimeout(gerarSorteioLocal, 100); }} style={styles.btnRegerar}>🔄</button>
                 <button onClick={() => setSorteioPreview(null)} style={styles.btnCancelar}>✕</button>
               </div>
@@ -801,11 +630,9 @@ export default function Admin({ session }) {
               </div>
             </div>
             <div style={styles.placarSection}>
-              <input type="number" min="0" max="7" placeholder="0" value={novoJogo.placar_a}
-                onChange={(e) => setNovoJogo({ ...novoJogo, placar_a: e.target.value })} style={styles.placarInput} />
+              <input type="number" min="0" max="7" placeholder="0" value={novoJogo.placar_a} onChange={(e) => setNovoJogo({ ...novoJogo, placar_a: e.target.value })} style={styles.placarInput} />
               <span style={styles.placarVs}>×</span>
-              <input type="number" min="0" max="7" placeholder="0" value={novoJogo.placar_b}
-                onChange={(e) => setNovoJogo({ ...novoJogo, placar_b: e.target.value })} style={styles.placarInput} />
+              <input type="number" min="0" max="7" placeholder="0" value={novoJogo.placar_b} onChange={(e) => setNovoJogo({ ...novoJogo, placar_b: e.target.value })} style={styles.placarInput} />
             </div>
             <div style={styles.duplaSection}>
               <div style={styles.duplaLabel}>🎾 Dupla B</div>
@@ -815,18 +642,13 @@ export default function Admin({ session }) {
               </div>
             </div>
             <div style={styles.botoesForm}>
-              <button onClick={salvarJogo} disabled={salvando} style={styles.btnSalvar}>
-                {salvando ? "Salvando..." : editandoId ? "💾 Atualizar" : "💾 Salvar"}
-              </button>
+              <button onClick={salvarJogo} disabled={salvando} style={styles.btnSalvar}>{salvando ? "Salvando..." : editandoId ? "💾 Atualizar" : "💾 Salvar"}</button>
               {editandoId && <button onClick={resetForm} style={styles.btnCancelar}>✕ Cancelar</button>}
             </div>
           </div>
 
           <div style={styles.card}>
-            <h2 style={styles.cardTitulo}>
-              📋 Jogos da rodada
-              <span style={styles.badgeCount}>{jogos.length} jogos</span>
-            </h2>
+            <h2 style={styles.cardTitulo}>📋 Jogos da rodada <span style={styles.badgeCount}>{jogos.length} jogos</span></h2>
             {loading ? <p style={styles.loadingText}>Carregando...</p>
               : jogos.length === 0 ? <p style={styles.emptyText}>Nenhum jogo inserido ainda.</p>
               : (
@@ -838,21 +660,11 @@ export default function Admin({ session }) {
                       <div key={jogo.id} style={styles.jogoCard}>
                         <div style={styles.jogoNumero}>{idx + 1}</div>
                         <div style={styles.jogoConteudo}>
-                          <div style={{ ...styles.dupla, ...(venceuA ? styles.vencedor : {}) }}>
-                            {jogo.dupla_a_1}{jogo.dupla_a_2 ? ` / ${jogo.dupla_a_2}` : ""}
-                          </div>
+                          <div style={{ ...styles.dupla, ...(venceuA ? styles.vencedor : {}) }}>{jogo.dupla_a_1}{jogo.dupla_a_2 ? ` / ${jogo.dupla_a_2}` : ""}</div>
                           <div style={styles.placarDisplay}>
-                            {temPlacar ? (
-                              <>
-                                <span style={venceuA ? styles.placarVencedor : styles.placarPerdedor}>{jogo.placar_a}</span>
-                                <span style={styles.placarSep}>×</span>
-                                <span style={!venceuA ? styles.placarVencedor : styles.placarPerdedor}>{jogo.placar_b}</span>
-                              </>
-                            ) : <span style={styles.semPlacar}>–</span>}
+                            {temPlacar ? (<><span style={venceuA ? styles.placarVencedor : styles.placarPerdedor}>{jogo.placar_a}</span><span style={styles.placarSep}>×</span><span style={!venceuA ? styles.placarVencedor : styles.placarPerdedor}>{jogo.placar_b}</span></>) : <span style={styles.semPlacar}>–</span>}
                           </div>
-                          <div style={{ ...styles.dupla, ...(!venceuA ? styles.vencedor : {}), textAlign: "right" }}>
-                            {jogo.dupla_b_1}{jogo.dupla_b_2 ? ` / ${jogo.dupla_b_2}` : ""}
-                          </div>
+                          <div style={{ ...styles.dupla, ...(!venceuA ? styles.vencedor : {}), textAlign: "right" }}>{jogo.dupla_b_1}{jogo.dupla_b_2 ? ` / ${jogo.dupla_b_2}` : ""}</div>
                         </div>
                         <div style={styles.jogoAcoes}>
                           <button onClick={() => editarJogo(jogo)} style={styles.btnEdit}>✏️</button>
@@ -873,9 +685,7 @@ export default function Admin({ session }) {
                 ⭐ Rodada Especial — pontuação dobrada aplicada automaticamente
               </div>
             )}
-            <button onClick={calcularPontuacao} disabled={calculando} style={styles.btnCalcular}>
-              {calculando ? "Calculando..." : "📊 Calcular Pontuação"}
-            </button>
+            <button onClick={calcularPontuacao} disabled={calculando} style={styles.btnCalcular}>{calculando ? "Calculando..." : "📊 Calcular Pontuação"}</button>
           </div>
 
           {rankingPreview && (
@@ -889,9 +699,7 @@ export default function Admin({ session }) {
               )}
               {["ouro", "prata"].map(chave => (
                 <div key={chave} style={{ marginBottom: 16 }}>
-                  <div style={{ ...styles.chaveHeader, color: chave === "ouro" ? ouro : prata }}>
-                    {chave === "ouro" ? "🥇 Chave Ouro" : "🥈 Chave Prata"}
-                  </div>
+                  <div style={{ ...styles.chaveHeader, color: chave === "ouro" ? ouro : prata }}>{chave === "ouro" ? "🥇 Chave Ouro" : "🥈 Chave Prata"}</div>
                   {(rankingPreview[chave] || []).map((j, idx) => {
                     const total = (rankingPreview[chave] || []).length;
                     const desce = chave === "ouro" && idx >= total - 3 && rodadaSelecionada?.tipo !== "especial";
@@ -910,9 +718,7 @@ export default function Admin({ session }) {
                 </div>
               ))}
               <div style={styles.botoesForm}>
-                <button onClick={salvarPontuacao} disabled={calculando} style={styles.btnSalvar}>
-                  {calculando ? "Salvando..." : "✅ Confirmar e Salvar"}
-                </button>
+                <button onClick={salvarPontuacao} disabled={calculando} style={styles.btnSalvar}>{calculando ? "Salvando..." : "✅ Confirmar e Salvar"}</button>
                 <button onClick={() => setRankingPreview(null)} style={styles.btnCancelar}>✕ Cancelar</button>
               </div>
             </div>
@@ -920,14 +726,11 @@ export default function Admin({ session }) {
         </>
       )}
 
-      {/* ── ABA CONVITES ── */}
       {abaAtiva === "convites" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>🔗 Gerar Convite</h2>
           <p style={styles.infoText}>Gere um link único válido por 7 dias e envie pelo WhatsApp.</p>
-          <button onClick={gerarNovoConvite} disabled={gerandoConvite} style={styles.btnSalvar}>
-            {gerandoConvite ? "Gerando..." : "🔗 Gerar novo link de convite"}
-          </button>
+          <button onClick={gerarNovoConvite} disabled={gerandoConvite} style={styles.btnSalvar}>{gerandoConvite ? "Gerando..." : "🔗 Gerar novo link de convite"}</button>
           <div style={{ marginTop: 20 }}>
             <div style={styles.label}>Convites recentes</div>
             {loadingConvites ? <p style={styles.loadingText}>Carregando...</p>
@@ -940,18 +743,11 @@ export default function Admin({ session }) {
                         <div style={{ ...styles.conviteToken, color: c.usado ? "#5a8a6a" : expirado ? "#c0392b" : ouro }}>
                           {c.usado ? "✅ Usado" : expirado ? "⏰ Expirado" : "🟢 Ativo"}
                         </div>
-                        <div style={styles.conviteData}>
-                          Criado: {new Date(c.created_at).toLocaleDateString("pt-BR")} •
-                          Expira: {new Date(c.expires_at).toLocaleDateString("pt-BR")}
-                        </div>
-                        <div style={styles.conviteLink}>
-                          resenha-bt.vercel.app/cadastro?token={c.token.substring(0, 8)}...
-                        </div>
+                        <div style={styles.conviteData}>Criado: {new Date(c.created_at).toLocaleDateString("pt-BR")} • Expira: {new Date(c.expires_at).toLocaleDateString("pt-BR")}</div>
+                        <div style={styles.conviteLink}>resenha-bt.vercel.app/cadastro?token={c.token.substring(0, 8)}...</div>
                       </div>
                       <div style={styles.jogoAcoes}>
-                        {!c.usado && !expirado && (
-                          <button onClick={() => copiarLink(c.token)} style={styles.btnCopiar}>📋</button>
-                        )}
+                        {!c.usado && !expirado && <button onClick={() => copiarLink(c.token)} style={styles.btnCopiar}>📋</button>}
                         <button onClick={() => revogarConvite(c.id)} style={styles.btnDel}>🗑️</button>
                       </div>
                     </div>
@@ -961,7 +757,6 @@ export default function Admin({ session }) {
         </div>
       )}
 
-      {/* ── ABA APROVAÇÕES ── */}
       {abaAtiva === "aprovacoes" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>
@@ -974,46 +769,72 @@ export default function Admin({ session }) {
                 <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
                 <p style={styles.emptyText}>Nenhum cadastro pendente.</p>
               </div>
-            ) : pendentes.map((p) => (
-              <div key={p.id} style={styles.pendenteCard}>
-                <div style={{ flex: 1 }}>
-                  <div style={styles.pendenteNome}>{p.nome}</div>
-                  <div style={styles.pendenteInfo}>📧 {p.email}</div>
-                  {p.whatsapp && <div style={styles.pendenteInfo}>📱 {p.whatsapp}</div>}
-                  <div style={styles.pendenteData}>
-                    Solicitado: {new Date(p.created_at).toLocaleDateString("pt-BR")}
-                  </div>
-                  {/* SELECT DE VINCULAÇÃO */}
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 11, color: "#7fb89a", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>
-                      Vincular ao jogador
+            ) : pendentes.map((p) => {
+              const vinc = vinculacoes[p.id] || {};
+              const tipoSelecionado = vinc.tipo || "existente";
+              return (
+                <div key={p.id} style={styles.pendenteCard}>
+                  <div style={{ flex: 1 }}>
+                    <div style={styles.pendenteNome}>{p.nome}</div>
+                    <div style={styles.pendenteInfo}>📧 {p.email}</div>
+                    {p.whatsapp && <div style={styles.pendenteInfo}>📱 {p.whatsapp}</div>}
+                    <div style={styles.pendenteData}>Solicitado: {new Date(p.created_at).toLocaleDateString("pt-BR")}</div>
+
+                    {/* Toggle existente / novo */}
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button
+                        onClick={() => setVinculacao(p.id, "tipo", "existente")}
+                        style={{ ...styles.btnToggle, ...(tipoSelecionado === "existente" ? styles.btnToggleAtivo : {}) }}>
+                        Jogador existente
+                      </button>
+                      <button
+                        onClick={() => setVinculacao(p.id, "tipo", "novo")}
+                        style={{ ...styles.btnToggle, ...(tipoSelecionado === "novo" ? styles.btnToggleAtivo : {}) }}>
+                        Novo jogador
+                      </button>
                     </div>
-                    <select
-                      value={vinculacoes[p.id] || ""}
-                      onChange={(e) => setVinculacoes({ ...vinculacoes, [p.id]: e.target.value })}
-                      style={{ ...styles.select, width: "100%" }}
-                    >
-                      <option value="">— selecionar jogador —</option>
-                      {jogadores
-                        .filter(j => !j.user_id)
-                        .sort((a, b) => a.nome.localeCompare(b.nome))
-                        .map(j => (
-                          <option key={j.id} value={j.id}>{j.nome} ({j.chave})</option>
-                        ))
-                      }
-                    </select>
+
+                    {tipoSelecionado === "existente" && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: 11, color: "#7fb89a", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Vincular ao jogador</div>
+                        <select
+                          value={vinc.jogadorId || ""}
+                          onChange={(e) => setVinculacao(p.id, "jogadorId", e.target.value)}
+                          style={{ ...styles.select, width: "100%" }}>
+                          <option value="">— selecionar jogador —</option>
+                          {jogadores.filter(j => !j.user_id).sort((a, b) => a.nome.localeCompare(b.nome)).map(j => (
+                            <option key={j.id} value={j.id}>{j.nome} ({j.chave})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {tipoSelecionado === "novo" && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: 11, color: "#7fb89a", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Apelido (nome curto no torneio)</div>
+                        <input
+                          type="text"
+                          placeholder="Ex: Joao V."
+                          value={vinc.apelido || ""}
+                          onChange={(e) => setVinculacao(p.id, "apelido", e.target.value)}
+                          style={{ ...styles.select, width: "100%", boxSizing: "border-box" }}
+                        />
+                        <div style={{ fontSize: 11, color: "#5a8a6a", marginTop: 4 }}>Entrará na Chave Prata automaticamente</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: 8 }}>
+                    <button onClick={() => aprovarCadastro(p)} disabled={aprovando === p.id} style={styles.btnAprovar}>
+                      {aprovando === p.id ? "..." : "✅ Aprovar"}
+                    </button>
+                    <button onClick={() => rejeitarCadastro(p)} disabled={aprovando === p.id} style={styles.btnRejeitar}>
+                      {aprovando === p.id ? "..." : "✕ Rejeitar"}
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: 8 }}>
-                  <button onClick={() => aprovarCadastro(p)} disabled={aprovando === p.id} style={styles.btnAprovar}>
-                    {aprovando === p.id ? "..." : "✅ Aprovar"}
-                  </button>
-                  <button onClick={() => rejeitarCadastro(p)} disabled={aprovando === p.id} style={styles.btnRejeitar}>
-                    {aprovando === p.id ? "..." : "✕ Rejeitar"}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
         </div>
       )}
     </div>
@@ -1069,6 +890,8 @@ const styles = {
   btnCopiar: { background: "#1a5c3a", border: `1px solid ${borda}`, color: "#7fd8a0", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 16 },
   btnAprovar: { background: "#1a5c3a", border: `1px solid #4a9a6a`, color: "#7fd8a0", borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" },
   btnRejeitar: { background: "transparent", border: `1px solid #c0392b`, color: "#e74c3c", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13, cursor: "pointer" },
+  btnToggle: { flex: 1, padding: "6px 0", borderRadius: 8, border: `1px solid ${borda}`, background: "#0f2d1e", color: "#5a8a6a", cursor: "pointer", fontSize: 12, fontWeight: 600 },
+  btnToggleAtivo: { background: verde, border: `1px solid ${ouro}`, color: ouro },
   loadingText: { color: "#7fb89a", textAlign: "center", padding: 20 },
   emptyText: { color: "#5a8a6a", textAlign: "center", padding: 20, fontSize: 14 },
   infoText: { color: "#7fb89a", fontSize: 13, marginBottom: 12, lineHeight: 1.5 },
