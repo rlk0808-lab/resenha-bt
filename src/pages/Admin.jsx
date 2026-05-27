@@ -94,14 +94,16 @@ export default function Admin({ session }) {
   const [pendentes, setPendentes] = useState([]);
   const [loadingPendentes, setLoadingPendentes] = useState(false);
   const [aprovando, setAprovando] = useState(null);
-  // vinculacoes: { pendente_id: { tipo: 'existente'|'novo', jogadorId, apelido } }
   const [vinculacoes, setVinculacoes] = useState({});
+  const [atletas, setAtletas] = useState([]);
+  const [loadingAtletas, setLoadingAtletas] = useState(false);
   const [mensagem, setMensagem] = useState(null);
 
   useEffect(() => { carregarRodadas(); carregarJogadores(); }, []);
   useEffect(() => { if (rodadaSelecionada) carregarJogos(); }, [rodadaSelecionada, chaveAtiva]);
   useEffect(() => { if (abaAtiva === "convites") carregarConvites(); }, [abaAtiva]);
   useEffect(() => { if (abaAtiva === "aprovacoes") carregarPendentes(); }, [abaAtiva]);
+  useEffect(() => { if (abaAtiva === "atletas") carregarAtletas(); }, [abaAtiva]);
 
   function mostrarMensagem(texto, tipo = "sucesso") {
     setMensagem({ texto, tipo });
@@ -137,8 +139,7 @@ export default function Admin({ session }) {
     }
     setSalvando(true);
     const payload = {
-      rodada_id: rodadaSelecionada.id,
-      numero_rodada: rodadaSelecionada.numero,
+      rodada_id: rodadaSelecionada.id, numero_rodada: rodadaSelecionada.numero,
       dupla_a_1: novoJogo.dupla_a_1, dupla_a_2: novoJogo.dupla_a_2 || null,
       dupla_b_1: novoJogo.dupla_b_1, dupla_b_2: novoJogo.dupla_b_2 || null,
       placar_a: parseInt(novoJogo.placar_a), placar_b: parseInt(novoJogo.placar_b),
@@ -189,8 +190,8 @@ export default function Admin({ session }) {
     if (!sorteioPreview || !rodadaSelecionada) return;
     setSalvandoSorteio(true);
     await supabase.from("jogos").delete().eq("rodada_id", rodadaSelecionada.id).eq("chave", chaveAtiva).is("placar_a", null);
-    const inserts = sorteioPreview.flatMap((rodadaJogos) =>
-      rodadaJogos.map(([a1, a2, b1, b2]) => ({
+    const inserts = sorteioPreview.flatMap((rj) =>
+      rj.map(([a1, a2, b1, b2]) => ({
         rodada_id: rodadaSelecionada.id, numero_rodada: rodadaSelecionada.numero,
         dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
         placar_a: null, placar_b: null, chave: chaveAtiva,
@@ -437,43 +438,25 @@ export default function Admin({ session }) {
       mostrarMensagem("Selecione um jogador existente ou informe o apelido para criar novo.", "erro");
       return;
     }
-
     setAprovando(pendente.id);
     let jogadorId = vinc.jogadorId;
 
     if (vinc.tipo === "novo") {
-      // Cria novo jogador na Prata
-      if (!vinc.apelido?.trim()) {
-        mostrarMensagem("Informe o apelido do novo jogador.", "erro");
-        setAprovando(null);
-        return;
-      }
-      const { data: novoJogador, error: erroNovo } = await supabase
+      if (!vinc.apelido?.trim()) { mostrarMensagem("Informe o apelido do novo jogador.", "erro"); setAprovando(null); return; }
+      const { data: novoJog, error: erroNovo } = await supabase
         .from("jogadores")
         .insert({ nome: vinc.apelido.trim(), apelido: pendente.nome, chave: "prata", ativo: true, user_id: pendente.user_id })
         .select().single();
-
-      if (erroNovo) {
-        mostrarMensagem("Erro ao criar jogador: " + erroNovo.message, "erro");
-        setAprovando(null);
-        return;
-      }
-      jogadorId = novoJogador.id;
+      if (erroNovo) { mostrarMensagem("Erro ao criar jogador: " + erroNovo.message, "erro"); setAprovando(null); return; }
+      jogadorId = novoJog.id;
     } else {
-      // Vincula ao jogador existente
       const { error: erroVinculo } = await supabase
         .from("jogadores")
         .update({ user_id: pendente.user_id, apelido: pendente.nome })
         .eq("id", jogadorId);
-
-      if (erroVinculo) {
-        mostrarMensagem("Erro ao vincular: " + erroVinculo.message, "erro");
-        setAprovando(null);
-        return;
-      }
+      if (erroVinculo) { mostrarMensagem("Erro ao vincular: " + erroVinculo.message, "erro"); setAprovando(null); return; }
     }
 
-    // Aprova o cadastro
     const { error } = await supabase.from("cadastros_pendentes").update({ status: "aprovado" }).eq("id", pendente.id);
     if (error) mostrarMensagem("Erro ao aprovar: " + error.message, "erro");
     else {
@@ -492,6 +475,21 @@ export default function Admin({ session }) {
     if (error) mostrarMensagem("Erro ao rejeitar: " + error.message, "erro");
     else { mostrarMensagem(`${pendente.nome} rejeitado.`); carregarPendentes(); }
     setAprovando(null);
+  }
+
+  // ─── ATLETAS ─────────────────────────────────────────────────────────────
+  async function carregarAtletas() {
+    setLoadingAtletas(true);
+    const { data } = await supabase.from("jogadores").select("*").order("nome", { ascending: true });
+    setAtletas(data || []);
+    setLoadingAtletas(false);
+  }
+
+  async function revogarAcesso(jogador) {
+    if (!confirm(`Revogar acesso de ${jogador.nome}? O jogador não conseguirá mais fazer login.`)) return;
+    const { error } = await supabase.from("jogadores").update({ user_id: null, apelido: null }).eq("id", jogador.id);
+    if (error) mostrarMensagem("Erro ao revogar: " + error.message, "erro");
+    else { mostrarMensagem(`✅ Acesso de ${jogador.nome} revogado.`); carregarAtletas(); }
   }
 
   const SelectJogador = ({ value, onChange, placeholder }) => (
@@ -567,8 +565,10 @@ export default function Admin({ session }) {
         <button onClick={() => setAbaAtiva("aprovacoes")} style={{ ...styles.aba, ...(abaAtiva === "aprovacoes" ? styles.abaAtiva : {}) }}>
           👤 Aprovações {pendentes.length > 0 && <span style={styles.badge}>{pendentes.length}</span>}
         </button>
+        <button onClick={() => setAbaAtiva("atletas")} style={{ ...styles.aba, ...(abaAtiva === "atletas" ? styles.abaAtiva : {}) }}>👥 Atletas</button>
       </div>
 
+      {/* ── ABA JOGOS ── */}
       {abaAtiva === "jogos" && (
         <>
           <div style={styles.card}>
@@ -726,6 +726,7 @@ export default function Admin({ session }) {
         </>
       )}
 
+      {/* ── ABA CONVITES ── */}
       {abaAtiva === "convites" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>🔗 Gerar Convite</h2>
@@ -757,6 +758,7 @@ export default function Admin({ session }) {
         </div>
       )}
 
+      {/* ── ABA APROVAÇÕES ── */}
       {abaAtiva === "aprovacoes" && (
         <div style={styles.card}>
           <h2 style={styles.cardTitulo}>
@@ -779,28 +781,14 @@ export default function Admin({ session }) {
                     <div style={styles.pendenteInfo}>📧 {p.email}</div>
                     {p.whatsapp && <div style={styles.pendenteInfo}>📱 {p.whatsapp}</div>}
                     <div style={styles.pendenteData}>Solicitado: {new Date(p.created_at).toLocaleDateString("pt-BR")}</div>
-
-                    {/* Toggle existente / novo */}
                     <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                      <button
-                        onClick={() => setVinculacao(p.id, "tipo", "existente")}
-                        style={{ ...styles.btnToggle, ...(tipoSelecionado === "existente" ? styles.btnToggleAtivo : {}) }}>
-                        Jogador existente
-                      </button>
-                      <button
-                        onClick={() => setVinculacao(p.id, "tipo", "novo")}
-                        style={{ ...styles.btnToggle, ...(tipoSelecionado === "novo" ? styles.btnToggleAtivo : {}) }}>
-                        Novo jogador
-                      </button>
+                      <button onClick={() => setVinculacao(p.id, "tipo", "existente")} style={{ ...styles.btnToggle, ...(tipoSelecionado === "existente" ? styles.btnToggleAtivo : {}) }}>Jogador existente</button>
+                      <button onClick={() => setVinculacao(p.id, "tipo", "novo")} style={{ ...styles.btnToggle, ...(tipoSelecionado === "novo" ? styles.btnToggleAtivo : {}) }}>Novo jogador</button>
                     </div>
-
                     {tipoSelecionado === "existente" && (
                       <div style={{ marginTop: 8 }}>
                         <div style={{ fontSize: 11, color: "#7fb89a", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Vincular ao jogador</div>
-                        <select
-                          value={vinc.jogadorId || ""}
-                          onChange={(e) => setVinculacao(p.id, "jogadorId", e.target.value)}
-                          style={{ ...styles.select, width: "100%" }}>
+                        <select value={vinc.jogadorId || ""} onChange={(e) => setVinculacao(p.id, "jogadorId", e.target.value)} style={{ ...styles.select, width: "100%" }}>
                           <option value="">— selecionar jogador —</option>
                           {jogadores.filter(j => !j.user_id).sort((a, b) => a.nome.localeCompare(b.nome)).map(j => (
                             <option key={j.id} value={j.id}>{j.nome} ({j.chave})</option>
@@ -808,33 +796,56 @@ export default function Admin({ session }) {
                         </select>
                       </div>
                     )}
-
                     {tipoSelecionado === "novo" && (
                       <div style={{ marginTop: 8 }}>
                         <div style={{ fontSize: 11, color: "#7fb89a", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Apelido (nome curto no torneio)</div>
-                        <input
-                          type="text"
-                          placeholder="Ex: Joao V."
-                          value={vinc.apelido || ""}
-                          onChange={(e) => setVinculacao(p.id, "apelido", e.target.value)}
-                          style={{ ...styles.select, width: "100%", boxSizing: "border-box" }}
-                        />
+                        <input type="text" placeholder="Ex: Joao V." value={vinc.apelido || ""} onChange={(e) => setVinculacao(p.id, "apelido", e.target.value)} style={{ ...styles.select, width: "100%", boxSizing: "border-box" }} />
                         <div style={{ fontSize: 11, color: "#5a8a6a", marginTop: 4 }}>Entrará na Chave Prata automaticamente</div>
                       </div>
                     )}
                   </div>
-
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: 8 }}>
-                    <button onClick={() => aprovarCadastro(p)} disabled={aprovando === p.id} style={styles.btnAprovar}>
-                      {aprovando === p.id ? "..." : "✅ Aprovar"}
-                    </button>
-                    <button onClick={() => rejeitarCadastro(p)} disabled={aprovando === p.id} style={styles.btnRejeitar}>
-                      {aprovando === p.id ? "..." : "✕ Rejeitar"}
-                    </button>
+                    <button onClick={() => aprovarCadastro(p)} disabled={aprovando === p.id} style={styles.btnAprovar}>{aprovando === p.id ? "..." : "✅ Aprovar"}</button>
+                    <button onClick={() => rejeitarCadastro(p)} disabled={aprovando === p.id} style={styles.btnRejeitar}>{aprovando === p.id ? "..." : "✕ Rejeitar"}</button>
                   </div>
                 </div>
               );
             })}
+        </div>
+      )}
+
+      {/* ── ABA ATLETAS ── */}
+      {abaAtiva === "atletas" && (
+        <div style={styles.card}>
+          <h2 style={styles.cardTitulo}>
+            👥 Atletas Cadastrados
+            <span style={styles.badgeCount}>{atletas.filter(a => a.user_id).length} com acesso</span>
+          </h2>
+          {loadingAtletas ? <p style={styles.loadingText}>Carregando...</p>
+            : atletas.length === 0 ? <p style={styles.emptyText}>Nenhum atleta cadastrado.</p>
+            : atletas.map((a) => (
+              <div key={a.id} style={{ ...styles.pendenteCard, alignItems: "center" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={styles.pendenteNome}>{a.nome}</div>
+                  {a.apelido && (
+                    <div style={{ fontSize: 12, color: "#7fb89a", marginBottom: 4 }}>{a.apelido}</div>
+                  )}
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: a.chave === "ouro" ? ouro : prata, fontWeight: 700, textTransform: "uppercase" }}>
+                      {a.chave === "ouro" ? "🥇" : "🥈"} {a.chave}
+                    </span>
+                    <span style={{ fontSize: 11, color: a.user_id ? "#2ecc71" : "#5a8a6a" }}>
+                      {a.user_id ? "✅ Com acesso" : "⭕ Sem acesso"}
+                    </span>
+                  </div>
+                </div>
+                {a.user_id && (
+                  <button onClick={() => revogarAcesso(a)} style={styles.btnRejeitar}>
+                    🚫 Revogar
+                  </button>
+                )}
+              </div>
+            ))}
         </div>
       )}
     </div>
@@ -856,8 +867,8 @@ const styles = {
   subtitulo: { margin: 0, fontSize: 13, color: "#7fb89a", marginTop: 2 },
   mensagem: { padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 14, fontWeight: 600, color: "#fff" },
   cardDestaque: { background: "#1a3020", border: `2px solid ${ouro}`, borderRadius: 12, padding: 16, marginBottom: 16 },
-  abas: { display: "flex", gap: 8, marginBottom: 16 },
-  aba: { flex: 1, padding: "10px 4px", borderRadius: 10, border: `1px solid ${borda}`, background: "#1e3d2a", color: "#5a8a6a", cursor: "pointer", fontWeight: 600, fontSize: 13 },
+  abas: { display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" },
+  aba: { flex: 1, minWidth: 70, padding: "10px 4px", borderRadius: 10, border: `1px solid ${borda}`, background: "#1e3d2a", color: "#5a8a6a", cursor: "pointer", fontWeight: 600, fontSize: 12 },
   abaAtiva: { background: verde, border: `1px solid ${ouro}`, color: ouro },
   badge: { background: "#c0392b", color: "#fff", borderRadius: 10, padding: "1px 6px", fontSize: 11, marginLeft: 4 },
   card: { background: cardBg, border: `1px solid ${borda}`, borderRadius: 12, padding: 16, marginBottom: 16 },
