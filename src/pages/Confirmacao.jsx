@@ -9,112 +9,81 @@ export default function Confirmacao({ session }) {
   const [listaEspera, setListaEspera] = useState([]);
   const [rankingAnterior, setRankingAnterior] = useState({ ouro: [], prata: [] });
   const [previaChaves, setPreviaChaves] = useState({ ouro: [], prata: [] });
-  const [jogouUltimaRodada, setJogouUltimaRodada] = useState(null); // null = carregando
+  const [jogouUltimaRodada, setJogouUltimaRodada] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processando, setProcessando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
 
   const LIMITE_PRINCIPAL = 24;
 
-  useEffect(() => {
-    if (session?.user) carregarDados();
-  }, [session]);
+  useEffect(() => { if (session?.user) carregarDados(); }, [session]);
 
   async function carregarDados() {
     setLoading(true);
-    await Promise.all([carregarJogador(), carregarProximaRodada()]);
+    const jog = await carregarJogador();
+    await carregarProximaRodada(jog);
     setLoading(false);
   }
 
   async function carregarJogador() {
-    const { data } = await supabase
-      .from("jogadores").select("*").eq("user_id", session.user.id).limit(1);
-    setJogador(data?.[0] || null);
-    return data?.[0] || null;
+    const { data } = await supabase.from("jogadores").select("*").eq("user_id", session.user.id).limit(1);
+    const jog = data?.[0] || null;
+    setJogador(jog);
+    return jog;
   }
 
-  async function carregarProximaRodada() {
-    const { data } = await supabase
-      .from("rodadas").select("*")
-      .in("status", ["ativa", "proxima"])
-      .order("numero", { ascending: true }).limit(1);
-
+  async function carregarProximaRodada(jog) {
+    const { data } = await supabase.from("rodadas").select("*")
+      .in("status", ["ativa", "proxima"]).order("numero", { ascending: true }).limit(1);
     const rodada = data?.[0] || null;
-    if (rodada) {
-      setRodadaAtual(rodada);
+    if (!rodada) return;
+    setRodadaAtual(rodada);
 
-      // Busca rodada anterior finalizada
-      const { data: anterior } = await supabase
-        .from("rodadas").select("*")
-        .eq("status", "finalizada")
-        .order("numero", { ascending: false }).limit(1);
-      const rodAnt = anterior?.[0] || null;
+    // Rodada anterior finalizada
+    const { data: anterior } = await supabase.from("rodadas").select("*")
+      .eq("status", "finalizada").order("numero", { ascending: false }).limit(1);
+    const rodAnt = anterior?.[0] || null;
 
-      // Busca ranking da rodada anterior
-      if (rodAnt) {
-        const { data: rank } = await supabase
-          .from("ranking_rodada")
-          .select("*, jogadores(nome, chave)")
-          .eq("rodada_id", rodAnt.id)
-          .order("posicao", { ascending: true });
-
-        if (rank) {
-          setRankingAnterior({
-            ouro: rank.filter(r => r.chave === "ouro"),
-            prata: rank.filter(r => r.chave === "prata"),
-          });
-        }
-
-        // Verifica se o jogador atual jogou a última rodada
-        const { data: jData } = await supabase
-          .from("jogadores").select("id").eq("user_id", session.user.id).limit(1);
-        if (jData?.[0]) {
-          const { data: rankJogador } = await supabase
-            .from("ranking_rodada")
-            .select("id")
-            .eq("rodada_id", rodAnt.id)
-            .eq("jogador_id", jData[0].id)
-            .limit(1);
-          setJogouUltimaRodada(!!(rankJogador && rankJogador.length > 0));
-        }
-      } else {
-        // Primeira rodada — todos podem confirmar normalmente
-        setJogouUltimaRodada(true);
+    if (rodAnt) {
+      const { data: rank } = await supabase.from("ranking_rodada")
+        .select("*, jogadores(id, nome, chave)").eq("rodada_id", rodAnt.id)
+        .order("posicao", { ascending: true });
+      if (rank) {
+        setRankingAnterior({
+          ouro: rank.filter(r => r.chave === "ouro"),
+          prata: rank.filter(r => r.chave === "prata"),
+        });
       }
 
-      await carregarConfirmacoes(rodada.id);
+      // Verifica se jogador jogou a última rodada
+      if (jog) {
+        const { data: rankJog } = await supabase.from("ranking_rodada").select("id")
+          .eq("rodada_id", rodAnt.id).eq("jogador_id", jog.id).limit(1);
+        setJogouUltimaRodada(!!(rankJog && rankJog.length > 0));
+      }
+    } else {
+      setJogouUltimaRodada(true); // Primeira rodada: todos podem confirmar
     }
-    return rodada;
+
+    await carregarConfirmacoes(rodada.id, jog);
   }
 
-  async function carregarConfirmacoes(rodadaId) {
-    const { data } = await supabase
-      .from("confirmacoes")
+  async function carregarConfirmacoes(rodadaId, jog) {
+    const { data } = await supabase.from("confirmacoes")
       .select("*, jogadores(id, nome, chave)")
-      .eq("rodada_id", rodadaId)
-      .order("created_at", { ascending: true });
-
+      .eq("rodada_id", rodadaId).order("created_at", { ascending: true });
     if (data) {
-      const confirmados = data.filter(c => c.status === "confirmado");
-      const espera = data.filter(c => c.status === "espera");
-      setListaConfirmados(confirmados);
-      setListaEspera(espera);
-
-      if (session?.user) {
-        const { data: jData } = await supabase
-          .from("jogadores").select("id").eq("user_id", session.user.id).limit(1);
-        if (jData?.[0]) {
-          const minhaConf = data.find(c => c.jogador_id === jData[0].id);
-          setConfirmacao(minhaConf || null);
-        }
+      setListaConfirmados(data.filter(c => c.status === "confirmado"));
+      setListaEspera(data.filter(c => c.status === "espera"));
+      const jogadorId = jog?.id;
+      if (jogadorId) {
+        const minhaConf = data.find(c => c.jogador_id === jogadorId);
+        setConfirmacao(minhaConf || null);
       }
     }
   }
 
-  // ─── REGRAS DE PRAZO ────────────────────────────────────────────────────
-  function listaFechada() {
-    return rodadaAtual?.status === "ativa";
-  }
+  function listaFechada() { return rodadaAtual?.status === "ativa"; }
 
   function dentroDoPrazoListaPrincipal() {
     const agora = new Date();
@@ -125,65 +94,103 @@ export default function Confirmacao({ session }) {
     return false;
   }
 
-  // Calcula prévia das chaves
+  // ─── CÁLCULO DE PRÉVIA ───────────────────────────────────────────────────
+  // Regras:
+  // - 3 últimos da Ouro descem
+  // - 3 primeiros da Prata sobem (em condições normais)
+  // - Se jogadores da Ouro faltam: sobem mais da Prata (4º, 5º, 6º...)
+  // - A partir do 6º faltante da Ouro: 10º, 11º, 12º se mantêm (não descem)
+  // - Celso (e outros que desceram) ficam na Prata até a prévia
   function calcularPrevia(confirmados, rankingAnt) {
     if (!rankingAnt.ouro.length && !rankingAnt.prata.length) {
-      const ouro = confirmados.filter(c => c.jogadores?.chave === "ouro").map(c => ({ nome: c.jogadores?.nome, status: "normal" }));
-      const prata = confirmados.filter(c => c.jogadores?.chave === "prata").map(c => ({ nome: c.jogadores?.nome, status: "normal" }));
-      return { ouro, prata };
+      return {
+        ouro: confirmados.filter(c => c.jogadores?.chave === "ouro").map(c => ({ nome: c.jogadores?.nome, status: "normal" })),
+        prata: confirmados.filter(c => c.jogadores?.chave === "prata").map(c => ({ nome: c.jogadores?.nome, status: "normal" })),
+      };
     }
 
     const nomeConfirmados = new Set(confirmados.map(c => c.jogadores?.nome));
+
+    // Os 3 que descem (10º, 11º, 12º da Ouro anterior)
     const ouroDescem = rankingAnt.ouro.slice(-3).map(r => r.jogadores?.nome);
+
+    // Jogadores da Ouro que ficam (1º ao 9º que confirmaram)
     const ouroFicam = rankingAnt.ouro
       .filter(r => !ouroDescem.includes(r.jogadores?.nome) && nomeConfirmados.has(r.jogadores?.nome))
       .map(r => ({ nome: r.jogadores?.nome, status: "normal" }));
 
-    const prataSobem = rankingAnt.prata.slice(0, 3).map(r => r.jogadores?.nome);
+    // Quantos da Ouro efetiva (1º-9º) faltaram
     const ouroEfetivos = rankingAnt.ouro.filter(r => !ouroDescem.includes(r.jogadores?.nome));
-    const ouroFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
+    const ouroFaltaram = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome));
+    const qtdFaltasEfetivas = ouroFaltaram.length;
 
-    const prataTodosOrdenados = rankingAnt.prata
+    // Jogadores que desceram mas confirmaram → ficam na Prata (marcados como "desceu")
+    // Não voltam para Ouro a não ser que sejam chamados pela fila da Prata
+
+    // Quantos precisam subir da Prata: 3 (normais) + faltas dos efetivos
+    let totalSubir = 3 + qtdFaltasEfetivas;
+
+    // Regra especial: a partir do 6º faltante da efetiva (posições 10-12 se mantêm)
+    const ouroMantem = [];
+    if (qtdFaltasEfetivas >= 4) {
+      const pos10 = rankingAnt.ouro.find(r => r.posicao === 10);
+      if (pos10 && nomeConfirmados.has(pos10.jogadores?.nome)) {
+        ouroMantem.push({ nome: pos10.jogadores?.nome, status: "mantido" });
+        totalSubir--;
+      }
+    }
+    if (qtdFaltasEfetivas >= 5) {
+      const pos11 = rankingAnt.ouro.find(r => r.posicao === 11);
+      if (pos11 && nomeConfirmados.has(pos11.jogadores?.nome)) {
+        ouroMantem.push({ nome: pos11.jogadores?.nome, status: "mantido" });
+        totalSubir--;
+      }
+    }
+    if (qtdFaltasEfetivas >= 6) {
+      const pos12 = rankingAnt.ouro.find(r => r.posicao === 12);
+      if (pos12 && nomeConfirmados.has(pos12.jogadores?.nome)) {
+        ouroMantem.push({ nome: pos12.jogadores?.nome, status: "mantido" });
+        totalSubir--;
+      }
+    }
+
+    // Jogadores da Prata que podem subir (ordenados por posição na Prata anterior)
+    // Inclui os que desceram da Ouro (eles entram na fila da Prata pela posição)
+    const prataTodos = rankingAnt.prata
       .filter(r => nomeConfirmados.has(r.jogadores?.nome))
       .sort((a, b) => a.posicao - b.posicao);
 
-    let totalSubindo = Math.min(3 + ouroFaltasEfetivas, prataTodosOrdenados.length);
+    // Jogadores que desceram da Ouro e confirmaram (entram no final da fila da Prata)
+    const desceuOuroConfirmou = ouroDescem
+      .filter(nome => nomeConfirmados.has(nome))
+      .map(nome => ({ nome, status: "desceu" }));
 
-    const ouroMantemPosicoes = [];
-    if (ouroFaltasEfetivas >= 4) {
-      const pos10 = rankingAnt.ouro.find(r => r.posicao === 10);
-      if (pos10 && nomeConfirmados.has(pos10.jogadores?.nome)) ouroMantemPosicoes.push(pos10.jogadores?.nome);
-    }
-    if (ouroFaltasEfetivas >= 5) {
-      const pos11 = rankingAnt.ouro.find(r => r.posicao === 11);
-      if (pos11 && nomeConfirmados.has(pos11.jogadores?.nome)) ouroMantemPosicoes.push(pos11.jogadores?.nome);
-    }
-    if (ouroFaltasEfetivas >= 6) {
-      const pos12 = rankingAnt.ouro.find(r => r.posicao === 12);
-      if (pos12 && nomeConfirmados.has(pos12.jogadores?.nome)) ouroMantemPosicoes.push(pos12.jogadores?.nome);
-    }
+    // Sobe: primeiros da Prata até totalSubir (excluindo os que desceram)
+    const prataSobem = prataTodos
+      .slice(0, totalSubir)
+      .map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
 
-    const ouroFinal = [
-      ...ouroFicam,
-      ...ouroMantemPosicoes.map(nome => ({ nome, status: "mantido" })),
-      ...prataTodosOrdenados.slice(0, totalSubindo).map(r => ({ nome: r.jogadores?.nome, status: "subiu" })),
-    ].slice(0, 12);
-
+    const ouroFinal = [...ouroFicam, ...ouroMantem, ...prataSobem].slice(0, 12);
     const nomesOuro = new Set(ouroFinal.map(j => j.nome));
-    const prataFinal = confirmados
-      .filter(c => !nomesOuro.has(c.jogadores?.nome))
-      .map(c => {
-        const desceu = ouroDescem.includes(c.jogadores?.nome);
-        return { nome: c.jogadores?.nome, status: desceu ? "desceu" : "normal" };
-      });
+
+    // Prata: quem não foi para Ouro
+    const prataFinal = [
+      ...prataTodos.slice(totalSubir).map(r => ({ nome: r.jogadores?.nome, status: "normal" })),
+      ...desceuOuroConfirmou,
+      // Confirmados que não estão no ranking anterior (estreantes ou retornando)
+      ...confirmados
+        .filter(c => !nomesOuro.has(c.jogadores?.nome) &&
+          !prataTodos.some(r => r.jogadores?.nome === c.jogadores?.nome) &&
+          !desceuOuroConfirmou.some(d => d.nome === c.jogadores?.nome))
+        .map(c => ({ nome: c.jogadores?.nome, status: "normal" }))
+    ];
 
     return { ouro: ouroFinal, prata: prataFinal };
   }
 
   useEffect(() => {
     if (listaConfirmados.length > 0 || rankingAnterior.ouro.length > 0) {
-      const previa = calcularPrevia(listaConfirmados, rankingAnterior);
-      setPreviaChaves(previa);
+      setPreviaChaves(calcularPrevia(listaConfirmados, rankingAnterior));
     }
   }, [listaConfirmados, rankingAnterior]);
 
@@ -202,37 +209,24 @@ export default function Confirmacao({ session }) {
 
   async function confirmarPresenca() {
     if (!jogador || !rodadaAtual) return;
-
-    if (listaFechada()) {
-      mostrarMensagem("Lista encerrada. O sorteio já foi publicado.", "info");
-      return;
-    }
-
+    if (listaFechada()) { mostrarMensagem("Lista encerrada. O sorteio já foi publicado.", "info"); return; }
     setProcessando(true);
 
-    const { data: existentes } = await supabase
-      .from("confirmacoes").select("*")
+    const { data: existentes } = await supabase.from("confirmacoes").select("*")
       .eq("jogador_id", jogador.id).eq("rodada_id", rodadaAtual.id);
-
     if (existentes && existentes.length > 0) {
-      mostrarMensagem("Você já está confirmado!", "info");
-      setProcessando(false);
-      return;
+      mostrarMensagem("Você já está confirmado!", "info"); setProcessando(false); return;
     }
 
-    const dentroDoPrazo = dentroDoPrazoListaPrincipal();
+    const dentroPrazo = dentroDoPrazoListaPrincipal();
 
-    // REGRA: quem não jogou a última rodada vai para espera
-    // EXCETO se já passou quarta 10h (aí todo mundo vai para espera mesmo)
+    // REGRA: quem não jogou a última rodada → sempre espera
     let status;
     if (!jogouUltimaRodada) {
-      // Não jogou a última rodada → sempre espera
       status = "espera";
-    } else if (listaConfirmados.length < LIMITE_PRINCIPAL && dentroDoPrazo) {
-      // Jogou + dentro do prazo + tem vaga → confirmado
+    } else if (listaConfirmados.length < LIMITE_PRINCIPAL && dentroPrazo) {
       status = "confirmado";
     } else {
-      // Fora do prazo ou sem vaga → espera
       status = "espera";
     }
 
@@ -243,14 +237,10 @@ export default function Confirmacao({ session }) {
     if (error) {
       mostrarMensagem("Erro ao confirmar: " + error.message, "erro");
     } else {
-      if (status === "confirmado") {
-        mostrarMensagem("✅ Presença confirmada na lista principal!");
-      } else if (!jogouUltimaRodada) {
-        mostrarMensagem("⏳ Você não jogou a última rodada. Entrou na lista de espera.", "info");
-      } else {
-        mostrarMensagem("⏳ Prazo encerrado. Você entrou na lista de espera.");
-      }
-      await carregarConfirmacoes(rodadaAtual.id);
+      if (status === "confirmado") mostrarMensagem("✅ Presença confirmada na lista principal!");
+      else if (!jogouUltimaRodada) mostrarMensagem("⏳ Você não jogou a última rodada. Entrou na lista de espera.", "info");
+      else mostrarMensagem("⏳ Prazo encerrado. Você entrou na lista de espera.");
+      await carregarConfirmacoes(rodadaAtual.id, jogador);
     }
     setProcessando(false);
   }
@@ -259,23 +249,19 @@ export default function Confirmacao({ session }) {
     if (!confirmacao) return;
     if (!confirm("Deseja cancelar sua confirmação?")) return;
     setProcessando(true);
-
     const eraConfirmado = confirmacao.status === "confirmado";
     const { error } = await supabase.from("confirmacoes").delete().eq("id", confirmacao.id);
-
     if (error) {
       mostrarMensagem("Erro ao cancelar: " + error.message, "erro");
     } else {
       if (eraConfirmado && listaEspera.length > 0) {
-        await supabase.from("confirmacoes")
-          .update({ status: "confirmado" })
-          .eq("id", listaEspera[0].id);
-        mostrarMensagem("Confirmação cancelada. O próximo da lista de espera foi promovido.", "info");
+        await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", listaEspera[0].id);
+        mostrarMensagem("Confirmação cancelada. O próximo da espera foi promovido.", "info");
       } else {
         mostrarMensagem("Confirmação cancelada.", "info");
       }
       setConfirmacao(null);
-      await carregarConfirmacoes(rodadaAtual.id);
+      await carregarConfirmacoes(rodadaAtual.id, jogador);
     }
     setProcessando(false);
   }
@@ -283,6 +269,15 @@ export default function Confirmacao({ session }) {
   function mostrarMensagem(texto, tipo = "sucesso") {
     setMensagem({ texto, tipo });
     setTimeout(() => setMensagem(null), 5000);
+  }
+
+  function formatarDataHora(iso) {
+    const d = new Date(iso);
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+      timeZone: "America/Sao_Paulo"
+    });
   }
 
   function corStatus(status) {
@@ -300,19 +295,17 @@ export default function Confirmacao({ session }) {
   }
 
   const status = statusConfirmacao();
-  const vagasOuro = 12 - previaChaves.ouro.length;
-  const vagasPrata = 12 - previaChaves.prata.length;
+  const vagasOuro = Math.max(0, 12 - previaChaves.ouro.length);
+  const vagasPrata = Math.max(0, 12 - previaChaves.prata.length);
   const fechada = listaFechada();
   const dentroPrazo = dentroDoPrazoListaPrincipal();
 
-  if (loading) return (
-    <div style={styles.container}><p style={styles.loadingText}>Carregando...</p></div>
-  );
+  if (loading) return <div style={styles.container}><p style={styles.loadingText}>Carregando...</p></div>;
 
   if (!jogador) return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <p style={styles.emptyText}>Seu perfil ainda não está vinculado a um jogador. Entre em contato com o administrador.</p>
+        <p style={styles.emptyText}>Seu perfil ainda não está vinculado. Entre em contato com o administrador.</p>
       </div>
     </div>
   );
@@ -328,10 +321,7 @@ export default function Confirmacao({ session }) {
       </div>
 
       {mensagem && (
-        <div style={{
-          ...styles.mensagem,
-          background: mensagem.tipo === "erro" ? "#c0392b" : mensagem.tipo === "info" ? "#2980b9" : "#27ae60"
-        }}>
+        <div style={{ ...styles.mensagem, background: mensagem.tipo === "erro" ? "#c0392b" : mensagem.tipo === "info" ? "#2980b9" : "#27ae60" }}>
           {mensagem.texto}
         </div>
       )}
@@ -360,31 +350,24 @@ export default function Confirmacao({ session }) {
             {fechada ? (
               <div style={{ ...styles.prazoBox, background: "#1a3a20", borderColor: "#2ecc71" }}>
                 <span style={styles.prazoIcon}>✅</span>
-                <span style={styles.prazoTexto}>
-                  Lista encerrada — <strong style={{ color: "#2ecc71" }}>sorteio publicado</strong>
-                </span>
+                <span style={styles.prazoTexto}>Lista encerrada — <strong style={{ color: "#2ecc71" }}>sorteio publicado</strong></span>
               </div>
             ) : dentroPrazo ? (
               <div style={styles.prazoBox}>
                 <span style={styles.prazoIcon}>⏰</span>
-                <span style={styles.prazoTexto}>Prazo para lista principal: <strong>Quarta-feira às 10h00</strong></span>
+                <span style={styles.prazoTexto}>Prazo para lista principal: <strong>Quarta-feira às 10h</strong></span>
               </div>
             ) : (
               <div style={{ ...styles.prazoBox, background: "#3a2000", borderColor: "#c9a227" }}>
                 <span style={styles.prazoIcon}>⚠️</span>
-                <span style={styles.prazoTexto}>
-                  Prazo encerrado — novas confirmações vão para a <strong style={{ color: "#c9a227" }}>lista de espera</strong>
-                </span>
+                <span style={styles.prazoTexto}>Prazo encerrado — novas confirmações vão para <strong style={{ color: "#c9a227" }}>lista de espera</strong></span>
               </div>
             )}
 
-            {/* Aviso para quem não jogou a última rodada */}
             {!fechada && jogouUltimaRodada === false && !status && (
               <div style={{ ...styles.prazoBox, background: "#1a2a3a", borderColor: "#4a8ab5", marginTop: 8 }}>
                 <span style={styles.prazoIcon}>ℹ️</span>
-                <span style={styles.prazoTexto}>
-                  Você não jogou a última rodada. Sua confirmação irá para a <strong style={{ color: "#4a9ad4" }}>lista de espera</strong>
-                </span>
+                <span style={styles.prazoTexto}>Você não jogou a última rodada — sua confirmação irá para a <strong style={{ color: "#4a9ad4" }}>lista de espera</strong></span>
               </div>
             )}
           </div>
@@ -392,47 +375,23 @@ export default function Confirmacao({ session }) {
           {/* ── MINHA SITUAÇÃO ── */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>Minha situação</h2>
-
             {fechada ? (
               <div style={styles.listaEncerrada}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
                 <div style={{ fontSize: 15, color: "#c8e6c9", fontWeight: 700, marginBottom: 4 }}>Lista encerrada</div>
-                <div style={{ fontSize: 13, color: "#7fb89a", textAlign: "center" }}>
-                  O sorteio foi publicado. Veja os jogos na aba Rodada.
-                </div>
-                {status?.tipo === "confirmado" && (
-                  <div style={{ marginTop: 12, background: "#1a3a20", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#2ecc71", fontWeight: 700 }}>
-                    ✅ Você está confirmado — #{status.pos} na lista
-                  </div>
-                )}
-                {status?.tipo === "espera" && (
-                  <div style={{ marginTop: 12, background: "#3a2000", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#c9a227" }}>
-                    ⏳ Você está na lista de espera — #{status.pos}º
-                  </div>
-                )}
-                {!status && (
-                  <div style={{ marginTop: 12, background: "#1e3d2a", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#5a8a6a" }}>
-                    Você não confirmou presença para esta rodada.
-                  </div>
-                )}
+                <div style={{ fontSize: 13, color: "#7fb89a", textAlign: "center" }}>O sorteio foi publicado. Veja os jogos na aba Rodada.</div>
+                {status?.tipo === "confirmado" && <div style={{ marginTop: 12, background: "#1a3a20", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#2ecc71", fontWeight: 700 }}>✅ Você está confirmado — #{status.pos} na lista</div>}
+                {status?.tipo === "espera" && <div style={{ marginTop: 12, background: "#3a2000", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#c9a227" }}>⏳ Você está na lista de espera — #{status.pos}º</div>}
+                {!status && <div style={{ marginTop: 12, background: "#1e3d2a", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#5a8a6a" }}>Você não confirmou presença para esta rodada.</div>}
               </div>
             ) : !status ? (
               <div style={styles.semConfirmacao}>
                 <div style={styles.semConfirmacaoIcon}>❓</div>
                 <div style={styles.semConfirmacaoTexto}>Você ainda não confirmou presença</div>
-                {!dentroPrazo && (
-                  <div style={{ fontSize: 12, color: "#c9a227", background: "#3a2000", borderRadius: 8, padding: "6px 12px", marginBottom: 4, textAlign: "center" }}>
-                    ⚠️ Prazo encerrado — você entrará na lista de espera
-                  </div>
-                )}
-                {jogouUltimaRodada === false && dentroPrazo && (
-                  <div style={{ fontSize: 12, color: "#4a9ad4", background: "#1a2a3a", borderRadius: 8, padding: "6px 12px", marginBottom: 4, textAlign: "center" }}>
-                    ℹ️ Você não jogou a última rodada — entrará na lista de espera
-                  </div>
-                )}
+                {!dentroPrazo && <div style={{ fontSize: 12, color: "#c9a227", background: "#3a2000", borderRadius: 8, padding: "6px 12px", marginBottom: 4, textAlign: "center" }}>⚠️ Prazo encerrado — você entrará na lista de espera</div>}
+                {jogouUltimaRodada === false && dentroPrazo && <div style={{ fontSize: 12, color: "#4a9ad4", background: "#1a2a3a", borderRadius: 8, padding: "6px 12px", marginBottom: 4, textAlign: "center" }}>ℹ️ Você não jogou a última rodada — entrará na lista de espera</div>}
                 <button onClick={confirmarPresenca} disabled={processando} style={styles.btnConfirmar}>
-                  {processando ? "Processando..." :
-                    (!jogouUltimaRodada || !dentroPrazo) ? "⏳ Entrar na Lista de Espera" : "✅ Confirmar Presença"}
+                  {processando ? "Processando..." : (!jogouUltimaRodada || !dentroPrazo) ? "⏳ Entrar na Lista de Espera" : "✅ Confirmar Presença"}
                 </button>
               </div>
             ) : status.tipo === "confirmado" ? (
@@ -440,18 +399,14 @@ export default function Confirmacao({ session }) {
                 <div style={styles.statusIcon}>✅</div>
                 <div style={styles.statusTexto}><strong>Confirmado!</strong> Você está na lista principal</div>
                 <div style={styles.statusPos}>#{status.pos} na lista</div>
-                <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelar}>
-                  {processando ? "..." : "Cancelar confirmação"}
-                </button>
+                <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelar}>{processando ? "..." : "Cancelar confirmação"}</button>
               </div>
             ) : (
               <div style={styles.statusEspera}>
                 <div style={styles.statusIcon}>⏳</div>
                 <div style={styles.statusTexto}><strong>Lista de espera</strong> — Posição #{status.pos}</div>
                 <div style={styles.statusInfo}>Você será promovido automaticamente se uma vaga abrir</div>
-                <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelarEspera}>
-                  {processando ? "..." : "Sair da lista de espera"}
-                </button>
+                <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelarEspera}>{processando ? "..." : "Sair da lista de espera"}</button>
               </div>
             )}
           </div>
@@ -463,40 +418,34 @@ export default function Confirmacao({ session }) {
                 🔮 Prévia das Chaves
                 <span style={{ fontSize: 11, color: "#5a8a6a", fontWeight: 400 }}>atualiza em tempo real</span>
               </h2>
-              <p style={{ fontSize: 12, color: "#5a8a6a", marginBottom: 14 }}>
-                ↑ subiu &nbsp;↓ desceu &nbsp;= mantido por falta na Ouro
-              </p>
+              <p style={{ fontSize: 12, color: "#5a8a6a", marginBottom: 14 }}>↑ subiu &nbsp;↓ desceu &nbsp;= mantido por falta na Ouro</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
-                    🥇 Ouro ({previaChaves.ouro.length}/12)
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥇 Ouro ({previaChaves.ouro.length}/12)</div>
                   {previaChaves.ouro.map((j, idx) => (
-                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: "1px solid #1e3d2a" }}>
                       <span style={{ fontSize: 10, color: "#5a8a6a", width: 16 }}>{idx + 1}</span>
                       <span style={{ flex: 1, fontSize: 12, color: corStatus(j.status), fontWeight: j.status !== "normal" ? 700 : 400 }}>{j.nome}</span>
                       {j.status !== "normal" && <span style={{ fontSize: 11, color: corStatus(j.status), fontWeight: 700 }}>{iconStatus(j.status)}</span>}
                     </div>
                   ))}
                   {vagasOuro > 0 && Array.from({ length: vagasOuro }).map((_, i) => (
-                    <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                    <div key={i} style={{ padding: "4px 0", borderBottom: "1px solid #1e3d2a" }}>
                       <span style={{ fontSize: 11, color: "#3a5a4a", fontStyle: "italic" }}>vaga aberta</span>
                     </div>
                   ))}
                 </div>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
-                    🥈 Prata ({previaChaves.prata.length}/12)
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥈 Prata ({previaChaves.prata.length}/12)</div>
                   {previaChaves.prata.map((j, idx) => (
-                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: "1px solid #1e3d2a" }}>
                       <span style={{ fontSize: 10, color: "#5a8a6a", width: 16 }}>{idx + 1}</span>
                       <span style={{ flex: 1, fontSize: 12, color: corStatus(j.status), fontWeight: j.status !== "normal" ? 700 : 400 }}>{j.nome}</span>
                       {j.status !== "normal" && <span style={{ fontSize: 11, color: corStatus(j.status), fontWeight: 700 }}>{iconStatus(j.status)}</span>}
                     </div>
                   ))}
                   {vagasPrata > 0 && Array.from({ length: vagasPrata }).map((_, i) => (
-                    <div key={i} style={{ padding: "4px 0", borderBottom: `1px solid #1e3d2a` }}>
+                    <div key={i} style={{ padding: "4px 0", borderBottom: "1px solid #1e3d2a" }}>
                       <span style={{ fontSize: 11, color: "#3a5a4a", fontStyle: "italic" }}>vaga aberta</span>
                     </div>
                   ))}
@@ -520,7 +469,7 @@ export default function Confirmacao({ session }) {
                     <span style={styles.listaPos}>{idx + 1}</span>
                     <span style={styles.listaNome}>{c.jogadores?.nome}</span>
                     <span style={{ ...styles.listaChave, color: c.jogadores?.chave === "ouro" ? ouro : prata }}>{c.jogadores?.chave}</span>
-                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</span>
+                    <span style={styles.listaHora}>{formatarDataHora(c.created_at)}</span>
                   </div>
                 ))}
               </div>
@@ -536,7 +485,7 @@ export default function Confirmacao({ session }) {
                   <div key={c.id} style={{ ...styles.listaItem, ...(c.jogador_id === jogador?.id ? styles.listaItemMeu : {}) }}>
                     <span style={styles.listaPos}>{idx + 1}º</span>
                     <span style={styles.listaNome}>{c.jogadores?.nome}</span>
-                    <span style={styles.listaHora}>{new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</span>
+                    <span style={styles.listaHora}>{formatarDataHora(c.created_at)}</span>
                   </div>
                 ))}
               </div>
@@ -544,9 +493,7 @@ export default function Confirmacao({ session }) {
           )}
         </>
       ) : (
-        <div style={styles.card}>
-          <p style={styles.emptyText}>Nenhuma rodada agendada no momento.</p>
-        </div>
+        <div style={styles.card}><p style={styles.emptyText}>Nenhuma rodada agendada no momento.</p></div>
       )}
     </div>
   );
