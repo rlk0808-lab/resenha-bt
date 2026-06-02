@@ -3,13 +3,13 @@ import { supabase } from "../lib/supabase";
 
 export default function Confirmacao({ session }) {
   const [rodadaAtual, setRodadaAtual] = useState(null);
-  const [rodadaAnterior, setRodadaAnterior] = useState(null);
   const [jogador, setJogador] = useState(null);
   const [confirmacao, setConfirmacao] = useState(null);
   const [listaConfirmados, setListaConfirmados] = useState([]);
   const [listaEspera, setListaEspera] = useState([]);
   const [rankingAnterior, setRankingAnterior] = useState({ ouro: [], prata: [] });
   const [previaChaves, setPreviaChaves] = useState({ ouro: [], prata: [] });
+  const [jogouUltimaRodada, setJogouUltimaRodada] = useState(null); // null = carregando
   const [loading, setLoading] = useState(true);
   const [processando, setProcessando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
@@ -34,7 +34,6 @@ export default function Confirmacao({ session }) {
   }
 
   async function carregarProximaRodada() {
-    // Busca rodada proxima OU ativa (ativa = lista fechada, sorteio publicado)
     const { data } = await supabase
       .from("rodadas").select("*")
       .in("status", ["ativa", "proxima"])
@@ -44,13 +43,14 @@ export default function Confirmacao({ session }) {
     if (rodada) {
       setRodadaAtual(rodada);
 
+      // Busca rodada anterior finalizada
       const { data: anterior } = await supabase
         .from("rodadas").select("*")
         .eq("status", "finalizada")
         .order("numero", { ascending: false }).limit(1);
       const rodAnt = anterior?.[0] || null;
-      setRodadaAnterior(rodAnt);
 
+      // Busca ranking da rodada anterior
       if (rodAnt) {
         const { data: rank } = await supabase
           .from("ranking_rodada")
@@ -59,10 +59,27 @@ export default function Confirmacao({ session }) {
           .order("posicao", { ascending: true });
 
         if (rank) {
-          const rankOuro = rank.filter(r => r.chave === "ouro");
-          const rankPrata = rank.filter(r => r.chave === "prata");
-          setRankingAnterior({ ouro: rankOuro, prata: rankPrata });
+          setRankingAnterior({
+            ouro: rank.filter(r => r.chave === "ouro"),
+            prata: rank.filter(r => r.chave === "prata"),
+          });
         }
+
+        // Verifica se o jogador atual jogou a última rodada
+        const { data: jData } = await supabase
+          .from("jogadores").select("id").eq("user_id", session.user.id).limit(1);
+        if (jData?.[0]) {
+          const { data: rankJogador } = await supabase
+            .from("ranking_rodada")
+            .select("id")
+            .eq("rodada_id", rodAnt.id)
+            .eq("jogador_id", jData[0].id)
+            .limit(1);
+          setJogouUltimaRodada(!!(rankJogador && rankJogador.length > 0));
+        }
+      } else {
+        // Primeira rodada — todos podem confirmar normalmente
+        setJogouUltimaRodada(true);
       }
 
       await carregarConfirmacoes(rodada.id);
@@ -95,25 +112,20 @@ export default function Confirmacao({ session }) {
   }
 
   // ─── REGRAS DE PRAZO ────────────────────────────────────────────────────
-  // Prazo para lista principal: quarta às 10h
-  // Após esse prazo: novos confirmados vão para espera, cancelamentos promovem próximo da espera
-  // Fechamento da lista: sexta às 14h (status muda para 'ativa')
-
   function listaFechada() {
     return rodadaAtual?.status === "ativa";
   }
 
-  function dentroDoprazoListaPrincipal() {
+  function dentroDoPrazoListaPrincipal() {
     const agora = new Date();
-    const dia = agora.getDay(); // 0=dom, 1=seg, 2=ter, 3=qua, 4=qui, 5=sex, 6=sab
+    const dia = agora.getDay();
     const hora = agora.getHours();
-    // Dentro do prazo = antes de quarta às 10h
     if (dia < 3) return true;
     if (dia === 3 && hora < 10) return true;
     return false;
   }
 
-  // Calcula a prévia das chaves com base nos confirmados e ranking anterior
+  // Calcula prévia das chaves
   function calcularPrevia(confirmados, rankingAnt) {
     if (!rankingAnt.ouro.length && !rankingAnt.prata.length) {
       const ouro = confirmados.filter(c => c.jogadores?.chave === "ouro").map(c => ({ nome: c.jogadores?.nome, status: "normal" }));
@@ -122,34 +134,21 @@ export default function Confirmacao({ session }) {
     }
 
     const nomeConfirmados = new Set(confirmados.map(c => c.jogadores?.nome));
-
-    const ouroConfirmados = rankingAnt.ouro.filter(r => nomeConfirmados.has(r.jogadores?.nome));
-
-    // 3 últimos da Ouro descem
     const ouroDescem = rankingAnt.ouro.slice(-3).map(r => r.jogadores?.nome);
-
-    // Ouro que ficam = confirmados que NÃO estão nos 3 últimos
-    const ouroFicam = ouroConfirmados
-      .filter(r => !ouroDescem.includes(r.jogadores?.nome))
+    const ouroFicam = rankingAnt.ouro
+      .filter(r => !ouroDescem.includes(r.jogadores?.nome) && nomeConfirmados.has(r.jogadores?.nome))
       .map(r => ({ nome: r.jogadores?.nome, status: "normal" }));
 
-    // 3 primeiros da Prata sobem
     const prataSobem = rankingAnt.prata.slice(0, 3).map(r => r.jogadores?.nome);
-    const prataSobemConf = prataSobem.filter(n => nomeConfirmados.has(n));
-
-    // Faltas na Ouro (jogadores da ouro efetivos que não confirmaram)
     const ouroEfetivos = rankingAnt.ouro.filter(r => !ouroDescem.includes(r.jogadores?.nome));
     const ouroFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
 
-    // Prata ordenada por posição, apenas confirmados
     const prataTodosOrdenados = rankingAnt.prata
       .filter(r => nomeConfirmados.has(r.jogadores?.nome))
       .sort((a, b) => a.posicao - b.posicao);
 
-    // Quantos precisam subir: 3 normais + faltas da Ouro
     let totalSubindo = Math.min(3 + ouroFaltasEfetivas, prataTodosOrdenados.length);
 
-    // Regra especial: se faltaram 4, 5 ou 6 da Ouro, os 10º/11º/12º se mantêm
     const ouroMantemPosicoes = [];
     if (ouroFaltasEfetivas >= 4) {
       const pos10 = rankingAnt.ouro.find(r => r.posicao === 10);
@@ -204,7 +203,6 @@ export default function Confirmacao({ session }) {
   async function confirmarPresenca() {
     if (!jogador || !rodadaAtual) return;
 
-    // Lista fechada: bloqueia novas confirmações
     if (listaFechada()) {
       mostrarMensagem("Lista encerrada. O sorteio já foi publicado.", "info");
       return;
@@ -222,11 +220,21 @@ export default function Confirmacao({ session }) {
       return;
     }
 
-    const dentroDoPrazo = dentroDoprazoListaPrincipal();
+    const dentroDoPrazo = dentroDoPrazoListaPrincipal();
 
-    // Determina status: dentro do prazo e vagas disponíveis → confirmado
-    // Fora do prazo → espera (mesmo que haja vagas)
-    const status = (listaConfirmados.length < LIMITE_PRINCIPAL && dentroDoPrazo) ? "confirmado" : "espera";
+    // REGRA: quem não jogou a última rodada vai para espera
+    // EXCETO se já passou quarta 10h (aí todo mundo vai para espera mesmo)
+    let status;
+    if (!jogouUltimaRodada) {
+      // Não jogou a última rodada → sempre espera
+      status = "espera";
+    } else if (listaConfirmados.length < LIMITE_PRINCIPAL && dentroDoPrazo) {
+      // Jogou + dentro do prazo + tem vaga → confirmado
+      status = "confirmado";
+    } else {
+      // Fora do prazo ou sem vaga → espera
+      status = "espera";
+    }
 
     const { error } = await supabase.from("confirmacoes").insert({
       jogador_id: jogador.id, rodada_id: rodadaAtual.id, status,
@@ -237,6 +245,8 @@ export default function Confirmacao({ session }) {
     } else {
       if (status === "confirmado") {
         mostrarMensagem("✅ Presença confirmada na lista principal!");
+      } else if (!jogouUltimaRodada) {
+        mostrarMensagem("⏳ Você não jogou a última rodada. Entrou na lista de espera.", "info");
       } else {
         mostrarMensagem("⏳ Prazo encerrado. Você entrou na lista de espera.");
       }
@@ -251,13 +261,11 @@ export default function Confirmacao({ session }) {
     setProcessando(true);
 
     const eraConfirmado = confirmacao.status === "confirmado";
-
     const { error } = await supabase.from("confirmacoes").delete().eq("id", confirmacao.id);
 
     if (error) {
       mostrarMensagem("Erro ao cancelar: " + error.message, "erro");
     } else {
-      // Se era confirmado E há alguém na espera → promove automaticamente
       if (eraConfirmado && listaEspera.length > 0) {
         await supabase.from("confirmacoes")
           .update({ status: "confirmado" })
@@ -274,7 +282,7 @@ export default function Confirmacao({ session }) {
 
   function mostrarMensagem(texto, tipo = "sucesso") {
     setMensagem({ texto, tipo });
-    setTimeout(() => setMensagem(null), 4000);
+    setTimeout(() => setMensagem(null), 5000);
   }
 
   function corStatus(status) {
@@ -295,7 +303,7 @@ export default function Confirmacao({ session }) {
   const vagasOuro = 12 - previaChaves.ouro.length;
   const vagasPrata = 12 - previaChaves.prata.length;
   const fechada = listaFechada();
-  const dentroPrazo = dentroDoprazoListaPrincipal();
+  const dentroPrazo = dentroDoPrazoListaPrincipal();
 
   if (loading) return (
     <div style={styles.container}><p style={styles.loadingText}>Carregando...</p></div>
@@ -349,7 +357,6 @@ export default function Confirmacao({ session }) {
               </div>
             </div>
 
-            {/* Prazo / status da lista */}
             {fechada ? (
               <div style={{ ...styles.prazoBox, background: "#1a3a20", borderColor: "#2ecc71" }}>
                 <span style={styles.prazoIcon}>✅</span>
@@ -370,19 +377,26 @@ export default function Confirmacao({ session }) {
                 </span>
               </div>
             )}
+
+            {/* Aviso para quem não jogou a última rodada */}
+            {!fechada && jogouUltimaRodada === false && !status && (
+              <div style={{ ...styles.prazoBox, background: "#1a2a3a", borderColor: "#4a8ab5", marginTop: 8 }}>
+                <span style={styles.prazoIcon}>ℹ️</span>
+                <span style={styles.prazoTexto}>
+                  Você não jogou a última rodada. Sua confirmação irá para a <strong style={{ color: "#4a9ad4" }}>lista de espera</strong>
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ── MINHA SITUAÇÃO ── */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>Minha situação</h2>
 
-            {/* Lista fechada: mostra status mas sem botão de confirmar */}
             {fechada ? (
               <div style={styles.listaEncerrada}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
-                <div style={{ fontSize: 15, color: "#c8e6c9", fontWeight: 700, marginBottom: 4 }}>
-                  Lista encerrada
-                </div>
+                <div style={{ fontSize: 15, color: "#c8e6c9", fontWeight: 700, marginBottom: 4 }}>Lista encerrada</div>
                 <div style={{ fontSize: 13, color: "#7fb89a", textAlign: "center" }}>
                   O sorteio foi publicado. Veja os jogos na aba Rodada.
                 </div>
@@ -411,8 +425,14 @@ export default function Confirmacao({ session }) {
                     ⚠️ Prazo encerrado — você entrará na lista de espera
                   </div>
                 )}
+                {jogouUltimaRodada === false && dentroPrazo && (
+                  <div style={{ fontSize: 12, color: "#4a9ad4", background: "#1a2a3a", borderRadius: 8, padding: "6px 12px", marginBottom: 4, textAlign: "center" }}>
+                    ℹ️ Você não jogou a última rodada — entrará na lista de espera
+                  </div>
+                )}
                 <button onClick={confirmarPresenca} disabled={processando} style={styles.btnConfirmar}>
-                  {processando ? "Processando..." : dentroPrazo ? "✅ Confirmar Presença" : "⏳ Entrar na Lista de Espera"}
+                  {processando ? "Processando..." :
+                    (!jogouUltimaRodada || !dentroPrazo) ? "⏳ Entrar na Lista de Espera" : "✅ Confirmar Presença"}
                 </button>
               </div>
             ) : status.tipo === "confirmado" ? (
@@ -436,7 +456,7 @@ export default function Confirmacao({ session }) {
             )}
           </div>
 
-          {/* ── PRÉVIA DAS CHAVES (só quando lista não fechada) ── */}
+          {/* ── PRÉVIA DAS CHAVES ── */}
           {!fechada && listaConfirmados.length > 0 && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>
@@ -446,9 +466,7 @@ export default function Confirmacao({ session }) {
               <p style={{ fontSize: 12, color: "#5a8a6a", marginBottom: 14 }}>
                 ↑ subiu &nbsp;↓ desceu &nbsp;= mantido por falta na Ouro
               </p>
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {/* OURO */}
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
                     🥇 Ouro ({previaChaves.ouro.length}/12)
@@ -466,8 +484,6 @@ export default function Confirmacao({ session }) {
                     </div>
                   ))}
                 </div>
-
-                {/* PRATA */}
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
                     🥈 Prata ({previaChaves.prata.length}/12)
