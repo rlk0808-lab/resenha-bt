@@ -5,7 +5,7 @@ import { Calendar, Trophy, Users, CheckCircle } from 'lucide-react'
 export default function Home() {
   const [proximaRodada, setProximaRodada] = useState(null)
   const [rodadaAtual, setRodadaAtual] = useState(null)
-  const [totalRodadas, setTotalRodadas] = useState(12)
+  const TOTAL_RODADAS = 12
   const [confirmado, setConfirmado] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [confirmacaoId, setConfirmacaoId] = useState(null)
@@ -22,7 +22,6 @@ export default function Home() {
         .from('rodadas').select('*').order('numero', { ascending: true })
 
       if (todasRodadas) {
-        setTotalRodadas(todasRodadas.length)
 
         // Rodada atual = última finalizada ou ativa
         const finalizada = todasRodadas.filter(r => r.status === 'finalizada')
@@ -79,7 +78,7 @@ export default function Home() {
   }
 
   const rodadasFinalizadas = rodadaAtual?.numero || 0
-  const progresso = (rodadasFinalizadas / totalRodadas) * 100
+  const progresso = (rodadasFinalizadas / TOTAL_RODADAS) * 100
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
@@ -220,7 +219,7 @@ export default function Home() {
               fontSize: '12px', color: 'rgba(255,255,255,0.4)',
               letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px'
             }}>Rodadas</div>
-            <div style={{ fontWeight: 700 }}>{rodadaAtual?.numero || 0} / {totalRodadas}</div>
+            <div style={{ fontWeight: 700 }}>{rodadaAtual?.numero || 0} / {TOTAL_RODADAS}</div>
           </div>
         </div>
         <div style={{

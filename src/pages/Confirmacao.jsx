@@ -273,11 +273,9 @@ export default function Confirmacao({ session }) {
 
   function formatarDataHora(iso) {
     const d = new Date(iso);
-    return d.toLocaleString("pt-BR", {
-      day: "2-digit", month: "2-digit",
-      hour: "2-digit", minute: "2-digit",
-      timeZone: "America/Sao_Paulo"
-    });
+    const data = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
+    const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+    return `${data} ${hora}`;
   }
 
   function corStatus(status) {
