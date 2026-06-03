@@ -553,6 +553,8 @@ export default function Admin({ session }) {
     await carregarListaEspera();
     setPromovendo(false);
   }
+
+  const SelectJogador = ({ value, onChange, placeholder }) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} style={styles.select}>
       <option value="">{placeholder || "— selecionar —"}</option>
       {jogadores.map((j) => <option key={j.id} value={j.nome}>{j.nome} ({j.chave})</option>)}
