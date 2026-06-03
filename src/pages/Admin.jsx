@@ -97,10 +97,12 @@ export default function Admin({ session }) {
   const [vinculacoes, setVinculacoes] = useState({});
   const [atletas, setAtletas] = useState([]);
   const [loadingAtletas, setLoadingAtletas] = useState(false);
+  const [listaEsperaAdmin, setListaEsperaAdmin] = useState([]);
+  const [promovendo, setPromovendo] = useState(false);
   const [mensagem, setMensagem] = useState(null);
 
   useEffect(() => { carregarRodadas(); carregarJogadores(); }, []);
-  useEffect(() => { if (rodadaSelecionada) carregarJogos(); }, [rodadaSelecionada, chaveAtiva]);
+  useEffect(() => { if (rodadaSelecionada) { carregarJogos(); carregarListaEspera(); } }, [rodadaSelecionada, chaveAtiva]);
   useEffect(() => { if (abaAtiva === "convites") carregarConvites(); }, [abaAtiva]);
   useEffect(() => { if (abaAtiva === "aprovacoes") carregarPendentes(); }, [abaAtiva]);
   useEffect(() => { if (abaAtiva === "atletas") carregarAtletas(); }, [abaAtiva]);
@@ -211,6 +213,23 @@ export default function Admin({ session }) {
     const { data: proximasRodadas } = await supabase.from("rodadas").select("*").eq("status", "proxima").limit(1);
     const rodadaAlvo = proximasRodadas?.[0];
     if (!rodadaAlvo) { mostrarMensagem("Nenhuma rodada 'proxima' encontrada.", "erro"); return; }
+
+    // Promove automaticamente da espera se houver vagas
+    const { data: confirmadosAtuais } = await supabase.from("confirmacoes").select("id")
+      .eq("rodada_id", rodadaAlvo.id).eq("status", "confirmado");
+    const totalConfirmados = confirmadosAtuais?.length || 0;
+    const vagas = 24 - totalConfirmados;
+    if (vagas > 0) {
+      const { data: listaEspera } = await supabase.from("confirmacoes").select("id")
+        .eq("rodada_id", rodadaAlvo.id).eq("status", "espera")
+        .order("created_at", { ascending: true }).limit(vagas);
+      if (listaEspera && listaEspera.length > 0) {
+        for (const c of listaEspera) {
+          await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", c.id);
+        }
+        mostrarMensagem(`✅ ${listaEspera.length} jogador(es) promovido(s) da lista de espera.`);
+      }
+    }
 
     const { data: confirmacoes } = await supabase
       .from("confirmacoes").select("*, jogadores(id, nome, chave)")
@@ -492,7 +511,48 @@ export default function Admin({ session }) {
     else { mostrarMensagem(`✅ Acesso de ${jogador.nome} revogado.`); carregarAtletas(); }
   }
 
-  const SelectJogador = ({ value, onChange, placeholder }) => (
+  async function carregarListaEspera() {
+    const rodadaProx = rodadas.find(r => r.status === "proxima");
+    if (!rodadaProx) { setListaEsperaAdmin([]); return; }
+    const { data } = await supabase
+      .from("confirmacoes")
+      .select("*, jogadores(nome, chave)")
+      .eq("rodada_id", rodadaProx.id)
+      .eq("status", "espera")
+      .order("created_at", { ascending: true });
+    setListaEsperaAdmin(data || []);
+  }
+
+  async function promoverListaEspera() {
+    const rodadaProx = rodadas.find(r => r.status === "proxima");
+    if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
+    setPromovendo(true);
+
+    // Conta confirmados atuais
+    const { data: confirmados } = await supabase
+      .from("confirmacoes").select("id")
+      .eq("rodada_id", rodadaProx.id).eq("status", "confirmado");
+    const total = confirmados?.length || 0;
+    const vagas = 24 - total;
+
+    if (vagas <= 0) {
+      mostrarMensagem("Lista principal já está completa (24/24).", "info");
+      setPromovendo(false); return;
+    }
+    if (listaEsperaAdmin.length === 0) {
+      mostrarMensagem("Lista de espera está vazia.", "info");
+      setPromovendo(false); return;
+    }
+
+    const promover = listaEsperaAdmin.slice(0, vagas);
+    for (const c of promover) {
+      await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", c.id);
+    }
+
+    mostrarMensagem(`✅ ${promover.length} jogador(es) promovido(s) da lista de espera!`);
+    await carregarListaEspera();
+    setPromovendo(false);
+  }
     <select value={value} onChange={(e) => onChange(e.target.value)} style={styles.select}>
       <option value="">{placeholder || "— selecionar —"}</option>
       {jogadores.map((j) => <option key={j.id} value={j.nome}>{j.nome} ({j.chave})</option>)}
@@ -514,6 +574,29 @@ export default function Admin({ session }) {
       {mensagem && (
         <div style={{ ...styles.mensagem, background: mensagem.tipo === "erro" ? "#c0392b" : "#27ae60" }}>
           {mensagem.texto}
+        </div>
+      )}
+
+      {/* ── PROMOVER LISTA DE ESPERA ── */}
+      {listaEsperaAdmin.length > 0 && !previewFechamento && (
+        <div style={{ ...styles.cardDestaque, borderColor: "#2980b9" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 24 }}>⏳</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "#4a9ad4" }}>Lista de Espera</div>
+              <div style={{ fontSize: 12, color: "#7fb89a" }}>{listaEsperaAdmin.length} jogador(es) aguardando</div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            {listaEsperaAdmin.map((c, i) => (
+              <div key={c.id} style={{ fontSize: 13, color: "#c8e6c9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>
+                {i + 1}. {c.jogadores?.nome} <span style={{ fontSize: 11, color: "#5a8a6a" }}>({c.jogadores?.chave})</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={promoverListaEspera} disabled={promovendo} style={{ ...styles.btnSalvar, background: "#2980b9" }}>
+            {promovendo ? "Promovendo..." : "⬆️ Promover para Lista Principal"}
+          </button>
         </div>
       )}
 
