@@ -3,69 +3,28 @@ import { supabase } from "../lib/supabase";
 
 const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
 
+// Estrutura fixa do chaveamento (índices 0-11 = slots J1-J12)
+// Formato por rodada: [a1, a2, b1, b2] = dupla(a1,a2) x dupla(b1,b2)
+const ESTRUTURA_CHAVE = [
+  // Rodada 1
+  [[0,8,  1,2],  [3,5,  7,10], [4,11, 6,9]],
+  // Rodada 2
+  [[0,5,  4,6],  [1,9,  2,7],  [3,10, 8,11]],
+  // Rodada 3
+  [[0,1,  5,10], [2,4,  3,11], [6,8,  7,9]],
+  // Rodada 4
+  [[0,11, 7,8],  [1,10, 4,9],  [2,3,  5,6]],
+];
+
 function gerarSorteio(jogadores) {
-  const n = jogadores.length;
-  const todasDuplas = [];
-  for (let i = 0; i < n; i++)
-    for (let j = i + 1; j < n; j++)
-      todasDuplas.push([jogadores[i], jogadores[j]]);
+  // Sorteia aleatoriamente os jogadores nos slots J1-J12
+  const slots = [...jogadores].sort(() => Math.random() - 0.5);
 
-  const parceirosUsados = {};
-  const adversariosContador = {};
-  jogadores.forEach(j => { parceirosUsados[j] = new Set(); adversariosContador[j] = {}; });
+  // Monta as 4 rodadas usando a estrutura fixa
+  const rodadas = ESTRUTURA_CHAVE.map(rodada =>
+    rodada.map(([a1, a2, b1, b2]) => [slots[a1], slots[a2], slots[b1], slots[b2]])
+  );
 
-  const rodadas = [];
-  for (let r = 0; r < 4; r++) {
-    let melhorRodada = null;
-    let melhorScore = -Infinity;
-
-    for (let t = 0; t < 3000; t++) {
-      const duplasDisponiveis = todasDuplas
-        .filter(([a, b]) => !parceirosUsados[a].has(b))
-        .sort(() => Math.random() - 0.5);
-
-      const usados = new Set();
-      const jogosRodada = [];
-
-      for (const [a1, a2] of duplasDisponiveis) {
-        if (usados.has(a1) || usados.has(a2)) continue;
-        for (const [b1, b2] of duplasDisponiveis) {
-          if (usados.has(b1) || usados.has(b2)) continue;
-          if (b1 === a1 || b1 === a2 || b2 === a1 || b2 === a2) continue;
-          const repAdv =
-            (adversariosContador[a1][b1] || 0) + (adversariosContador[a1][b2] || 0) +
-            (adversariosContador[a2][b1] || 0) + (adversariosContador[a2][b2] || 0);
-          jogosRodada.push({ jogo: [a1, a2, b1, b2], rep: repAdv });
-          usados.add(a1); usados.add(a2); usados.add(b1); usados.add(b2);
-          break;
-        }
-        if (usados.size === n) break;
-      }
-
-      if (usados.size === n) {
-        const score = -jogosRodada.reduce((s, j) => s + j.rep, 0);
-        if (score > melhorScore) {
-          melhorScore = score;
-          melhorRodada = jogosRodada.map(j => j.jogo);
-        }
-      }
-    }
-
-    if (!melhorRodada) return null;
-
-    melhorRodada.forEach(([a1, a2, b1, b2]) => {
-      parceirosUsados[a1].add(a2); parceirosUsados[a2].add(a1);
-      parceirosUsados[b1].add(b2); parceirosUsados[b2].add(b1);
-      [b1, b2].forEach(b => {
-        adversariosContador[a1][b] = (adversariosContador[a1][b] || 0) + 1;
-        adversariosContador[b][a1] = (adversariosContador[b][a1] || 0) + 1;
-        adversariosContador[a2][b] = (adversariosContador[a2][b] || 0) + 1;
-        adversariosContador[b][a2] = (adversariosContador[b][a2] || 0) + 1;
-      });
-    });
-
-    rodadas.push(melhorRodada);
-  }
   return rodadas;
 }
 
