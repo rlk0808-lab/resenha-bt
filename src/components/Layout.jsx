@@ -2,8 +2,15 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Home, Trophy, Calendar, User, LogOut, Settings, ClipboardList } from 'lucide-react'
 
+const ADMINS = [
+  'a60b3e0f-5528-400c-8e0f-8fb3f9226070', // Robson
+  '118a0596-1e11-4943-b8f2-9e49bd234dcf', // Celso
+  'a506b568-7183-4aab-b86f-5adbb5f435a6', // Marcel
+];
+
 export default function Layout({ session }) {
   const navigate = useNavigate()
+  const isAdmin = ADMINS.includes(session?.user?.id)
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -15,7 +22,7 @@ export default function Layout({ session }) {
     { to: '/classificacao', icon: Trophy, label: 'Classificação' },
     { to: '/rodada', icon: Calendar, label: 'Rodada' },
     { to: '/perfil', icon: User, label: 'Perfil' },
-    { to: '/admin', icon: Settings, label: 'Admin' },
+    ...(isAdmin ? [{ to: '/admin', icon: Settings, label: 'Admin' }] : []),
     { to: '/confirmacao', icon: ClipboardList, label: 'Presença' },
   ]
 
