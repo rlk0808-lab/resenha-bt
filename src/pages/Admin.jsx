@@ -471,7 +471,7 @@ export default function Admin({ session }) {
   }
 
   async function carregarListaEspera() {
-    const rodadaProx = rodadas.find(r => r.status === "proxima");
+    const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
     if (!rodadaProx) { setListaEsperaAdmin([]); return; }
     const { data } = await supabase
       .from("confirmacoes")
@@ -483,7 +483,7 @@ export default function Admin({ session }) {
   }
 
   async function promoverListaEspera() {
-    const rodadaProx = rodadas.find(r => r.status === "proxima");
+    const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
     if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
     setPromovendo(true);
 
