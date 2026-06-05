@@ -17,6 +17,12 @@ const ESTRUTURA_CHAVE = [
 ];
 
 function gerarSorteio(jogadores) {
+  // Valida que temos exatamente 12 jogadores
+  if (!jogadores || jogadores.length !== 12) {
+    console.error(`gerarSorteio: esperava 12 jogadores, recebeu ${jogadores?.length}`);
+    return null;
+  }
+
   // Sorteia aleatoriamente os jogadores nos slots J1-J12
   const slots = [...jogadores].sort(() => Math.random() - 0.5);
 
@@ -24,6 +30,13 @@ function gerarSorteio(jogadores) {
   const rodadas = ESTRUTURA_CHAVE.map(rodada =>
     rodada.map(([a1, a2, b1, b2]) => [slots[a1], slots[a2], slots[b1], slots[b2]])
   );
+
+  // Valida que não há undefined nos jogos
+  const temInvalido = rodadas.some(r => r.some(([a1,a2,b1,b2]) => !a1 || !a2 || !b1 || !b2));
+  if (temInvalido) {
+    console.error('gerarSorteio: jogos com jogadores undefined');
+    return null;
+  }
 
   return rodadas;
 }
