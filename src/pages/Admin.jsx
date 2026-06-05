@@ -197,29 +197,13 @@ export default function Admin({ session }) {
 
     if (!confirmacoes || confirmacoes.length < 8) { mostrarMensagem("Confirmados insuficientes (mínimo 8).", "erro"); return; }
 
-    const { data: rodadaAnterior } = await supabase.from("rodadas").select("*").eq("status", "finalizada").order("numero", { ascending: false }).limit(1);
-    const rodAnt = rodadaAnterior?.[0];
-    let rankAnt = { ouro: [], prata: [] };
-    if (rodAnt) {
-      const { data: rank } = await supabase.from("ranking_rodada").select("*, jogadores(id, nome)").eq("rodada_id", rodAnt.id).order("posicao", { ascending: true });
-      if (rank) { rankAnt.ouro = rank.filter(r => r.chave === "ouro"); rankAnt.prata = rank.filter(r => r.chave === "prata"); }
-    }
-
-    const confirmadosNomes = new Set(confirmacoes.map(c => c.jogadores?.nome));
-    let jogadoresOuro = [], jogadoresPrata = [];
-
-    if (rankAnt.ouro.length === 0 && rankAnt.prata.length === 0) {
-      jogadoresOuro = confirmacoes.filter(c => c.jogadores?.chave === "ouro").map(c => c.jogadores?.nome);
-      jogadoresPrata = confirmacoes.filter(c => c.jogadores?.chave === "prata").map(c => c.jogadores?.nome);
-    } else {
-      const ouroDescem = rankAnt.ouro.slice(-3).map(r => r.jogadores?.nome);
-      const prataSobem = rankAnt.prata.slice(0, 3).map(r => r.jogadores?.nome);
-      const ouroFicam = rankAnt.ouro.filter(r => !ouroDescem.includes(r.jogadores?.nome) && confirmadosNomes.has(r.jogadores?.nome)).map(r => r.jogadores?.nome);
-      const prataSobemConf = prataSobem.filter(n => confirmadosNomes.has(n));
-      jogadoresOuro = [...ouroFicam, ...prataSobemConf];
-      const nomesOuro = new Set(jogadoresOuro);
-      jogadoresPrata = confirmacoes.filter(c => !nomesOuro.has(c.jogadores?.nome)).map(c => c.jogadores?.nome);
-    }
+    // Usa diretamente a chave atual do banco de cada jogador confirmado
+    const jogadoresOuro = confirmacoes
+      .filter(c => c.jogadores?.chave === "ouro")
+      .map(c => c.jogadores?.nome);
+    const jogadoresPrata = confirmacoes
+      .filter(c => c.jogadores?.chave === "prata")
+      .map(c => c.jogadores?.nome);
 
     if (jogadoresOuro.length < 4) { mostrarMensagem(`Ouro com ${jogadoresOuro.length} confirmados. Mínimo 4.`, "erro"); return; }
     if (jogadoresPrata.length < 4) { mostrarMensagem(`Prata com ${jogadoresPrata.length} confirmados. Mínimo 4.`, "erro"); return; }
