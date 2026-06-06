@@ -86,20 +86,43 @@ export default function Rodada() {
         }
       }
 
+      // Calcula pontos do dia a partir dos jogos
+      const ptsDia = {}
+      const vitoriasDia = {}
+      const jogosCompletos = (j || []).filter(j => j.placar_a !== null && j.placar_b !== null)
+      
+      for (const jogo of jogosCompletos) {
+        const { dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2, placar_a, placar_b } = jogo
+        const jogA = [dupla_a_1, dupla_a_2].filter(Boolean)
+        const jogB = [dupla_b_1, dupla_b_2].filter(Boolean)
+        const todos = [...jogA, ...jogB]
+        todos.forEach(n => { if (!ptsDia[n]) { ptsDia[n] = 0; vitoriasDia[n] = 0 } })
+        const saldo = Math.abs(placar_a - placar_b)
+        const venceuA = placar_a > placar_b
+        const venc = venceuA ? jogA : jogB
+        const perd = venceuA ? jogB : jogA
+        venc.forEach(n => { ptsDia[n] += 15 + saldo; vitoriasDia[n] += 1 })
+        perd.forEach(n => { ptsDia[n] += venceuA ? placar_b : placar_a })
+      }
+
       // Marca quem subiu/desceu baseado na posição desta rodada
       const desceram = rankOuro.slice(-3).map(r => r.jogadores?.nome)
       const subiram  = rankPrata.slice(0, 3).map(r => r.jogadores?.nome)
 
       setDetalheRanking({
-        ouro: rankOuro.map((r, idx) => ({
+        ouro: rankOuro.map((r) => ({
           nome: r.jogadores?.nome,
           pontos: r.pontos_liga,
+          pontosDia: ptsDia[r.jogadores?.nome] || 0,
+          vitorias: vitoriasDia[r.jogadores?.nome] || 0,
           posicao: r.posicao,
           movimento: desceram.includes(r.jogadores?.nome) ? 'desceu' : null,
         })),
-        prata: rankPrata.map((r, idx) => ({
+        prata: rankPrata.map((r) => ({
           nome: r.jogadores?.nome,
           pontos: r.pontos_liga,
+          pontosDia: ptsDia[r.jogadores?.nome] || 0,
+          vitorias: vitoriasDia[r.jogadores?.nome] || 0,
           posicao: r.posicao,
           movimento: subiram.includes(r.jogadores?.nome) ? 'subiu' : null,
         })),
@@ -218,11 +241,13 @@ export default function Rodada() {
               )}
 
               {/* Pontos */}
-              <div style={{
-                fontSize: 15, fontWeight: 700, color: cor,
-                minWidth: 50, textAlign: 'right',
-              }}>
-                {j.pontos} pts
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 1 }}>
+                  {j.vitorias}V · {j.pontosDia} pts dia
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: cor }}>
+                  {j.pontos} pts liga
+                </div>
               </div>
             </div>
           )
