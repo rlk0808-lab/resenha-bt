@@ -108,6 +108,9 @@ export default function Confirmacao({ session }) {
   // - A partir do 6º faltante da Ouro: 10º, 11º, 12º se mantêm (não descem)
   // - Celso (e outros que desceram) ficam na Prata até a prévia
   function calcularPrevia(confirmados, rankingAnt) {
+    const nomeConfirmados = new Set(confirmados.map(c => c.jogadores?.nome));
+
+    // Sem ranking anterior: usa chave atual do banco
     if (!rankingAnt.ouro.length && !rankingAnt.prata.length) {
       return {
         ouro: confirmados.filter(c => c.jogadores?.chave === "ouro").map(c => ({ nome: c.jogadores?.nome, status: "normal" })),
@@ -115,88 +118,67 @@ export default function Confirmacao({ session }) {
       };
     }
 
-    const nomeConfirmados = new Set(confirmados.map(c => c.jogadores?.nome));
+    // Passo 1: identifica quem desce (10º, 11º, 12º da Ouro)
+    const ouroDescem = new Set(rankingAnt.ouro.slice(-3).map(r => r.jogadores?.nome));
 
-    // Os 3 que descem (10º, 11º, 12º da Ouro anterior)
-    const ouroDescem = rankingAnt.ouro.slice(-3).map(r => r.jogadores?.nome);
-
-    // Jogadores da Ouro que ficam (1º ao 9º que confirmaram)
+    // Passo 2: Ouro que FICA (posições 1-9 que confirmaram)
     const ouroFicam = rankingAnt.ouro
-      .filter(r => !ouroDescem.includes(r.jogadores?.nome) && nomeConfirmados.has(r.jogadores?.nome))
+      .filter(r => !ouroDescem.has(r.jogadores?.nome) && nomeConfirmados.has(r.jogadores?.nome))
       .map(r => ({ nome: r.jogadores?.nome, status: "normal" }));
 
-    // Quantos da Ouro efetiva (1º-9º) faltaram
-    const ouroEfetivos = rankingAnt.ouro.filter(r => !ouroDescem.includes(r.jogadores?.nome));
-    const ouroFaltaram = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome));
-    const qtdFaltasEfetivas = ouroFaltaram.length;
-
-    // Jogadores que desceram mas confirmaram → ficam na Prata (marcados como "desceu")
-    // Não voltam para Ouro a não ser que sejam chamados pela fila da Prata
-
-    // Quantos precisam subir da Prata: 3 (normais) + faltas dos efetivos
+    // Passo 3: quantos dos que ficam faltaram → precisa compensar subindo mais da Prata
+    const ouroEfetivos = rankingAnt.ouro.filter(r => !ouroDescem.has(r.jogadores?.nome));
+    const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
     let totalSubir = 3 + qtdFaltasEfetivas;
 
-    // Regra especial: a partir do 6º faltante da efetiva (posições 10-12 se mantêm)
+    // Passo 4: regra de manutenção (posições 10-12 se mantêm quando há muitas faltas)
     const ouroMantem = [];
-    if (qtdFaltasEfetivas >= 4) {
-      const pos10 = rankingAnt.ouro.find(r => r.posicao === 10);
-      if (pos10 && nomeConfirmados.has(pos10.jogadores?.nome)) {
-        ouroMantem.push({ nome: pos10.jogadores?.nome, status: "mantido" });
-        totalSubir--;
+    [10, 11, 12].forEach((pos, i) => {
+      if (qtdFaltasEfetivas >= 4 + i) {
+        const jogPos = rankingAnt.ouro.find(r => r.posicao === pos);
+        if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
+          ouroMantem.push({ nome: jogPos.jogadores?.nome, status: "mantido" });
+          totalSubir--;
+        }
       }
-    }
-    if (qtdFaltasEfetivas >= 5) {
-      const pos11 = rankingAnt.ouro.find(r => r.posicao === 11);
-      if (pos11 && nomeConfirmados.has(pos11.jogadores?.nome)) {
-        ouroMantem.push({ nome: pos11.jogadores?.nome, status: "mantido" });
-        totalSubir--;
-      }
-    }
-    if (qtdFaltasEfetivas >= 6) {
-      const pos12 = rankingAnt.ouro.find(r => r.posicao === 12);
-      if (pos12 && nomeConfirmados.has(pos12.jogadores?.nome)) {
-        ouroMantem.push({ nome: pos12.jogadores?.nome, status: "mantido" });
-        totalSubir--;
-      }
-    }
+    });
 
-    // Jogadores da Prata que podem subir (ordenados por posição na Prata anterior)
+    // Passo 5: Prata que sobe (excluindo os que desceram da Ouro)
     const prataTodos = rankingAnt.prata
       .filter(r => nomeConfirmados.has(r.jogadores?.nome))
       .sort((a, b) => a.posicao - b.posicao);
-
-    // Jogadores que desceram da Ouro e confirmaram (entram no final da fila da Prata)
-    const desceuOuroConfirmou = ouroDescem
-      .filter(nome => nomeConfirmados.has(nome))
-      .map(nome => ({ nome, status: "desceu" }));
-
-    // Sobe: primeiros da Prata até totalSubir
-    const prataSobem = prataTodos
-      .slice(0, totalSubir)
+    const prataSobem = prataTodos.slice(0, totalSubir)
       .map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
 
+    // Passo 6: monta Ouro final
     const ouroFinal = [...ouroFicam, ...ouroMantem, ...prataSobem].slice(0, 12);
     const nomesOuro = new Set(ouroFinal.map(j => j.nome));
 
-    // Todos os nomes já processados (ouro + prata ranking + desceram) - evita duplicatas
-    const nomesJaAlocados = new Set([
-      ...nomesOuro,
-      ...prataTodos.map(r => r.jogadores?.nome),
-      ...desceuOuroConfirmou.map(d => d.nome),
-      // Inclui TODOS do ranking anterior para evitar duplicatas
-      ...rankingAnt.ouro.map(r => r.jogadores?.nome),
-      ...rankingAnt.prata.map(r => r.jogadores?.nome),
-    ]);
+    // Passo 7: monta Prata final
+    // Inclui: Prata que não subiu + quem desceu da Ouro + estreantes
+    // USA Set para garantir que NINGUÉM aparece duas vezes
+    const nomesUsados = new Set(nomesOuro);
 
-    // Prata: quem não foi para Ouro
-    const prataFinal = [
-      ...prataTodos.slice(totalSubir).map(r => ({ nome: r.jogadores?.nome, status: "normal" })),
-      ...desceuOuroConfirmou,
-      // Confirmados que são estreantes (não aparecem em nenhum ranking anterior)
-      ...confirmados
-        .filter(c => !nomesJaAlocados.has(c.jogadores?.nome))
-        .map(c => ({ nome: c.jogadores?.nome, status: "normal" }))
-    ];
+    const prataFinal = [];
+
+    // Prata que não subiu
+    prataTodos.slice(totalSubir).forEach(r => {
+      const nome = r.jogadores?.nome;
+      if (!nomesUsados.has(nome)) { prataFinal.push({ nome, status: "normal" }); nomesUsados.add(nome); }
+    });
+
+    // Quem desceu da Ouro
+    ouroDescem.forEach(nome => {
+      if (nomeConfirmados.has(nome) && !nomesUsados.has(nome)) {
+        prataFinal.push({ nome, status: "desceu" }); nomesUsados.add(nome);
+      }
+    });
+
+    // Estreantes / retornantes (confirmados que não aparecem em nenhum ranking)
+    confirmados.forEach(c => {
+      const nome = c.jogadores?.nome;
+      if (!nomesUsados.has(nome)) { prataFinal.push({ nome, status: "normal" }); nomesUsados.add(nome); }
+    });
 
     return { ouro: ouroFinal, prata: prataFinal };
   }
