@@ -8,72 +8,109 @@ const borda = '#2a5a3a'
 const cardBg = '#162f20'
 
 export default function Rodada() {
-  const [view, setView] = useState('proxima') // 'proxima' | 'historico' | 'detalhe'
+  const [view, setView] = useState('proxima')
   const [proximaRodada, setProximaRodada] = useState(null)
   const [proximaJogos, setProximaJogos] = useState([])
   const [rodadasFinalizadas, setRodadasFinalizadas] = useState([])
   const [rodadaDetalhe, setRodadaDetalhe] = useState(null)
   const [detalheJogos, setDetalheJogos] = useState([])
+  const [detalheRanking, setDetalheRanking] = useState({ ouro: [], prata: [] })
   const [chaveVis, setChaveVis] = useState('ouro')
+  const [detalheView, setDetalheView] = useState('jogos') // 'jogos' | 'classificacao'
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    carregarDados()
-  }, [])
+  useEffect(() => { carregarDados() }, [])
 
   async function carregarDados() {
     setLoading(true)
-
-    // Busca próxima rodada (proxima ou ativa)
     const { data: proximas } = await supabase
-      .from('rodadas')
-      .select('*')
+      .from('rodadas').select('*')
       .in('status', ['proxima', 'ativa'])
-      .order('numero', { ascending: true })
-      .limit(1)
-    
+      .order('numero', { ascending: true }).limit(1)
     const proxima = proximas?.[0] || null
     setProximaRodada(proxima)
 
     if (proxima) {
-      const { data: j } = await supabase
-        .from('jogos')
-        .select('*')
+      const { data: j } = await supabase.from('jogos').select('*')
         .eq('rodada_id', proxima.id)
         .order('chave', { ascending: true })
         .order('created_at', { ascending: true })
       setProximaJogos(j || [])
     }
 
-    // Busca rodadas finalizadas
-    const { data: finalizadas } = await supabase
-      .from('rodadas')
-      .select('*')
-      .eq('status', 'finalizada')
-      .order('numero', { ascending: false })
+    const { data: finalizadas } = await supabase.from('rodadas').select('*')
+      .eq('status', 'finalizada').order('numero', { ascending: false })
     setRodadasFinalizadas(finalizadas || [])
-
     setLoading(false)
   }
 
   async function abrirDetalhe(rodada) {
     setRodadaDetalhe(rodada)
+    setDetalheView('jogos')
+    setChaveVis('ouro')
     setView('detalhe')
-    const { data: j } = await supabase
-      .from('jogos')
-      .select('*')
+
+    const { data: j } = await supabase.from('jogos').select('*')
       .eq('rodada_id', rodada.id)
       .order('chave', { ascending: true })
       .order('created_at', { ascending: true })
     setDetalheJogos(j || [])
+
+    // Busca ranking desta rodada
+    const { data: rank } = await supabase
+      .from('ranking_rodada')
+      .select('*, jogadores(nome, chave)')
+      .eq('rodada_id', rodada.id)
+      .order('posicao', { ascending: true })
+
+    if (rank) {
+      const rankOuro = rank.filter(r => r.chave === 'ouro')
+      const rankPrata = rank.filter(r => r.chave === 'prata')
+
+      // Busca ranking da rodada ANTERIOR para saber quem subiu/desceu
+      const { data: rodadaAnt } = await supabase.from('rodadas').select('*')
+        .eq('status', 'finalizada')
+        .lt('numero', rodada.numero)
+        .order('numero', { ascending: false }).limit(1)
+
+      let rankAntOuro = [], rankAntPrata = []
+      if (rodadaAnt?.[0]) {
+        const { data: rankAnt } = await supabase
+          .from('ranking_rodada')
+          .select('*, jogadores(nome)')
+          .eq('rodada_id', rodadaAnt[0].id)
+          .order('posicao', { ascending: true })
+        if (rankAnt) {
+          rankAntOuro = rankAnt.filter(r => r.chave === 'ouro').map(r => r.jogadores?.nome)
+          rankAntPrata = rankAnt.filter(r => r.chave === 'prata').map(r => r.jogadores?.nome)
+        }
+      }
+
+      // Marca quem subiu/desceu baseado na posição desta rodada
+      const desceram = rankOuro.slice(-3).map(r => r.jogadores?.nome)
+      const subiram  = rankPrata.slice(0, 3).map(r => r.jogadores?.nome)
+
+      setDetalheRanking({
+        ouro: rankOuro.map((r, idx) => ({
+          nome: r.jogadores?.nome,
+          pontos: r.pontos_liga,
+          posicao: r.posicao,
+          movimento: desceram.includes(r.jogadores?.nome) ? 'desceu' : null,
+        })),
+        prata: rankPrata.map((r, idx) => ({
+          nome: r.jogadores?.nome,
+          pontos: r.pontos_liga,
+          posicao: r.posicao,
+          movimento: subiram.includes(r.jogadores?.nome) ? 'subiu' : null,
+        })),
+      })
+    }
   }
 
   function renderJogos(jogos, chave) {
     const filtrados = jogos.filter(j => j.chave === chave)
     const subRodadas = []
-    for (let i = 0; i < filtrados.length; i += 3) {
-      subRodadas.push(filtrados.slice(i, i + 3))
-    }
+    for (let i = 0; i < filtrados.length; i += 3) subRodadas.push(filtrados.slice(i, i + 3))
     const corChave = chave === 'ouro' ? ouro : prata
 
     if (filtrados.length === 0) return (
@@ -121,6 +158,79 @@ export default function Rodada() {
     ))
   }
 
+  function renderClassificacao(ranking, chave) {
+    const cor = chave === 'ouro' ? ouro : prata
+    if (!ranking || ranking.length === 0) return (
+      <div className="card" style={{ textAlign: 'center', padding: '30px' }}>
+        <p style={{ color: 'rgba(255,255,255,0.4)' }}>Classificação não disponível</p>
+      </div>
+    )
+
+    return (
+      <div className="card" style={{ padding: '16px', borderLeft: `3px solid ${cor}` }}>
+        {/* Cabeçalho */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span style={{ fontSize: 16 }}>{chave === 'ouro' ? '🥇' : '🥈'}</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: cor, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Chave {chave}
+          </span>
+        </div>
+
+        {/* Lista */}
+        {ranking.map((j, idx) => {
+          const desceu = j.movimento === 'desceu'
+          const subiu  = j.movimento === 'subiu'
+          return (
+            <div key={j.nome} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 0',
+              borderBottom: idx < ranking.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+              borderLeft: desceu ? '3px solid #e74c3c' : subiu ? '3px solid #2ecc71' : '3px solid transparent',
+              paddingLeft: 8,
+            }}>
+              {/* Posição */}
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: idx === 0 ? 'rgba(201,162,39,0.2)' : idx === 1 ? 'rgba(142,158,171,0.2)' : 'rgba(255,255,255,0.05)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 700,
+                color: idx === 0 ? ouro : idx === 1 ? prata : 'rgba(255,255,255,0.4)',
+                flexShrink: 0,
+              }}>
+                {idx + 1}
+              </div>
+
+              {/* Nome */}
+              <div style={{ flex: 1, fontSize: 14, fontWeight: idx < 3 ? 700 : 400, color: '#e8f5e9' }}>
+                {j.nome}
+              </div>
+
+              {/* Movimento */}
+              {desceu && (
+                <div style={{ fontSize: 11, color: '#e74c3c', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                  ↓ desceu
+                </div>
+              )}
+              {subiu && (
+                <div style={{ fontSize: 11, color: '#2ecc71', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                  ↑ subiu
+                </div>
+              )}
+
+              {/* Pontos */}
+              <div style={{
+                fontSize: 15, fontWeight: 700, color: cor,
+                minWidth: 50, textAlign: 'right',
+              }}>
+                {j.pontos} pts
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   function ToggleChave() {
     return (
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
@@ -147,6 +257,7 @@ export default function Rodada() {
   if (view === 'detalhe' && rodadaDetalhe) {
     return (
       <div>
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
           <button onClick={() => setView('historico')} style={{
             background: 'transparent', border: `1px solid ${borda}`, color: '#7fb89a',
@@ -160,8 +271,27 @@ export default function Rodada() {
         <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px' }}>
           📅 {new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
         </div>
+
+        {/* Toggle Jogos / Classificação */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
+          {[{ key: 'jogos', label: '🎾 Jogos' }, { key: 'classificacao', label: '🏆 Classificação' }].map(({ key, label }) => (
+            <button key={key} onClick={() => setDetalheView(key)} style={{
+              flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
+              background: detalheView === key ? 'rgba(201,162,39,0.15)' : 'transparent',
+              color: detalheView === key ? ouro : 'rgba(255,255,255,0.5)',
+              border: detalheView === key ? `1px solid rgba(201,162,39,0.3)` : '1px solid transparent',
+              fontFamily: "'Barlow Condensed', sans-serif", fontSize: '14px', fontWeight: 700,
+              letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer',
+            }}>{label}</button>
+          ))}
+        </div>
+
         <ToggleChave />
-        {renderJogos(detalheJogos, chaveVis)}
+
+        {detalheView === 'jogos'
+          ? renderJogos(detalheJogos, chaveVis)
+          : renderClassificacao(detalheRanking[chaveVis], chaveVis)
+        }
       </div>
     )
   }
@@ -206,7 +336,7 @@ export default function Rodada() {
     )
   }
 
-  // ── VIEW: PRÓXIMA RODADA (principal) ──
+  // ── VIEW: PRÓXIMA RODADA ──
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
