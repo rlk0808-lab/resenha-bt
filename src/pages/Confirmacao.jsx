@@ -161,7 +161,6 @@ export default function Confirmacao({ session }) {
     }
 
     // Jogadores da Prata que podem subir (ordenados por posição na Prata anterior)
-    // Inclui os que desceram da Ouro (eles entram na fila da Prata pela posição)
     const prataTodos = rankingAnt.prata
       .filter(r => nomeConfirmados.has(r.jogadores?.nome))
       .sort((a, b) => a.posicao - b.posicao);
@@ -171,7 +170,7 @@ export default function Confirmacao({ session }) {
       .filter(nome => nomeConfirmados.has(nome))
       .map(nome => ({ nome, status: "desceu" }));
 
-    // Sobe: primeiros da Prata até totalSubir (excluindo os que desceram)
+    // Sobe: primeiros da Prata até totalSubir
     const prataSobem = prataTodos
       .slice(0, totalSubir)
       .map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
@@ -179,15 +178,21 @@ export default function Confirmacao({ session }) {
     const ouroFinal = [...ouroFicam, ...ouroMantem, ...prataSobem].slice(0, 12);
     const nomesOuro = new Set(ouroFinal.map(j => j.nome));
 
+    // Nomes já alocados em alguma lista (para evitar duplicatas)
+    const nomesJaAlocados = new Set([
+      ...nomesOuro,
+      ...prataTodos.map(r => r.jogadores?.nome),
+      ...desceuOuroConfirmou.map(d => d.nome),
+    ]);
+
     // Prata: quem não foi para Ouro
     const prataFinal = [
       ...prataTodos.slice(totalSubir).map(r => ({ nome: r.jogadores?.nome, status: "normal" })),
       ...desceuOuroConfirmou,
-      // Confirmados que não estão no ranking anterior (estreantes ou retornando)
+      // Confirmados que não estão em nenhuma lista ainda (estreantes, retornando, ou
+      // jogadores cujo chave do banco é prata mas não aparecem no ranking anterior)
       ...confirmados
-        .filter(c => !nomesOuro.has(c.jogadores?.nome) &&
-          !prataTodos.some(r => r.jogadores?.nome === c.jogadores?.nome) &&
-          !desceuOuroConfirmou.some(d => d.nome === c.jogadores?.nome))
+        .filter(c => !nomesJaAlocados.has(c.jogadores?.nome))
         .map(c => ({ nome: c.jogadores?.nome, status: "normal" }))
     ];
 
