@@ -265,6 +265,7 @@ export default function Admin({ session }) {
 
   // ─── PONTUAÇÃO ───────────────────────────────────────────────────────────
   function calcularRankingLocal(jogosChave, chave) {
+    const ehEspecial = rodadaSelecionada?.tipo === "especial";
     const stats = {};
     const confrontos = {};
     const addJogador = (nome) => { if (nome && !stats[nome]) { stats[nome] = { nome, pts: 0, vitorias: 0, saldo: 0 }; confrontos[nome] = {}; } };
@@ -279,19 +280,57 @@ export default function Admin({ session }) {
       const saldo = Math.abs(placar_a - placar_b);
       const vencedores = venceuA ? jogadoresA : jogadoresB;
       const perdedores = venceuA ? jogadoresB : jogadoresA;
-      vencedores.forEach(n => { stats[n].pts += 15 + saldo; stats[n].vitorias += 1; stats[n].saldo += saldo; });
-      perdedores.forEach(n => { stats[n].pts += venceuA ? placar_b : placar_a; stats[n].saldo -= saldo; });
+
+      if (ehEspecial) {
+        // Rodada especial: pontuação por saldo de games
+        // Vencedor ganha o saldo (6x0=6, 6x1=5, etc), perdedor ganha 0
+        vencedores.forEach(n => { stats[n].pts += saldo; stats[n].vitorias += 1; stats[n].saldo += saldo; });
+        perdedores.forEach(n => { stats[n].saldo -= saldo; });
+      } else {
+        // Rodada normal: vencedor 15+saldo, perdedor games conquistados
+        vencedores.forEach(n => { stats[n].pts += 15 + saldo; stats[n].vitorias += 1; stats[n].saldo += saldo; });
+        perdedores.forEach(n => { stats[n].pts += venceuA ? placar_b : placar_a; stats[n].saldo -= saldo; });
+      }
       jogadoresA.forEach(a => { jogadoresB.forEach(b => { if (venceuA) { confrontos[a][b] = (confrontos[a][b] || 0) + 1; } else { confrontos[b][a] = (confrontos[b][a] || 0) + 1; } }); });
     }
 
     const jogadoresList = Object.values(stats);
     jogadoresList.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : b.saldo !== a.saldo ? b.saldo - a.saldo : ((confrontos[b.nome]?.[a.nome] || 0) - (confrontos[a.nome]?.[b.nome] || 0)));
 
-    const ehEspecial = rodadaSelecionada?.tipo === "especial";
-    jogadoresList.forEach((j, idx) => {
-      j.ptosLiga = (chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === "prata" && idx === 0 && !ehEspecial ? 3 : 0);
-      j.posicao = idx + 1;
-    });
+    if (ehEspecial) {
+      // Rodada especial: times definidos pelo campo chave do jogo
+      // chave = "time_a" ou "time_b"
+      // Time com mais pontos do dia = vencedor
+      const ptsPorTime = { time_a: 0, time_b: 0 };
+      const jogadoresPorTime = { time_a: new Set(), time_b: new Set() };
+
+      for (const jogo of jogosChave) {
+        if (jogo.placar_a === null || jogo.placar_b === null) continue;
+        const time = jogo.chave; // "time_a" ou "time_b"
+        if (!ptsPorTime[time] && ptsPorTime[time] !== 0) continue;
+        const venceuA = jogo.placar_a > jogo.placar_b;
+        const saldo = Math.abs(jogo.placar_a - jogo.placar_b);
+        if (venceuA) ptsPorTime[time] += saldo; // dupla A ganhou: saldo vai para o time
+        [jogo.dupla_a_1, jogo.dupla_a_2, jogo.dupla_b_1, jogo.dupla_b_2]
+          .filter(Boolean).forEach(n => jogadoresPorTime[time]?.add(n));
+      }
+
+      const timeVencedor = ptsPorTime.time_a >= ptsPorTime.time_b ? "time_a" : "time_b";
+
+      jogadoresList.forEach((j, idx) => {
+        const meuTime = jogadoresPorTime.time_a.has(j.nome) ? "time_a" : "time_b";
+        const isVencedor = meuTime === timeVencedor;
+        j.ptosLiga = (isVencedor ? 40 : 10) + j.vitorias * 3;
+        j.posicao = idx + 1;
+        j.timeVencedor = isVencedor;
+        j.time = meuTime;
+      });
+    } else {
+      jogadoresList.forEach((j, idx) => {
+        j.ptosLiga = (chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === "prata" && idx === 0 ? 3 : 0);
+        j.posicao = idx + 1;
+      });
+    }
     return jogadoresList;
   }
 
@@ -300,10 +339,17 @@ export default function Admin({ session }) {
     setCalculando(true);
     const { data: todosJogos, error } = await supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
     if (error) { mostrarMensagem("Erro ao buscar jogos.", "erro"); setCalculando(false); return; }
-    setRankingPreview({
-      ouro: calcularRankingLocal(todosJogos.filter(j => j.chave === "ouro"), "ouro"),
-      prata: calcularRankingLocal(todosJogos.filter(j => j.chave === "prata"), "prata"),
-    });
+    if (rodadaSelecionada?.tipo === "especial") {
+      // Especial: todos os jogos juntos (time_a e time_b), sem separação ouro/prata
+      const todosJogosEspecial = todosJogos.filter(j => j.chave === "time_a" || j.chave === "time_b");
+      const rankEspecial = calcularRankingLocal(todosJogosEspecial, "especial");
+      setRankingPreview({ ouro: rankEspecial, prata: [] });
+    } else {
+      setRankingPreview({
+        ouro: calcularRankingLocal(todosJogos.filter(j => j.chave === "ouro"), "ouro"),
+        prata: calcularRankingLocal(todosJogos.filter(j => j.chave === "prata"), "prata"),
+      });
+    }
     setCalculando(false);
   }
 
@@ -324,12 +370,22 @@ export default function Admin({ session }) {
 
     if (erros.length > 0) { mostrarMensagem("Erros: " + erros.join(", "), "erro"); setCalculando(false); return; }
 
-    for (const chave of ["ouro", "prata"]) {
-      for (const j of (rankingPreview[chave] || [])) {
+    if (rodadaSelecionada?.tipo === "especial") {
+      // Especial: salva com chave = time do jogador
+      for (const j of (rankingPreview.ouro || [])) {
         const jogador = jogadores.find(jg => jg.nome === j.nome);
         if (!jogador) continue;
         await supabase.from("ranking_rodada").delete().eq("rodada_id", rodadaSelecionada.id).eq("jogador_id", jogador.id);
-        await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave, posicao: j.posicao, pontos_liga: j.ptosLiga });
+        await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave: j.time || "time_a", posicao: j.posicao, pontos_liga: j.ptosLiga });
+      }
+    } else {
+      for (const chave of ["ouro", "prata"]) {
+        for (const j of (rankingPreview[chave] || [])) {
+          const jogador = jogadores.find(jg => jg.nome === j.nome);
+          if (!jogador) continue;
+          await supabase.from("ranking_rodada").delete().eq("rodada_id", rodadaSelecionada.id).eq("jogador_id", jogador.id);
+          await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave, posicao: j.posicao, pontos_liga: j.ptosLiga });
+        }
       }
     }
 
@@ -628,17 +684,29 @@ export default function Admin({ session }) {
           </div>
 
           <div style={styles.chaveRow}>
-            <button onClick={() => setChaveAtiva("ouro")} style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🥇 Chave Ouro</button>
-            <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🥈 Chave Prata</button>
+            {rodadaSelecionada?.tipo === "especial" ? (<>
+              <button onClick={() => setChaveAtiva("time_a")} style={{ ...styles.btnChave, ...(chaveAtiva === "time_a" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🔴 Time A</button>
+              <button onClick={() => setChaveAtiva("time_b")} style={{ ...styles.btnChave, ...(chaveAtiva === "time_b" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🔵 Time B</button>
+            </>) : (<>
+              <button onClick={() => setChaveAtiva("ouro")} style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🥇 Chave Ouro</button>
+              <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🥈 Chave Prata</button>
+            </>)}
           </div>
 
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>🎲 Sorteio Manual {rodadaSelecionada && <span style={styles.badgeRodada}>R{rodadaSelecionada.numero} — {chaveAtiva}</span>}</h2>
             <p style={styles.infoText}>Use apenas para sorteios pontuais. Para fechar a rodada use o botão acima.</p>
-            <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio Manual</button>
+            {rodadaSelecionada?.tipo !== "especial" && (
+              <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio Manual</button>
+            )}
+            {rodadaSelecionada?.tipo === "especial" && (
+              <div style={{ background: "#1a3a20", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#c9a227", border: "1px solid rgba(201,162,39,0.3)" }}>
+                ⭐ Rodada Especial — insira os jogos manualmente abaixo
+              </div>
+            )}
           </div>
 
-          {sorteioPreview && (
+          {rodadaSelecionada?.tipo !== "especial" && sorteioPreview && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>👀 Preview do Sorteio</h2>
               {sorteioPreview.map((rj, r) => (
@@ -740,17 +808,28 @@ export default function Admin({ session }) {
               )}
               {["ouro", "prata"].map(chave => (
                 <div key={chave} style={{ marginBottom: 16 }}>
-                  <div style={{ ...styles.chaveHeader, color: chave === "ouro" ? ouro : prata }}>{chave === "ouro" ? "🥇 Chave Ouro" : "🥈 Chave Prata"}</div>
+                  <div style={{ ...styles.chaveHeader, color: chave === "ouro" ? ouro : prata }}>
+                    {rodadaSelecionada?.tipo === "especial" ? "⭐ Resultado Especial" : chave === "ouro" ? "🥇 Chave Ouro" : "🥈 Chave Prata"}
+                  </div>
                   {(rankingPreview[chave] || []).map((j, idx) => {
                     const total = (rankingPreview[chave] || []).length;
                     const desce = chave === "ouro" && idx >= total - 3 && rodadaSelecionada?.tipo !== "especial";
                     const sobe = chave === "prata" && idx < 3 && rodadaSelecionada?.tipo !== "especial";
+                    const isVencedor = rodadaSelecionada?.tipo === "especial" && j.timeVencedor;
+                    const isPerdedor = rodadaSelecionada?.tipo === "especial" && !j.timeVencedor;
                     return (
                       <div key={j.nome} style={{ ...styles.rankingRow, ...(desce ? { borderLeft: "3px solid #e74c3c" } : sobe ? { borderLeft: "3px solid #2ecc71" } : {}) }}>
                         <span style={styles.rankPos}>{idx + 1}º</span>
                         <span style={styles.rankNome}>{j.nome}</span>
                         <span style={styles.rankVit}>{j.vitorias}V</span>
-                        <span style={styles.rankPts}>{j.ptosLiga} pts</span>
+                        <span style={styles.rankPts}>
+                          {j.ptosLiga} pts
+                          {rodadaSelecionada?.tipo === "especial" && (
+                            <span style={{ fontSize: 10, marginLeft: 4, color: isVencedor ? "#2ecc71" : "#e74c3c" }}>
+                              {isVencedor ? "🏆 vencedor" : "perdedor"}
+                            </span>
+                          )}
+                        </span>
                         {desce && <span style={{ fontSize: 11, color: "#e74c3c" }}>↓</span>}
                         {sobe && <span style={{ fontSize: 11, color: "#2ecc71" }}>↑</span>}
                       </div>
