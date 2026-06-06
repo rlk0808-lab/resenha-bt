@@ -848,7 +848,7 @@ export default function Admin({ session }) {
             <p style={styles.infoText}>Calcule após inserir todos os placares das duas chaves.</p>
             {rodadaSelecionada?.tipo === "especial" && (
               <div style={{ background: "#1a3a20", border: "1px solid #c9a227", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 13, color: "#c9a227" }}>
-                ⭐ Rodada Especial — pontuação dobrada aplicada automaticamente
+                ⭐ Rodada Especial — formato de times. Time vencedor: 40pts + 3/vitória | Perdedor: 10pts + 3/vitória
               </div>
             )}
             <button onClick={calcularPontuacao} disabled={calculando} style={styles.btnCalcular}>{calculando ? "Calculando..." : "📊 Calcular Pontuação"}</button>
