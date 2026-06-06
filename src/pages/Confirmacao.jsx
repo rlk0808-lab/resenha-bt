@@ -86,12 +86,18 @@ export default function Confirmacao({ session }) {
   function listaFechada() { return rodadaAtual?.status === "ativa"; }
 
   function dentroDoPrazoListaPrincipal() {
+    if (!rodadaAtual) return false;
     const agora = new Date();
-    const dia = agora.getDay();
-    const hora = agora.getHours();
-    if (dia < 3) return true;
-    if (dia === 3 && hora < 10) return true;
-    return false;
+    
+    // Calcula a quarta-feira antes da rodada às 10h (horário Brasília)
+    const dataRodada = new Date(rodadaAtual.data + "T12:00:00-03:00");
+    
+    // Encontra a quarta-feira anterior à rodada (sábado - 3 dias)
+    const quartaAntes = new Date(dataRodada);
+    quartaAntes.setDate(dataRodada.getDate() - 3); // sábado - 3 = quarta
+    quartaAntes.setHours(10, 0, 0, 0);
+    
+    return agora < quartaAntes;
   }
 
   // ─── CÁLCULO DE PRÉVIA ───────────────────────────────────────────────────
