@@ -178,19 +178,21 @@ export default function Confirmacao({ session }) {
     const ouroFinal = [...ouroFicam, ...ouroMantem, ...prataSobem].slice(0, 12);
     const nomesOuro = new Set(ouroFinal.map(j => j.nome));
 
-    // Nomes já alocados em alguma lista (para evitar duplicatas)
+    // Todos os nomes já processados (ouro + prata ranking + desceram) - evita duplicatas
     const nomesJaAlocados = new Set([
       ...nomesOuro,
       ...prataTodos.map(r => r.jogadores?.nome),
       ...desceuOuroConfirmou.map(d => d.nome),
+      // Inclui TODOS do ranking anterior para evitar duplicatas
+      ...rankingAnt.ouro.map(r => r.jogadores?.nome),
+      ...rankingAnt.prata.map(r => r.jogadores?.nome),
     ]);
 
     // Prata: quem não foi para Ouro
     const prataFinal = [
       ...prataTodos.slice(totalSubir).map(r => ({ nome: r.jogadores?.nome, status: "normal" })),
       ...desceuOuroConfirmou,
-      // Confirmados que não estão em nenhuma lista ainda (estreantes, retornando, ou
-      // jogadores cujo chave do banco é prata mas não aparecem no ranking anterior)
+      // Confirmados que são estreantes (não aparecem em nenhum ranking anterior)
       ...confirmados
         .filter(c => !nomesJaAlocados.has(c.jogadores?.nome))
         .map(c => ({ nome: c.jogadores?.nome, status: "normal" }))
