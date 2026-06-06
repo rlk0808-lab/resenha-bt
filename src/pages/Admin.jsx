@@ -53,6 +53,7 @@ export default function Admin({ session }) {
   const [calculando, setCalculando] = useState(false);
   const [rankingPreview, setRankingPreview] = useState(null);
   const [sorteioPreview, setSorteioPreview] = useState(null);
+  const [timesEspecial, setTimesEspecial] = useState({ time_a: [], time_b: [] });
   const [salvandoSorteio, setSalvandoSorteio] = useState(false);
   const [fechandoLista, setFechandoLista] = useState(false);
   const [previewFechamento, setPreviewFechamento] = useState(null);
@@ -74,7 +75,20 @@ export default function Admin({ session }) {
   const [mensagem, setMensagem] = useState(null);
 
   useEffect(() => { carregarRodadas(); carregarJogadores(); }, []);
-  useEffect(() => { if (rodadaSelecionada) { carregarJogos(); carregarListaEspera(); } }, [rodadaSelecionada, chaveAtiva]);
+  useEffect(() => {
+    if (rodadaSelecionada) {
+      carregarJogos();
+      carregarListaEspera();
+      if (rodadaSelecionada.tipo === "especial") {
+        supabase.from("confirmacoes")
+          .select("*, jogadores(nome)")
+          .eq("rodada_id", rodadaSelecionada.id)
+          .eq("status", "confirmado")
+          .then(({ data }) => setConfirmacoes(data || []));
+        setTimesEspecial({ time_a: [], time_b: [] });
+      }
+    }
+  }, [rodadaSelecionada, chaveAtiva]);
   useEffect(() => { if (abaAtiva === "convites") carregarConvites(); }, [abaAtiva]);
   useEffect(() => { if (abaAtiva === "aprovacoes") carregarPendentes(); }, [abaAtiva]);
   useEffect(() => { if (abaAtiva === "atletas") carregarAtletas(); }, [abaAtiva]);
@@ -89,6 +103,8 @@ export default function Admin({ session }) {
     setRodadas(data || []);
     if (data && data.length > 0) setRodadaSelecionada(data[0]);
   }
+
+  const [confirmacoes, setConfirmacoes] = useState([]);
 
   async function carregarJogadores() {
     const { data } = await supabase.from("jogadores").select("*").order("nome", { ascending: true });
@@ -692,6 +708,47 @@ export default function Admin({ session }) {
               <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🥈 Chave Prata</button>
             </>)}
           </div>
+
+          {rodadaSelecionada?.tipo === "especial" && (
+            <div style={styles.card}>
+              <h2 style={styles.cardTitulo}>👥 Configuração dos Times</h2>
+              <p style={styles.infoText}>Selecione quais jogadores pertencem a cada time. O capitão escolhe no draft da sexta.</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {["time_a", "time_b"].map(time => {
+                  const cor = time === "time_a" ? "#e74c3c" : "#3498db";
+                  const label = time === "time_a" ? "🔴 Time A" : "🔵 Time B";
+                  const confirmadosNaoAlocados = (confirmacoes || [])
+                    .map(c => c.jogadores?.nome)
+                    .filter(n => n && !timesEspecial.time_a.includes(n) && !timesEspecial.time_b.includes(n));
+                  return (
+                    <div key={time}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: cor, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+                        {label} ({timesEspecial[time].length})
+                      </div>
+                      {timesEspecial[time].map(nome => (
+                        <div key={nome} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: `${cor}22`, borderRadius: 6, marginBottom: 4, border: `1px solid ${cor}44` }}>
+                          <span style={{ fontSize: 12, color: "#e8f5e9" }}>{nome}</span>
+                          <button onClick={() => setTimesEspecial(prev => ({ ...prev, [time]: prev[time].filter(n => n !== nome) }))}
+                            style={{ background: "transparent", border: "none", color: cor, cursor: "pointer", fontSize: 14, padding: "0 2px" }}>✕</button>
+                        </div>
+                      ))}
+                      <select
+                        onChange={e => {
+                          const nome = e.target.value;
+                          if (!nome) return;
+                          setTimesEspecial(prev => ({ ...prev, [time]: [...prev[time], nome] }));
+                          e.target.value = "";
+                        }}
+                        style={{ width: "100%", background: "#0f2d1e", border: `1px solid ${cor}66`, borderRadius: 6, padding: "6px 8px", color: "#e8f5e9", fontSize: 12, marginTop: 4 }}>
+                        <option value="">+ Adicionar jogador</option>
+                        {confirmadosNaoAlocados.map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>🎲 Sorteio Manual {rodadaSelecionada && <span style={styles.badgeRodada}>R{rodadaSelecionada.numero} — {chaveAtiva}</span>}</h2>
