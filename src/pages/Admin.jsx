@@ -84,8 +84,13 @@ export default function Admin({ session }) {
           .select("*, jogadores(nome)")
           .eq("rodada_id", rodadaSelecionada.id)
           .eq("status", "confirmado")
-          .then(({ data }) => setConfirmacoes(data || []));
-        setTimesEspecial({ time_a: [], time_b: [] });
+          .then(({ data }) => {
+            setConfirmacoes(data || []);
+            // Carrega times já salvos no banco
+            const ta = (data || []).filter(c => c.time === "time_a").map(c => c.jogadores?.nome).filter(Boolean);
+            const tb = (data || []).filter(c => c.time === "time_b").map(c => c.jogadores?.nome).filter(Boolean);
+            setTimesEspecial({ time_a: ta, time_b: tb });
+          });
       }
     }
   }, [rodadaSelecionada, chaveAtiva]);
@@ -315,31 +320,25 @@ export default function Admin({ session }) {
 
     if (ehEspecial) {
       // Rodada especial: times definidos pelo campo chave do jogo
-      // chave = "time_a" ou "time_b"
-      // Time com mais pontos do dia = vencedor
+      // Usa timesEspecial (do estado) para saber o time de cada jogador
+      // Calcula total de pontos do dia por time para determinar vencedor
       const ptsPorTime = { time_a: 0, time_b: 0 };
-      const jogadoresPorTime = { time_a: new Set(), time_b: new Set() };
 
-      for (const jogo of jogosChave) {
-        if (jogo.placar_a === null || jogo.placar_b === null) continue;
-        const time = jogo.chave; // "time_a" ou "time_b"
-        if (!ptsPorTime[time] && ptsPorTime[time] !== 0) continue;
-        const venceuA = jogo.placar_a > jogo.placar_b;
-        const saldo = Math.abs(jogo.placar_a - jogo.placar_b);
-        if (venceuA) ptsPorTime[time] += saldo; // dupla A ganhou: saldo vai para o time
-        [jogo.dupla_a_1, jogo.dupla_a_2, jogo.dupla_b_1, jogo.dupla_b_2]
-          .filter(Boolean).forEach(n => jogadoresPorTime[time]?.add(n));
-      }
+      jogadoresList.forEach(j => {
+        const meuTime = timesEspecial.time_a.includes(j.nome) ? "time_a"
+                      : timesEspecial.time_b.includes(j.nome) ? "time_b"
+                      : "time_a"; // fallback
+        ptsPorTime[meuTime] += j.pts;
+        j.time = meuTime;
+      });
 
       const timeVencedor = ptsPorTime.time_a >= ptsPorTime.time_b ? "time_a" : "time_b";
 
       jogadoresList.forEach((j, idx) => {
-        const meuTime = jogadoresPorTime.time_a.has(j.nome) ? "time_a" : "time_b";
-        const isVencedor = meuTime === timeVencedor;
+        const isVencedor = j.time === timeVencedor;
         j.ptosLiga = (isVencedor ? 40 : 10) + j.vitorias * 3;
         j.posicao = idx + 1;
         j.timeVencedor = isVencedor;
-        j.time = meuTime;
       });
     } else {
       jogadoresList.forEach((j, idx) => {
@@ -728,14 +727,23 @@ export default function Admin({ session }) {
                       {timesEspecial[time].map(nome => (
                         <div key={nome} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: `${cor}22`, borderRadius: 6, marginBottom: 4, border: `1px solid ${cor}44` }}>
                           <span style={{ fontSize: 12, color: "#e8f5e9" }}>{nome}</span>
-                          <button onClick={() => setTimesEspecial(prev => ({ ...prev, [time]: prev[time].filter(n => n !== nome) }))}
+                          <button onClick={async () => {
+                              const conf = confirmacoes.find(c => c.jogadores?.nome === nome);
+                              if (conf) await supabase.from("confirmacoes").update({ time: null }).eq("id", conf.id);
+                              setTimesEspecial(prev => ({ ...prev, [time]: prev[time].filter(n => n !== nome) }));
+                            }}
                             style={{ background: "transparent", border: "none", color: cor, cursor: "pointer", fontSize: 14, padding: "0 2px" }}>✕</button>
                         </div>
                       ))}
                       <select
-                        onChange={e => {
+                        onChange={async e => {
                           const nome = e.target.value;
                           if (!nome) return;
+                          // Salva no banco
+                          const conf = confirmacoes.find(c => c.jogadores?.nome === nome);
+                          if (conf) {
+                            await supabase.from("confirmacoes").update({ time }).eq("id", conf.id);
+                          }
                           setTimesEspecial(prev => ({ ...prev, [time]: [...prev[time], nome] }));
                           e.target.value = "";
                         }}
