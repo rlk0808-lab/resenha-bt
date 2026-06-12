@@ -256,6 +256,70 @@ export default function Rodada() {
     )
   }
 
+  function gerarTextoWhatsApp() {
+    if (!rodadaDetalhe) return '';
+    const data = new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', {
+      weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo'
+    });
+
+    let texto = `🎾 *RESENHA BT — RODADA ${rodadaDetalhe.numero}*
+`;
+    texto += `📅 ${data}
+
+`;
+
+    for (const chave of ['ouro', 'prata']) {
+      const jogos = detalheJogos.filter(j => j.chave === chave);
+      if (jogos.length === 0) continue;
+      const cor = chave === 'ouro' ? '🥇' : '🥈';
+      texto += `${cor} *CHAVE ${chave.toUpperCase()}*
+`;
+      texto += '─────────────────
+';
+
+      const subRodadas = [];
+      for (let i = 0; i < jogos.length; i += 3) subRodadas.push(jogos.slice(i, i + 3));
+
+      subRodadas.forEach((grupo, idx) => {
+        texto += `
+*Rodada ${idx + 1}:*
+`;
+        grupo.forEach(j => {
+          const venceuA = j.placar_a > j.placar_b;
+          const a = `${j.dupla_a_1}/${j.dupla_a_2}`;
+          const b = `${j.dupla_b_1}/${j.dupla_b_2}`;
+          texto += `${venceuA ? '✅' : '  '} ${a} ${j.placar_a} x ${j.placar_b} ${b} ${!venceuA ? '✅' : ''}
+`;
+        });
+      });
+
+      // Classificação
+      const rank = detalheRanking[chave];
+      if (rank && rank.length > 0) {
+        texto += `
+*🏆 Classificação ${chave === 'ouro' ? 'Ouro' : 'Prata'}:*
+`;
+        rank.forEach((j, idx) => {
+          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}º`;
+          const mov = j.movimento === 'desceu' ? ' ↓' : j.movimento === 'subiu' ? ' ↑' : '';
+          texto += `${medal} ${j.nome} — ${j.pontosDia} pts dia | ${j.pontos} pts liga${mov}
+`;
+        });
+      }
+      texto += '
+';
+    }
+
+    texto += `🎾 _Resenha BT — Londrina/PR_`;
+    return texto;
+  }
+
+  function compartilharWhatsApp() {
+    const texto = gerarTextoWhatsApp();
+    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
+  }
+
   function ToggleChave() {
     return (
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
@@ -293,8 +357,17 @@ export default function Rodada() {
             {rodadaDetalhe.tipo === 'especial' && <span style={{ fontSize: '14px', color: ouro, marginLeft: 8 }}>⭐ Especial</span>}
           </h1>
         </div>
-        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px' }}>
-          📅 {new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+            📅 {new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
+          </div>
+          <button onClick={compartilharWhatsApp} style={{
+            background: '#25D366', border: 'none', borderRadius: '8px',
+            padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+            color: '#fff', fontWeight: 700, fontSize: '13px'
+          }}>
+            <span style={{ fontSize: '16px' }}>📲</span> WhatsApp
+          </button>
         </div>
 
         {/* Toggle Jogos / Classificação */}
