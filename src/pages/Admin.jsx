@@ -581,12 +581,21 @@ export default function Admin({ session }) {
     setPromovendo(false);
   }
 
-  const SelectJogador = ({ value, onChange, placeholder }) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={styles.select}>
-      <option value="">{placeholder || "— selecionar —"}</option>
-      {jogadores.map((j) => <option key={j.id} value={j.nome}>{j.nome} ({j.chave})</option>)}
-    </select>
-  );
+  const SelectJogador = ({ value, onChange, placeholder }) => {
+    // Na rodada especial, filtra apenas jogadores do time selecionado
+    const listaJogadores = rodadaSelecionada?.tipo === "especial"
+      ? (timesEspecial[chaveAtiva] || []).map(nome => ({ nome, id: nome }))
+      : jogadores.filter(j => j.chave === chaveAtiva || chaveAtiva === "ouro" || chaveAtiva === "prata");
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={styles.select}>
+        <option value="">{placeholder || "— selecionar —"}</option>
+        {rodadaSelecionada?.tipo === "especial"
+          ? listaJogadores.map(j => <option key={j.nome} value={j.nome}>{j.nome}</option>)
+          : jogadores.map(j => <option key={j.id} value={j.nome}>{j.nome} ({j.chave})</option>)
+        }
+      </select>
+    );
+  };
 
   const rodadaProxima = rodadas.find(r => r.status === "proxima");
 
@@ -711,59 +720,55 @@ export default function Admin({ session }) {
           {rodadaSelecionada?.tipo === "especial" && (
             <div style={styles.card}>
               <h2 style={styles.cardTitulo}>👥 Configuração dos Times</h2>
-              <p style={styles.infoText}>Selecione quais jogadores pertencem a cada time. O capitão escolhe no draft da sexta.</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {["time_a", "time_b"].map(time => {
-                  const cor = time === "time_a" ? "#e74c3c" : "#3498db";
-                  const label = time === "time_a" ? "🔴 Time A" : "🔵 Time B";
-                  const confirmadosNaoAlocados = (confirmacoes || [])
-                    .map(c => c.jogadores?.nome)
-                    .filter(n => n && !timesEspecial.time_a.includes(n) && !timesEspecial.time_b.includes(n));
-                  return (
-                    <div key={time}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: cor, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
-                        {label} ({timesEspecial[time].length})
-                      </div>
+              <p style={styles.infoText}>Selecione quais jogadores pertencem a cada time.</p>
+              {["time_a", "time_b"].map(time => {
+                const cor = time === "time_a" ? "#e74c3c" : "#3498db";
+                const label = time === "time_a" ? "🔴 Time A" : "🔵 Time B";
+                const isAtivo = chaveAtiva === time;
+                if (!isAtivo) return null;
+                const confirmadosNaoAlocados = jogadores
+                  .filter(j => j.nome && !timesEspecial.time_a.includes(j.nome) && !timesEspecial.time_b.includes(j.nome))
+                  .map(j => j.nome)
+                  .sort();
+                return (
+                  <div key={time}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: cor, marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>
+                      {label} — {timesEspecial[time].length} jogadores
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                       {timesEspecial[time].map(nome => (
-                        <div key={nome} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: `${cor}22`, borderRadius: 6, marginBottom: 4, border: `1px solid ${cor}44` }}>
-                          <span style={{ fontSize: 12, color: "#e8f5e9" }}>{nome}</span>
+                        <div key={nome} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: cor + "22", borderRadius: 20, border: "1px solid " + cor + "55" }}>
+                          <span style={{ fontSize: 13, color: "#e8f5e9" }}>{nome}</span>
                           <button onClick={async () => {
-                              const jogadorEncontrado = jogadores.find(j => j.nome === nome);
-                              if (jogadorEncontrado) {
-                                await supabase.from("confirmacoes")
-                                  .update({ time: null })
-                                  .eq("jogador_id", jogadorEncontrado.id)
-                                  .eq("rodada_id", rodadaSelecionada.id);
-                              }
-                              setTimesEspecial(prev => ({ ...prev, [time]: prev[time].filter(n => n !== nome) }));
-                            }}
-                            style={{ background: "transparent", border: "none", color: cor, cursor: "pointer", fontSize: 14, padding: "0 2px" }}>✕</button>
+                            const jog = jogadores.find(j => j.nome === nome);
+                            if (jog) await supabase.from("confirmacoes").update({ time: null }).eq("jogador_id", jog.id).eq("rodada_id", rodadaSelecionada.id);
+                            setTimesEspecial(prev => ({ ...prev, [time]: prev[time].filter(n => n !== nome) }));
+                          }} style={{ background: "transparent", border: "none", color: cor, cursor: "pointer", fontSize: 13, padding: 0, lineHeight: 1 }}>✕</button>
                         </div>
                       ))}
-                      <select
-                        onChange={async e => {
-                          const nome = e.target.value;
-                          if (!nome) return;
-                          // Busca o jogador pelo nome e atualiza diretamente
-                          const jogadorEncontrado = jogadores.find(j => j.nome === nome);
-                          if (jogadorEncontrado) {
-                            const { error } = await supabase.from("confirmacoes")
-                              .update({ time })
-                              .eq("jogador_id", jogadorEncontrado.id)
-                              .eq("rodada_id", rodadaSelecionada.id);
-                            if (error) console.error("Erro ao salvar time:", error);
-                          }
-                          setTimesEspecial(prev => ({ ...prev, [time]: [...prev[time], nome] }));
-                          e.target.value = "";
-                        }}
-                        style={{ width: "100%", background: "#0f2d1e", border: `1px solid ${cor}66`, borderRadius: 6, padding: "6px 8px", color: "#e8f5e9", fontSize: 12, marginTop: 4 }}>
-                        <option value="">+ Adicionar jogador</option>
-                        {confirmadosNaoAlocados.map(n => <option key={n} value={n}>{n}</option>)}
-                      </select>
+                      {timesEspecial[time].length === 0 && (
+                        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", fontStyle: "italic" }}>Nenhum jogador adicionado</span>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
+                    <select
+                      onChange={async e => {
+                        const nome = e.target.value;
+                        if (!nome) return;
+                        const jog = jogadores.find(j => j.nome === nome);
+                        if (jog) {
+                          const { error } = await supabase.from("confirmacoes").update({ time }).eq("jogador_id", jog.id).eq("rodada_id", rodadaSelecionada.id);
+                          if (error) console.error("Erro ao salvar time:", error);
+                        }
+                        setTimesEspecial(prev => ({ ...prev, [time]: [...prev[time], nome] }));
+                        e.target.value = "";
+                      }}
+                      style={{ width: "100%", background: "#0f2d1e", border: "1px solid " + cor + "66", borderRadius: 8, padding: "8px 10px", color: "#e8f5e9", fontSize: 13, marginTop: 4 }}>
+                      <option value="">+ Adicionar jogador ao {label}</option>
+                      {confirmadosNaoAlocados.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                );
+              })}
             </div>
           )}
 
