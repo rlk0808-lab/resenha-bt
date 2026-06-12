@@ -274,7 +274,7 @@ export default function Rodada() {
       const cor = chave === 'ouro' ? '🥇' : '🥈';
       texto += `${cor} *CHAVE ${chave.toUpperCase()}*
 `;
-      texto += '─────────────────
+      texto += '-
 ';
 
       const subRodadas = [];
@@ -342,7 +342,7 @@ export default function Rodada() {
     </div>
   )
 
-  // ── VIEW: DETALHE DE RODADA FINALIZADA ──
+  // - VIEW: DETALHE DE RODADA FINALIZADA -
   if (view === 'detalhe' && rodadaDetalhe) {
     return (
       <div>
@@ -394,7 +394,7 @@ export default function Rodada() {
     )
   }
 
-  // ── VIEW: HISTÓRICO ──
+  // - VIEW: HISTÓRICO -
   if (view === 'historico') {
     return (
       <div>
@@ -434,7 +434,7 @@ export default function Rodada() {
     )
   }
 
-  // ── VIEW: PRÓXIMA RODADA ──
+  // - VIEW: PRÓXIMA RODADA -
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
