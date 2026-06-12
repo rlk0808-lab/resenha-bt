@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import html2canvas from 'html2canvas'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -18,6 +19,9 @@ export default function Rodada() {
   const [chaveVis, setChaveVis] = useState('ouro')
   const [detalheView, setDetalheView] = useState('jogos') // 'jogos' | 'classificacao'
   const [loading, setLoading] = useState(true)
+  const [mostrандoCard, setMostrandoCard] = useState(false)
+  const [gerandoImagem, setGerandoImagem] = useState(false)
+  const cardRef = useRef(null)
 
   useEffect(() => { carregarDados() }, [])
 
@@ -303,6 +307,112 @@ export default function Rodada() {
     return linhas.join(nl);
   }
 
+  async function gerarECompartilharImagem() {
+    setGerandoImagem(true)
+    setMostrandoCard(true)
+    // Aguarda o card renderizar
+    await new Promise(r => setTimeout(r, 500))
+    try {
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: '#0f2d1e',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      })
+      canvas.toBlob(async (blob) => {
+        // Tenta Web Share API (funciona em mobile)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'resenha-bt.png', { type: 'image/png' })] })) {
+          await navigator.share({
+            files: [new File([blob], 'resenha-bt.png', { type: 'image/png' })],
+            title: 'Resenha BT - Resultado',
+          })
+        } else {
+          // Fallback: download da imagem
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = 'resenha-bt-rodada-' + rodadaDetalhe.numero + '.png'
+          a.click()
+          URL.revokeObjectURL(url)
+        }
+        setMostrandoCard(false)
+        setGerandoImagem(false)
+      }, 'image/png')
+    } catch (e) {
+      setMostrandoCard(false)
+      setGerandoImagem(false)
+    }
+  }
+
+  function renderCardCompartilhamento() {
+    const data = new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', {
+      weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo'
+    })
+    return (
+      <div ref={cardRef} style={{
+        position: 'fixed', top: '-9999px', left: '-9999px',
+        width: '600px', background: '#0f2d1e', padding: '32px',
+        fontFamily: "'Segoe UI', sans-serif", color: '#e8f5e9',
+      }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 24, borderBottom: '2px solid #2a5a3a', paddingBottom: 20 }}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#c9a227', letterSpacing: 2, textTransform: 'uppercase' }}>
+            🎾 RESENHA BT
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#e8f5e9', marginTop: 6 }}>
+            Rodada {rodadaDetalhe.numero}
+          </div>
+          <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 4 }}>{data}</div>
+        </div>
+
+        {/* Chaves */}
+        {['ouro', 'prata'].map(chave => {
+          const rank = detalheRanking[chave]
+          if (!rank || rank.length === 0) return null
+          const cor = chave === 'ouro' ? '#c9a227' : '#8e9eab'
+          const emoji = chave === 'ouro' ? '🥇' : '🥈'
+          return (
+            <div key={chave} style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {emoji} Chave {chave}
+              </div>
+              {rank.map((j, idx) => {
+                const desceu = j.movimento === 'desceu'
+                const subiu = j.movimento === 'subiu'
+                const medals = ['🥇','🥈','🥉']
+                return (
+                  <div key={j.nome} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '7px 12px', marginBottom: 4,
+                    background: idx === 0 ? 'rgba(201,162,39,0.12)' : 'rgba(255,255,255,0.04)',
+                    borderRadius: 8,
+                    borderLeft: desceu ? '3px solid #e74c3c' : subiu ? '3px solid #2ecc71' : idx === 0 ? `3px solid ${cor}` : '3px solid transparent',
+                  }}>
+                    <span style={{ width: 28, fontSize: 13, textAlign: 'center' }}>
+                      {idx < 3 ? medals[idx] : (idx + 1) + 'º'}
+                    </span>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: idx < 3 ? 700 : 400 }}>{j.nome}</span>
+                    {desceu && <span style={{ fontSize: 11, color: '#e74c3c', fontWeight: 700 }}>↓ desceu</span>}
+                    {subiu && <span style={{ fontSize: 11, color: '#2ecc71', fontWeight: 700 }}>↑ subiu</span>}
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{j.vitorias}V · {j.pontosDia} pts dia</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: cor }}>{j.pontos} pts liga</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+
+        {/* Footer */}
+        <div style={{ textAlign: 'center', marginTop: 16, paddingTop: 16, borderTop: '1px solid #2a5a3a', fontSize: 12, color: '#5a8a6a' }}>
+          🏖️ Veronica Beach Tennis · Londrina/PR
+        </div>
+      </div>
+    )
+  }
+
   function compartilharWhatsApp() {
     const texto = gerarTextoWhatsApp();
     const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
@@ -350,12 +460,12 @@ export default function Rodada() {
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
             📅 {new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
           </div>
-          <button onClick={compartilharWhatsApp} style={{
+          <button onClick={gerarECompartilharImagem} disabled={gerandoImagem} style={{
             background: '#25D366', border: 'none', borderRadius: '8px',
             padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-            color: '#fff', fontWeight: 700, fontSize: '13px'
+            color: '#fff', fontWeight: 700, fontSize: '13px', opacity: gerandoImagem ? 0.7 : 1
           }}>
-            <span style={{ fontSize: '16px' }}>📲</span> WhatsApp
+            <span style={{ fontSize: '16px' }}>📲</span> {gerandoImagem ? 'Gerando...' : 'Compartilhar'}
           </button>
         </div>
 
@@ -375,6 +485,7 @@ export default function Rodada() {
 
         <ToggleChave />
 
+        {mostrandoCard && renderCardCompartilhamento()}
         {detalheView === 'jogos'
           ? renderJogos(detalheJogos, chaveVis)
           : renderClassificacao(detalheRanking[chaveVis], chaveVis)
