@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import html2canvas from 'html2canvas'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -310,9 +309,9 @@ export default function Rodada() {
   async function gerarECompartilharImagem() {
     setGerandoImagem(true)
     setMostrandoCard(true)
-    // Aguarda o card renderizar
-    await new Promise(r => setTimeout(r, 500))
+    await new Promise(r => setTimeout(r, 800))
     try {
+      const { default: html2canvas } = await import('html2canvas')
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#0f2d1e',
         scale: 2,
@@ -320,14 +319,12 @@ export default function Rodada() {
         logging: false,
       })
       canvas.toBlob(async (blob) => {
-        // Tenta Web Share API (funciona em mobile)
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], 'resenha-bt.png', { type: 'image/png' })] })) {
           await navigator.share({
             files: [new File([blob], 'resenha-bt.png', { type: 'image/png' })],
             title: 'Resenha BT - Resultado',
           })
         } else {
-          // Fallback: download da imagem
           const url = URL.createObjectURL(blob)
           const a = document.createElement('a')
           a.href = url
@@ -339,6 +336,7 @@ export default function Rodada() {
         setGerandoImagem(false)
       }, 'image/png')
     } catch (e) {
+      console.error('Erro ao gerar imagem:', e)
       setMostrandoCard(false)
       setGerandoImagem(false)
     }
