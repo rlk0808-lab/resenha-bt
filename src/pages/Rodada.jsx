@@ -257,61 +257,50 @@ export default function Rodada() {
   }
 
   function gerarTextoWhatsApp() {
-    if (!rodadaDetalhe) return '';
-    const data = new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', {
-      weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo'
+    if (!rodadaDetalhe) return "";
+    const nl = "\n";
+    const data = new Date(rodadaDetalhe.data + "T12:00:00").toLocaleDateString("pt-BR", {
+      weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo"
     });
-
-    let texto = `🎾 *RESENHA BT — RODADA ${rodadaDetalhe.numero}*
-`;
-    texto += `📅 ${data}
-
-`;
-
-    for (const chave of ['ouro', 'prata']) {
+    const linhas = [];
+    linhas.push("🎾 *RESENHA BT - RODADA " + rodadaDetalhe.numero + "*");
+    linhas.push("📅 " + data);
+    linhas.push("");
+    for (const chave of ["ouro", "prata"]) {
       const jogos = detalheJogos.filter(j => j.chave === chave);
       if (jogos.length === 0) continue;
-      const cor = chave === 'ouro' ? '🥇' : '🥈';
-      texto += `${cor} *CHAVE ${chave.toUpperCase()}*
-`;
-      texto += '-
-';
-
+      const cor = chave === "ouro" ? "🥇" : "🥈";
+      linhas.push(cor + " *CHAVE " + chave.toUpperCase() + "*");
+      linhas.push("-----------------");
       const subRodadas = [];
       for (let i = 0; i < jogos.length; i += 3) subRodadas.push(jogos.slice(i, i + 3));
-
       subRodadas.forEach((grupo, idx) => {
-        texto += `
-*Rodada ${idx + 1}:*
-`;
+        linhas.push("");
+        linhas.push("*Rodada " + (idx + 1) + ":*");
         grupo.forEach(j => {
           const venceuA = j.placar_a > j.placar_b;
-          const a = `${j.dupla_a_1}/${j.dupla_a_2}`;
-          const b = `${j.dupla_b_1}/${j.dupla_b_2}`;
-          texto += `${venceuA ? '✅' : '  '} ${a} ${j.placar_a} x ${j.placar_b} ${b} ${!venceuA ? '✅' : ''}
-`;
+          const a = j.dupla_a_1 + "/" + j.dupla_a_2;
+          const b = j.dupla_b_1 + "/" + j.dupla_b_2;
+          const prefA = venceuA ? "✅ " : "   ";
+          const sufB = !venceuA ? " ✅" : "";
+          linhas.push(prefA + a + " " + j.placar_a + " x " + j.placar_b + " " + b + sufB);
         });
       });
-
-      // Classificação
       const rank = detalheRanking[chave];
       if (rank && rank.length > 0) {
-        texto += `
-*🏆 Classificação ${chave === 'ouro' ? 'Ouro' : 'Prata'}:*
-`;
+        linhas.push("");
+        linhas.push("*🏆 Classificação " + (chave === "ouro" ? "Ouro" : "Prata") + ":*");
         rank.forEach((j, idx) => {
-          const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}º`;
-          const mov = j.movimento === 'desceu' ? ' ↓' : j.movimento === 'subiu' ? ' ↑' : '';
-          texto += `${medal} ${j.nome} — ${j.pontosDia} pts dia | ${j.pontos} pts liga${mov}
-`;
+          const medals = ["🥇","🥈","🥉"];
+          const medal = idx < 3 ? medals[idx] : (idx + 1) + "o";
+          const mov = j.movimento === "desceu" ? " desceu" : j.movimento === "subiu" ? " subiu" : "";
+          linhas.push(medal + " " + j.nome + " - " + j.pontosDia + " pts dia | " + j.pontos + " pts liga" + mov);
         });
       }
-      texto += '
-';
+      linhas.push("");
     }
-
-    texto += `🎾 _Resenha BT — Londrina/PR_`;
-    return texto;
+    linhas.push("🎾 Resenha BT - Londrina/PR");
+    return linhas.join(nl);
   }
 
   function compartilharWhatsApp() {
