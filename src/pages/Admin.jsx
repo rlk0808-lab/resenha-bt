@@ -728,8 +728,13 @@ export default function Admin({ session }) {
                         <div key={nome} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: `${cor}22`, borderRadius: 6, marginBottom: 4, border: `1px solid ${cor}44` }}>
                           <span style={{ fontSize: 12, color: "#e8f5e9" }}>{nome}</span>
                           <button onClick={async () => {
-                              const conf = confirmacoes.find(c => c.jogadores?.nome === nome);
-                              if (conf) await supabase.from("confirmacoes").update({ time: null }).eq("id", conf.id);
+                              const jogadorEncontrado = jogadores.find(j => j.nome === nome);
+                              if (jogadorEncontrado) {
+                                await supabase.from("confirmacoes")
+                                  .update({ time: null })
+                                  .eq("jogador_id", jogadorEncontrado.id)
+                                  .eq("rodada_id", rodadaSelecionada.id);
+                              }
                               setTimesEspecial(prev => ({ ...prev, [time]: prev[time].filter(n => n !== nome) }));
                             }}
                             style={{ background: "transparent", border: "none", color: cor, cursor: "pointer", fontSize: 14, padding: "0 2px" }}>✕</button>
@@ -739,10 +744,14 @@ export default function Admin({ session }) {
                         onChange={async e => {
                           const nome = e.target.value;
                           if (!nome) return;
-                          // Salva no banco
-                          const conf = confirmacoes.find(c => c.jogadores?.nome === nome);
-                          if (conf) {
-                            await supabase.from("confirmacoes").update({ time }).eq("id", conf.id);
+                          // Busca o jogador pelo nome e atualiza diretamente
+                          const jogadorEncontrado = jogadores.find(j => j.nome === nome);
+                          if (jogadorEncontrado) {
+                            const { error } = await supabase.from("confirmacoes")
+                              .update({ time })
+                              .eq("jogador_id", jogadorEncontrado.id)
+                              .eq("rodada_id", rodadaSelecionada.id);
+                            if (error) console.error("Erro ao salvar time:", error);
                           }
                           setTimesEspecial(prev => ({ ...prev, [time]: [...prev[time], nome] }));
                           e.target.value = "";
