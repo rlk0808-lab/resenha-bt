@@ -39,10 +39,14 @@ export default function Confirmacao({ session }) {
     if (!rodada) return;
     setRodadaAtual(rodada);
 
-    // Rodada anterior finalizada
-    const { data: anterior } = await supabase.from("rodadas").select("*")
-      .eq("status", "finalizada").order("numero", { ascending: false }).limit(1);
-    const rodAnt = anterior?.[0] || null;
+    // Busca todas as rodadas finalizadas ordenadas
+    const { data: anteriores } = await supabase.from("rodadas").select("*")
+      .eq("status", "finalizada").order("numero", { ascending: false });
+    
+    // Rodada de referência = última rodada NORMAL finalizada (não especial)
+    const rodAnt = anteriores?.find(r => r.tipo !== "especial") || anteriores?.[0] || null;
+    // Última rodada especial finalizada (para verificar os extras)
+    const rodEspecial = anteriores?.find(r => r.tipo === "especial") || null;
 
     if (rodAnt) {
       const { data: rank } = await supabase.from("ranking_rodada")
@@ -55,11 +59,22 @@ export default function Confirmacao({ session }) {
         });
       }
 
-      // Verifica se jogador jogou a última rodada
+      // Verifica se jogador jogou a última rodada NORMAL
       if (jog) {
         const { data: rankJog } = await supabase.from("ranking_rodada").select("id")
           .eq("rodada_id", rodAnt.id).eq("jogador_id", jog.id).limit(1);
-        setJogouUltimaRodada(!!(rankJog && rankJog.length > 0));
+        const jogouNormal = !!(rankJog && rankJog.length > 0);
+
+        if (!jogouNormal && rodEspecial) {
+          // Verifica se jogou a rodada especial (extras com prioridade)
+          const { data: rankEsp } = await supabase.from("ranking_rodada").select("id")
+            .eq("rodada_id", rodEspecial.id).eq("jogador_id", jog.id).limit(1);
+          const jogouEspecial = !!(rankEsp && rankEsp.length > 0);
+          // Jogou especial mas não normal → espera com prioridade (tratamos como false mas marcamos)
+          setJogouUltimaRodada(jogouEspecial ? "especial" : false);
+        } else {
+          setJogouUltimaRodada(jogouNormal);
+        }
       }
     } else {
       setJogouUltimaRodada(true); // Primeira rodada: todos podem confirmar
@@ -215,10 +230,13 @@ export default function Confirmacao({ session }) {
 
     const dentroPrazo = dentroDoPrazoListaPrincipal();
 
-    // REGRA: quem não jogou a última rodada → sempre espera
+    // REGRA: quem não jogou a última rodada NORMAL → sempre espera
+    // Quem jogou apenas a especial (extras) → espera com prioridade
     let status;
     if (!jogouUltimaRodada) {
       status = "espera";
+    } else if (jogouUltimaRodada === "especial") {
+      status = "espera"; // entra na espera mas confirmou antes dos que nunca jogaram
     } else if (listaConfirmados.length < LIMITE_PRINCIPAL && dentroPrazo) {
       status = "confirmado";
     } else {
