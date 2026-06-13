@@ -129,15 +129,16 @@ export default function Admin({ session }) {
   }
 
   async function salvarJogo() {
-    if (!novoJogo.dupla_a_1 || !novoJogo.dupla_b_1 || novoJogo.placar_a === "" || novoJogo.placar_b === "") {
-      mostrarMensagem("Preencha jogadores e placar.", "erro"); return;
+    if (!novoJogo.dupla_a_1 || !novoJogo.dupla_a_2 || !novoJogo.dupla_b_1 || !novoJogo.dupla_b_2) {
+      mostrarMensagem("Preencha os jogadores das duas duplas.", "erro"); return;
     }
     setSalvando(true);
     const payload = {
       rodada_id: rodadaSelecionada.id, numero_rodada: rodadaSelecionada.numero,
       dupla_a_1: novoJogo.dupla_a_1, dupla_a_2: novoJogo.dupla_a_2 || null,
       dupla_b_1: novoJogo.dupla_b_1, dupla_b_2: novoJogo.dupla_b_2 || null,
-      placar_a: parseInt(novoJogo.placar_a), placar_b: parseInt(novoJogo.placar_b),
+      placar_a: novoJogo.placar_a !== "" ? parseInt(novoJogo.placar_a) : null,
+      placar_b: novoJogo.placar_b !== "" ? parseInt(novoJogo.placar_b) : null,
       chave: chaveAtiva,
     };
     let erro;
@@ -811,7 +812,7 @@ export default function Admin({ session }) {
           )}
 
           <div style={styles.card}>
-            <h2 style={styles.cardTitulo}>{editandoId ? "✏️ Editando placar" : "➕ Inserir placar"}</h2>
+            <h2 style={styles.cardTitulo}>{editandoId ? "✏️ Editando jogo" : "➕ Inserir jogo"}</h2>
             <div style={styles.duplaSection}>
               <div style={styles.duplaLabel}>{rodadaSelecionada?.tipo === "especial" ? "🔴 Time A" : "🎾 Dupla A"}</div>
               <div style={styles.duplaInputs}>
