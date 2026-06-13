@@ -581,18 +581,20 @@ export default function Admin({ session }) {
     setPromovendo(false);
   }
 
-  const SelectJogador = ({ value, onChange, placeholder }) => {
-    // Na rodada especial, filtra apenas jogadores do time selecionado
-    const listaJogadores = rodadaSelecionada?.tipo === "especial"
-      ? (timesEspecial[chaveAtiva] || []).map(nome => ({ nome, id: nome }))
-      : jogadores.filter(j => j.chave === chaveAtiva || chaveAtiva === "ouro" || chaveAtiva === "prata");
+  // Na especial: dupla A = Time A, dupla B = Time B (fixo, independente da aba)
+  const SelectJogador = ({ value, onChange, placeholder, dupla }) => {
+    let lista;
+    if (rodadaSelecionada?.tipo === "especial") {
+      // dupla "a" mostra Time A, dupla "b" mostra Time B
+      const time = dupla === "a" ? "time_a" : "time_b";
+      lista = (timesEspecial[time] || []).map(nome => ({ key: nome, label: nome }));
+    } else {
+      lista = jogadores.map(j => ({ key: j.id, label: j.nome + " (" + j.chave + ")" }));
+    }
     return (
       <select value={value} onChange={(e) => onChange(e.target.value)} style={styles.select}>
         <option value="">{placeholder || "— selecionar —"}</option>
-        {rodadaSelecionada?.tipo === "especial"
-          ? listaJogadores.map(j => <option key={j.nome} value={j.nome}>{j.nome}</option>)
-          : jogadores.map(j => <option key={j.id} value={j.nome}>{j.nome} ({j.chave})</option>)
-        }
+        {lista.map(j => <option key={j.key} value={dupla ? j.label.split(" (")[0] : j.label}>{j.label}</option>)}
       </select>
     );
   };
@@ -811,10 +813,10 @@ export default function Admin({ session }) {
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>{editandoId ? "✏️ Editando placar" : "➕ Inserir placar"}</h2>
             <div style={styles.duplaSection}>
-              <div style={styles.duplaLabel}>🎾 Dupla A</div>
+              <div style={styles.duplaLabel}>{rodadaSelecionada?.tipo === "especial" ? "🔴 Time A" : "🎾 Dupla A"}</div>
               <div style={styles.duplaInputs}>
-                <SelectJogador value={novoJogo.dupla_a_1} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_a_1: v })} placeholder="Jogador 1" />
-                <SelectJogador value={novoJogo.dupla_a_2} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_a_2: v })} placeholder="Jogador 2" />
+                <SelectJogador value={novoJogo.dupla_a_1} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_a_1: v })} placeholder="Jogador 1" dupla="a" />
+                <SelectJogador value={novoJogo.dupla_a_2} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_a_2: v })} placeholder="Jogador 2" dupla="a" />
               </div>
             </div>
             <div style={styles.placarSection}>
@@ -823,10 +825,10 @@ export default function Admin({ session }) {
               <input type="number" min="0" max="7" placeholder="0" value={novoJogo.placar_b} onChange={(e) => setNovoJogo({ ...novoJogo, placar_b: e.target.value })} style={styles.placarInput} />
             </div>
             <div style={styles.duplaSection}>
-              <div style={styles.duplaLabel}>🎾 Dupla B</div>
+              <div style={styles.duplaLabel}>{rodadaSelecionada?.tipo === "especial" ? "🔵 Time B" : "🎾 Dupla B"}</div>
               <div style={styles.duplaInputs}>
-                <SelectJogador value={novoJogo.dupla_b_1} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_b_1: v })} placeholder="Jogador 1" />
-                <SelectJogador value={novoJogo.dupla_b_2} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_b_2: v })} placeholder="Jogador 2" />
+                <SelectJogador value={novoJogo.dupla_b_1} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_b_1: v })} placeholder="Jogador 1" dupla="b" />
+                <SelectJogador value={novoJogo.dupla_b_2} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_b_2: v })} placeholder="Jogador 2" dupla="b" />
               </div>
             </div>
             <div style={styles.botoesForm}>
