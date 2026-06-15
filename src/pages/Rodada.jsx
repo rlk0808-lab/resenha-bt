@@ -65,8 +65,14 @@ export default function Rodada() {
       .order('posicao', { ascending: true })
 
     if (rank) {
-      const rankOuro = rank.filter(r => r.chave === 'ouro')
-      const rankPrata = rank.filter(r => r.chave === 'prata')
+      // Suporta rodada especial (time_a/time_b/especial) e normal (ouro/prata)
+      const isEspecial = rank.some(r => ['time_a','time_b','especial'].includes(r.chave))
+      const rankOuro = isEspecial
+        ? rank.filter(r => r.chave === 'time_b') // vencedor aparece primeiro
+        : rank.filter(r => r.chave === 'ouro')
+      const rankPrata = isEspecial
+        ? rank.filter(r => r.chave === 'time_a')
+        : rank.filter(r => r.chave === 'prata')
 
       const { data: rodadaAnt } = await supabase.from('rodadas').select('*')
         .eq('status', 'finalizada')
@@ -129,7 +135,12 @@ export default function Rodada() {
   }
 
   function renderJogos(jogos, chave) {
-    const filtrados = jogos.filter(j => j.chave === chave)
+    // Na rodada especial todos os jogos têm chave "especial", "time_a" ou "time_b"
+    const chavesEspecial = ["time_a", "time_b", "especial"]
+    const isEspecial = jogos.some(j => chavesEspecial.includes(j.chave))
+    const filtrados = isEspecial
+      ? jogos  // mostra todos os jogos da especial
+      : jogos.filter(j => j.chave === chave)
     const subRodadas = []
     for (let i = 0; i < filtrados.length; i += 3) subRodadas.push(filtrados.slice(i, i + 3))
     const corChave = chave === 'ouro' ? ouro : prata
@@ -260,10 +271,13 @@ export default function Rodada() {
     }
   }
 
-  function ToggleChave() {
+  function ToggleChave({ isEspecial }) {
+    const opcoes = isEspecial
+      ? [{ key: 'ouro', label: '🏆 Time B (Vencedor)' }, { key: 'prata', label: '🔴 Time A' }]
+      : [{ key: 'ouro', label: '🥇 Chave Ouro' }, { key: 'prata', label: '🥈 Chave Prata' }]
     return (
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
-        {[{ key: 'ouro', label: '🥇 Chave Ouro' }, { key: 'prata', label: '🥈 Chave Prata' }].map(({ key, label }) => (
+        {opcoes.map(({ key, label }) => (
           <button key={key} onClick={() => setChaveVis(key)} style={{
             flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
             background: chaveVis === key ? "linear-gradient(135deg, " + (key === 'ouro' ? '#f5c518, #c9a010' : '#8e9eab, #6b7f8a') + ")" : 'transparent',
@@ -372,11 +386,18 @@ export default function Rodada() {
           ))}
         </div>
 
-        <ToggleChave />
-        {detalheView === 'jogos'
-          ? renderJogos(detalheJogos, chaveVis)
-          : renderClassificacao(detalheRanking[chaveVis], chaveVis)
-        }
+        {(() => {
+          const isEspecial = detalheJogos.some(j => j.chave === 'time_a' || j.chave === 'time_b')
+          return (
+            <>
+              {detalheView === 'classificacao' && <ToggleChave isEspecial={isEspecial} />}
+              {detalheView === 'jogos'
+                ? renderJogos(detalheJogos, chaveVis)
+                : renderClassificacao(detalheRanking[chaveVis], chaveVis)
+              }
+            </>
+          )
+        })()}
       </div>
     )
   }
