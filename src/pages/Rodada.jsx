@@ -326,42 +326,58 @@ export default function Rodada() {
     const data = rodadaDetalhe ? new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', {
       weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo'
     }) : ''
+    const isEspecial = detalheJogos.some(j => ['time_a','time_b','especial'].includes(j.chave))
+    const medals = ['🥇','🥈','🥉']
+
+    const renderRankCard = (rank, label, cor) => {
+      if (!rank || rank.length === 0) return null
+      return (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>
+            {label}
+          </div>
+          {rank.map((j, idx) => (
+            <div key={j.nome} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', marginBottom: 4,
+              background: idx === 0 ? cor + '22' : 'rgba(255,255,255,0.04)', borderRadius: 8,
+              borderLeft: j.movimento === 'desceu' ? '3px solid #e74c3c' : j.movimento === 'subiu' ? '3px solid #2ecc71' : '3px solid ' + cor + '44',
+            }}>
+              <span style={{ width: 28, fontSize: 13, textAlign: 'center' }}>{idx < 3 ? medals[idx] : (idx+1)+'o'}</span>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: idx < 3 ? 700 : 400 }}>{j.nome}</span>
+              {j.movimento === 'desceu' && <span style={{ fontSize: 11, color: '#e74c3c', fontWeight: 700 }}>↓</span>}
+              {j.movimento === 'subiu' && <span style={{ fontSize: 11, color: '#2ecc71', fontWeight: 700 }}>↑</span>}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{j.vitorias}V · {j.pontosDia} pts</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: cor }}>{j.pontos} pts liga</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
     return (
       <div ref={cardRef} style={{ display: 'none', width: '600px', background: '#0f2d1e', padding: '32px', fontFamily: "'Segoe UI', sans-serif", color: '#e8f5e9' }}>
         <div style={{ textAlign: 'center', marginBottom: 24, borderBottom: '2px solid #2a5a3a', paddingBottom: 20 }}>
           <div style={{ fontSize: 28, fontWeight: 900, color: '#c9a227', letterSpacing: 2 }}>RESENHA BT</div>
-          <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}>Rodada {rodadaDetalhe?.numero}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}>
+            Rodada {rodadaDetalhe?.numero}{isEspecial ? ' — Especial' : ''}
+          </div>
           <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 4 }}>{data}</div>
         </div>
-        {['ouro', 'prata'].map(chave => {
-          const rank = detalheRanking[chave]
-          if (!rank || rank.length === 0) return null
-          const cor = chave === 'ouro' ? '#c9a227' : '#8e9eab'
-          const medals = ['🥇','🥈','🥉']
-          return (
-            <div key={chave} style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>
-                {chave === 'ouro' ? '🥇' : '🥈'} Chave {chave}
-              </div>
-              {rank.map((j, idx) => (
-                <div key={j.nome} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', marginBottom: 4,
-                  background: idx === 0 ? 'rgba(201,162,39,0.12)' : 'rgba(255,255,255,0.04)', borderRadius: 8,
-                  borderLeft: j.movimento === 'desceu' ? '3px solid #e74c3c' : j.movimento === 'subiu' ? '3px solid #2ecc71' : '3px solid transparent',
-                }}>
-                  <span style={{ width: 28, fontSize: 13, textAlign: 'center' }}>{idx < 3 ? medals[idx] : (idx+1)+'o'}</span>
-                  <span style={{ flex: 1, fontSize: 14, fontWeight: idx < 3 ? 700 : 400 }}>{j.nome}</span>
-                  {j.movimento === 'desceu' && <span style={{ fontSize: 11, color: '#e74c3c', fontWeight: 700 }}>↓</span>}
-                  {j.movimento === 'subiu' && <span style={{ fontSize: 11, color: '#2ecc71', fontWeight: 700 }}>↑</span>}
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{j.vitorias}V · {j.pontosDia} pts</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: cor }}>{j.pontos} pts liga</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        })}
+
+        {isEspecial ? (
+          <>
+            {renderRankCard(detalheRanking['ouro'], '🔵 Time B (Vencedor)', '#3498db')}
+            {renderRankCard(detalheRanking['prata'], '🔴 Time A', '#e74c3c')}
+          </>
+        ) : (
+          <>
+            {renderRankCard(detalheRanking['ouro'], '🥇 Chave Ouro', '#c9a227')}
+            {renderRankCard(detalheRanking['prata'], '🥈 Chave Prata', '#8e9eab')}
+          </>
+        )}
+
         <div style={{ textAlign: 'center', marginTop: 16, paddingTop: 16, borderTop: '1px solid #2a5a3a', fontSize: 12, color: '#5a8a6a' }}>
           Veronica Beach Tennis · Londrina/PR
         </div>
