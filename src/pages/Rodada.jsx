@@ -134,13 +134,62 @@ export default function Rodada() {
     }
   }
 
+  function renderJogo(jogo, i, corBorda) {
+    return (
+      <div key={jogo.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+        <div style={{ flex: 1, textAlign: 'right' }}>
+          <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_a_1}</div>
+          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_a_2}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '80px', justifyContent: 'center' }}>
+          {[
+            { placar: jogo.placar_a, venceu: jogo.placar_a > jogo.placar_b },
+            { placar: jogo.placar_b, venceu: jogo.placar_b > jogo.placar_a }
+          ].map((lado, li) => (
+            <span key={li} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {li === 1 && <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>X</span>}
+              <div style={{
+                background: lado.venceu ? 'rgba(245,197,24,0.15)' : 'rgba(255,255,255,0.05)',
+                border: "1px solid " + (lado.venceu ? 'rgba(245,197,24,0.3)' : 'rgba(255,255,255,0.1)'),
+                borderRadius: '6px', padding: '4px 10px',
+                fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px',
+                color: lado.venceu ? '#f5c518' : 'rgba(255,255,255,0.5)',
+                minWidth: '32px', textAlign: 'center'
+              }}>{lado.placar ?? '-'}</div>
+            </span>
+          ))}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_b_1}</div>
+          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_b_2}</div>
+        </div>
+      </div>
+    )
+  }
+
   function renderJogos(jogos, chave) {
-    // Na rodada especial todos os jogos têm chave "especial", "time_a" ou "time_b"
     const chavesEspecial = ["time_a", "time_b", "especial"]
     const isEspecial = jogos.some(j => chavesEspecial.includes(j.chave))
-    const filtrados = isEspecial
-      ? jogos  // mostra todos os jogos da especial
-      : jogos.filter(j => j.chave === chave)
+
+    if (isEspecial) {
+      // Rodada especial: mostra todos os jogos num único card sem agrupamento
+      if (jogos.length === 0) return (
+        <div className="card" style={{ textAlign: 'center', padding: '30px' }}>
+          <p style={{ color: 'rgba(255,255,255,0.4)' }}>Nenhum jogo cadastrado</p>
+        </div>
+      )
+      return (
+        <div className="card" style={{ marginBottom: '12px', borderLeft: '3px solid #c9a227', padding: '16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
+            🔴 Time A  ×  🔵 Time B — {jogos.length} jogos
+          </div>
+          {jogos.map((jogo, i) => renderJogo(jogo, i, '#c9a227'))}
+        </div>
+      )
+    }
+
+    // Rodada normal: agrupa de 3 em 3
+    const filtrados = jogos.filter(j => j.chave === chave)
     const subRodadas = []
     for (let i = 0; i < filtrados.length; i += 3) subRodadas.push(filtrados.slice(i, i + 3))
     const corChave = chave === 'ouro' ? ouro : prata
@@ -156,42 +205,19 @@ export default function Rodada() {
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
           Rodada {idx + 1}
         </div>
-        {grupo.map((jogo, i) => (
-          <div key={jogo.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-            <div style={{ flex: 1, textAlign: 'right' }}>
-              <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_a_1}</div>
-              <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_a_2}</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '80px', justifyContent: 'center' }}>
-              {[
-                { placar: jogo.placar_a, venceu: jogo.placar_a > jogo.placar_b },
-                { placar: jogo.placar_b, venceu: jogo.placar_b > jogo.placar_a }
-              ].map((lado, li) => (
-                <span key={li} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {li === 1 && <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>X</span>}
-                  <div style={{
-                    background: lado.venceu ? 'rgba(245,197,24,0.15)' : 'rgba(255,255,255,0.05)',
-                    border: "1px solid " + (lado.venceu ? 'rgba(245,197,24,0.3)' : 'rgba(255,255,255,0.1)'),
-                    borderRadius: '6px', padding: '4px 10px',
-                    fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px',
-                    color: lado.venceu ? '#f5c518' : 'rgba(255,255,255,0.5)',
-                    minWidth: '32px', textAlign: 'center'
-                  }}>{lado.placar ?? '-'}</div>
-                </span>
-              ))}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_b_1}</div>
-              <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_b_2}</div>
-            </div>
-          </div>
-        ))}
+        {grupo.map((jogo, i) => renderJogo(jogo, i, corChave))}
       </div>
     ))
   }
 
-  function renderClassificacao(ranking, chave) {
-    const cor = chave === 'ouro' ? ouro : prata
+  function renderClassificacao(ranking, chave, isEspecial) {
+    const cor = isEspecial
+      ? (chave === 'ouro' ? '#3498db' : '#e74c3c')  // ouro=Time B vencedor, prata=Time A
+      : (chave === 'ouro' ? ouro : prata)
+    const label = isEspecial
+      ? (chave === 'ouro' ? '🔵 Time B (Vencedor)' : '🔴 Time A')
+      : (chave === 'ouro' ? '🥇 Chave Ouro' : '🥈 Chave Prata')
+
     if (!ranking || ranking.length === 0) return (
       <div className="card" style={{ textAlign: 'center', padding: '30px' }}>
         <p style={{ color: 'rgba(255,255,255,0.4)' }}>Classificacao nao disponivel</p>
@@ -200,9 +226,8 @@ export default function Rodada() {
     return (
       <div className="card" style={{ padding: '16px', borderLeft: "3px solid " + cor }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{ fontSize: 16 }}>{chave === 'ouro' ? '🥇' : '🥈'}</span>
           <span style={{ fontWeight: 700, fontSize: 14, color: cor, textTransform: 'uppercase', letterSpacing: 1 }}>
-            Chave {chave}
+            {label}
           </span>
         </div>
         {ranking.map((j, idx) => {
@@ -393,7 +418,7 @@ export default function Rodada() {
               {detalheView === 'classificacao' && <ToggleChave isEspecial={isEspecial} />}
               {detalheView === 'jogos'
                 ? renderJogos(detalheJogos, chaveVis)
-                : renderClassificacao(detalheRanking[chaveVis], chaveVis)
+                : renderClassificacao(detalheRanking[chaveVis], chaveVis, isEspecial)
               }
             </>
           )
