@@ -412,13 +412,18 @@ export default function Rodada() {
         </div>
 
         {(() => {
-          const isEspecial = detalheJogos.some(j => j.chave === 'time_a' || j.chave === 'time_b')
+          const isEspecial = detalheJogos.some(j => ['time_a','time_b','especial'].includes(j.chave))
           return (
             <>
-              {detalheView === 'classificacao' && <ToggleChave isEspecial={isEspecial} />}
+              {detalheView === 'classificacao' && !isEspecial && <ToggleChave isEspecial={false} />}
               {detalheView === 'jogos'
                 ? renderJogos(detalheJogos, chaveVis)
-                : renderClassificacao(detalheRanking[chaveVis], chaveVis, isEspecial)
+                : isEspecial
+                  ? <>
+                      {renderClassificacao(detalheRanking['ouro'], 'ouro', true)}
+                      {renderClassificacao(detalheRanking['prata'], 'prata', true)}
+                    </>
+                  : renderClassificacao(detalheRanking[chaveVis], chaveVis, false)
               }
             </>
           )
