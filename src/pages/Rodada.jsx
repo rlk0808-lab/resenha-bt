@@ -19,6 +19,7 @@ export default function Rodada() {
   const [detalheView, setDetalheView] = useState('jogos')
   const [loading, setLoading] = useState(true)
   const [gerandoImagem, setGerandoImagem] = useState(false)
+  const [compartilhandoModo, setCompartilhandoModo] = useState('classificacao')
   const cardRef = useRef(null)
 
   useEffect(() => { carregarDados() }, [])
@@ -265,15 +266,16 @@ export default function Rodada() {
     )
   }
 
-  async function compartilharImagem() {
+  async function compartilharImagem(modo) {
     if (!rodadaDetalhe) return
+    setCompartilhandoModo(modo || 'classificacao')
     setGerandoImagem(true)
     try {
       const { default: html2canvas } = await import('html2canvas')
       const el = cardRef.current
       if (!el) { setGerandoImagem(false); return }
       el.style.display = 'block'
-      await new Promise(r => setTimeout(r, 400))
+      await new Promise(r => setTimeout(r, 600))
       const canvas = await html2canvas(el, { backgroundColor: '#0f2d1e', scale: 2, useCORS: true, logging: false })
       el.style.display = 'none'
       canvas.toBlob(async (blob) => {
@@ -328,6 +330,7 @@ export default function Rodada() {
     }) : ''
     const isEspecial = detalheJogos.some(j => ['time_a','time_b','especial'].includes(j.chave))
     const medals = ['🥇','🥈','🥉']
+    const modoAtual = compartilhandoModo
 
     const renderRankCard = (rank, label, cor) => {
       if (!rank || rank.length === 0) return null
@@ -366,7 +369,68 @@ export default function Rodada() {
           <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 4 }}>{data}</div>
         </div>
 
-        {isEspecial ? (
+        {modoAtual === 'jogos' ? (
+          // Mostra os jogos
+          <div>
+            {isEspecial ? (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#c9a227', marginBottom: 10 }}>🔴 Time A × 🔵 Time B</div>
+                {detalheJogos.map((j, i) => (
+                  <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ flex: 1, textAlign: 'right', fontSize: 12 }}>
+                      <div style={{ fontWeight: 600 }}>{j.dupla_a_1}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.5)' }}>{j.dupla_a_2}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', minWidth: 70, justifyContent: 'center' }}>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: j.placar_a > j.placar_b ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.placar_a ?? '-'}</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>x</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: j.placar_b > j.placar_a ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.placar_b ?? '-'}</span>
+                    </div>
+                    <div style={{ flex: 1, fontSize: 12 }}>
+                      <div style={{ fontWeight: 600 }}>{j.dupla_b_1}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.5)' }}>{j.dupla_b_2}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              ['ouro', 'prata'].map(chave => {
+                const jogosChave = detalheJogos.filter(j => j.chave === chave)
+                if (jogosChave.length === 0) return null
+                const cor = chave === 'ouro' ? '#c9a227' : '#8e9eab'
+                const grupos = []
+                for (let i = 0; i < jogosChave.length; i += 3) grupos.push(jogosChave.slice(i, i+3))
+                return (
+                  <div key={chave} style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: cor, marginBottom: 8 }}>{chave === 'ouro' ? '🥇 Chave Ouro' : '🥈 Chave Prata'}</div>
+                    {grupos.map((grupo, gi) => (
+                      <div key={gi} style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Rodada {gi+1}</div>
+                        {grupo.map(j => (
+                          <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <div style={{ flex: 1, textAlign: 'right', fontSize: 12 }}>
+                              <div style={{ fontWeight: 600 }}>{j.dupla_a_1}</div>
+                              <div style={{ color: 'rgba(255,255,255,0.5)' }}>{j.dupla_a_2}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center', minWidth: 70, justifyContent: 'center' }}>
+                              <span style={{ fontSize: 18, fontWeight: 700, color: j.placar_a > j.placar_b ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.placar_a ?? '-'}</span>
+                              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>x</span>
+                              <span style={{ fontSize: 18, fontWeight: 700, color: j.placar_b > j.placar_a ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.placar_b ?? '-'}</span>
+                            </div>
+                            <div style={{ flex: 1, fontSize: 12 }}>
+                              <div style={{ fontWeight: 600 }}>{j.dupla_b_1}</div>
+                              <div style={{ color: 'rgba(255,255,255,0.5)' }}>{j.dupla_b_2}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        ) : isEspecial ? (
           <>
             {renderRankCard(detalheRanking['ouro'], '🔵 Time B (Vencedor)', '#3498db')}
             {renderRankCard(detalheRanking['prata'], '🔴 Time A', '#e74c3c')}
@@ -405,7 +469,7 @@ export default function Rodada() {
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
             {new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
           </div>
-          <button onClick={compartilharImagem} disabled={gerandoImagem} style={{
+          <button onClick={() => compartilharImagem(detalheView)} disabled={gerandoImagem} style={{
             background: '#25D366', border: 'none', borderRadius: '8px',
             padding: '8px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
             color: '#fff', fontWeight: 700, fontSize: '13px', opacity: gerandoImagem ? 0.7 : 1
