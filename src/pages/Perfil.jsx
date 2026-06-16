@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
+const ouro = '#c9a227'
+const prata = '#8e9eab'
+
 export default function Perfil() {
   const [perfil, setPerfil] = useState(null)
   const [stats, setStats] = useState(null)
+  const [temporadas, setTemporadas] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
@@ -16,10 +20,20 @@ export default function Perfil() {
         .from('jogadores').select('*').eq('user_id', user.id).limit(1)
       const p = jogadores?.[0] || null
       setPerfil(p)
+
       if (p) {
+        // Stats atuais (Inverno)
         const { data: s } = await supabase
           .from('stats_jogador').select('*').eq('jogador_id', p.id).limit(1)
         setStats(s?.[0] || null)
+
+        // Histórico de temporadas anteriores
+        const { data: temps } = await supabase
+          .from('temporadas')
+          .select('*')
+          .eq('jogador_id', p.id)
+          .order('ano', { ascending: false })
+        setTemporadas(temps || [])
       }
       setLoading(false)
     }
@@ -30,26 +44,20 @@ export default function Perfil() {
     const file = e.target.files?.[0]
     if (!file || !perfil) return
     setUploadando(true)
-
     const ext = file.name.split('.').pop()
     const path = `${perfil.id}/avatar.${ext}`
-
     const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true })
-
+      .from('avatars').upload(path, file, { upsert: true })
     if (uploadError) {
       setMensagem({ texto: 'Erro ao enviar foto.', tipo: 'erro' })
       setUploadando(false)
       return
     }
-
     const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
     const foto_url = urlData.publicUrl + '?t=' + Date.now()
-
     await supabase.from('jogadores').update({ foto_url }).eq('id', perfil.id)
     setPerfil({ ...perfil, foto_url })
-    setMensagem({ texto: '✅ Foto atualizada!', tipo: 'sucesso' })
+    setMensagem({ texto: 'Foto atualizada!', tipo: 'sucesso' })
     setUploadando(false)
     setTimeout(() => setMensagem(null), 3000)
   }
@@ -62,9 +70,9 @@ export default function Perfil() {
 
   const statCards = [
     { label: 'Pontos', valor: stats?.pontos_total || 0, cor: '#f5c518' },
-    { label: 'Vitórias', valor: stats?.vitorias || 0, cor: '#2d7a45' },
+    { label: 'Vitorias', valor: stats?.vitorias || 0, cor: '#2d7a45' },
     { label: 'Rodadas', valor: stats?.rodadas_jogadas || 0, cor: '#4d8ab5' },
-    { label: 'Posição', valor: stats?.posicao ? `${stats.posicao}º` : '–', cor: '#e8621a' },
+    { label: 'Posicao', valor: stats?.posicao ? `${stats.posicao}o` : '-', cor: '#e8621a' },
   ]
 
   return (
@@ -75,9 +83,9 @@ export default function Perfil() {
         </div>
       )}
 
+      {/* Card do jogador */}
       <div className="card" style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #112918, #0d2b1a)', border: '1px solid rgba(245,197,24,0.15)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {/* Avatar com clique para upload */}
           <div style={{ position: 'relative', flexShrink: 0 }} onClick={() => fileRef.current?.click()}>
             <div style={{
               width: '72px', height: '72px', borderRadius: '50%', overflow: 'hidden',
@@ -97,17 +105,12 @@ export default function Perfil() {
             }}>📷</div>
           </div>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFoto} />
-
           <div>
-            {/* Apelido — nome usado no torneio */}
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '28px', letterSpacing: '2px', lineHeight: 1, color: '#ffffff' }}>
               {perfil?.nome || 'Jogador'}
             </div>
-            {/* Nome completo — exibido abaixo se preenchido */}
             {perfil?.apelido && (
-              <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 3 }}>
-                {perfil.apelido}
-              </div>
+              <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 3 }}>{perfil.apelido}</div>
             )}
             <div style={{ marginTop: '6px' }}>
               {perfil?.chave === 'ouro'
@@ -120,6 +123,7 @@ export default function Perfil() {
         </div>
       </div>
 
+      {/* Stats do Inverno */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
         {statCards.map(({ label, valor, cor }) => (
           <div key={label} className="card" style={{ textAlign: 'center' }}>
@@ -129,31 +133,62 @@ export default function Perfil() {
         ))}
       </div>
 
+      {/* Histórico de temporadas */}
       <div className="card">
         <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '16px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: '16px' }}>
-          Histórico de Temporadas
+          Historico de Temporadas
         </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {[
-            { liga: 'Torneio de Inverno 2026', status: 'Em andamento' },
-            { liga: 'Torneio de Verão 2026', status: 'Concluído' },
-          ].map((t, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--borda)' }}>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.liga}</div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>{t.status}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', color: '#f5c518' }}>
-                  {stats?.pontos_total || '–'}
-                </div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
-                  {stats?.posicao ? `${stats.posicao}º lugar` : '–'}
-                </div>
-              </div>
+
+        {/* Torneio de Inverno 2026 — em andamento */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(201,162,39,0.06)', borderRadius: '8px', border: '1px solid rgba(201,162,39,0.2)', marginBottom: 8 }}>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: ouro }}>Torneio de Inverno 2026</div>
+            <div style={{ fontSize: '12px', color: '#2ecc71', marginTop: '2px' }}>Em andamento</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', color: '#f5c518' }}>
+              {stats?.pontos_total || '-'}
             </div>
-          ))}
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
+              {stats?.posicao ? `${stats.posicao}o lugar` : '-'}
+            </div>
+          </div>
         </div>
+
+        {/* Temporadas anteriores do banco */}
+        {temporadas.length > 0 ? (
+          temporadas.map((t, i) => {
+            const corChave = t.chave === 'ouro' ? ouro : prata
+            return (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--borda)', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                    {t.nome_torneio.replace('Verao', 'Verão')}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: corChave, textTransform: 'uppercase' }}>
+                      {t.chave === 'ouro' ? 'Chave Ouro' : 'Chave Prata'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>·</span>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Concluido</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', color: corChave }}>
+                    {t.pontos}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
+                    {t.posicao}o lugar
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        ) : (
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '16px' }}>
+            Nenhuma temporada anterior registrada
+          </div>
+        )}
       </div>
     </div>
   )
