@@ -406,13 +406,29 @@ export default function Admin({ session }) {
     }
 
     if (rodadaSelecionada?.tipo !== "especial") {
+      // 1. Os 3 últimos da Ouro descem
       for (const nome of (rankingPreview.ouro || []).slice(-3).map(j => j.nome)) {
         const jog = jogadores.find(jg => jg.nome === nome);
         if (jog) await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
       }
+      // 2. Os 3 primeiros da Prata sobem
       for (const nome of (rankingPreview.prata || []).slice(0, 3).map(j => j.nome)) {
         const jog = jogadores.find(jg => jg.nome === nome);
         if (jog) await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jog.id);
+      }
+      // 3. Jogadores da Ouro que NÃO jogaram esta rodada → descem para Prata
+      const nomesQueJogaram = new Set([
+        ...(rankingPreview.ouro || []).map(j => j.nome),
+        ...(rankingPreview.prata || []).map(j => j.nome),
+      ]);
+      const jogadoresOuroQueFaltaram = jogadores.filter(
+        jg => jg.chave === "ouro" && !nomesQueJogaram.has(jg.nome)
+      );
+      for (const jog of jogadoresOuroQueFaltaram) {
+        await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
+      }
+      if (jogadoresOuroQueFaltaram.length > 0) {
+        console.log("Rebaixados por falta:", jogadoresOuroQueFaltaram.map(j => j.nome));
       }
     }
 
