@@ -65,6 +65,7 @@ export default function Admin({ session }) {
     dupla_a_1: "", dupla_a_2: "", dupla_b_1: "", dupla_b_2: "", placar_a: "", placar_b: "",
   });
   const [editandoId, setEditandoId] = useState(null);
+  const [placaresInline, setPlacaresInline] = useState({});
   const [convites, setConvites] = useState([]);
   const [loadingConvites, setLoadingConvites] = useState(false);
   const [gerandoConvite, setGerandoConvite] = useState(false);
@@ -161,6 +162,17 @@ export default function Admin({ session }) {
     const { error } = await supabase.from("jogos").delete().eq("id", id);
     if (error) mostrarMensagem("Erro ao excluir.", "erro");
     else { mostrarMensagem("Jogo excluído."); carregarJogos(); }
+  }
+
+  async function salvarPlacarInline(jogoId) {
+    const p = placaresInline[jogoId];
+    if (!p || p.a === "" || p.b === "") return;
+    const pa = parseInt(p.a);
+    const pb = parseInt(p.b);
+    if (isNaN(pa) || isNaN(pb)) return;
+    await supabase.from("jogos").update({ placar_a: pa, placar_b: pb }).eq("id", jogoId);
+    await carregarJogos();
+    setPlacaresInline(prev => { const n = {...prev}; delete n[jogoId]; return n; });
   }
 
   function editarJogo(jogo) {
@@ -928,30 +940,60 @@ export default function Admin({ session }) {
             <h2 style={styles.cardTitulo}>📋 Jogos da rodada <span style={styles.badgeCount}>{jogos.length} jogos</span></h2>
             {loading ? <p style={styles.loadingText}>Carregando...</p>
               : jogos.length === 0 ? <p style={styles.emptyText}>Nenhum jogo inserido ainda.</p>
-              : (
-                <div style={styles.jogosList}>
-                  {jogos.map((jogo, idx) => {
-                    const temPlacar = jogo.placar_a !== null && jogo.placar_b !== null;
-                    const venceuA = temPlacar && jogo.placar_a > jogo.placar_b;
-                    return (
-                      <div key={jogo.id} style={styles.jogoCard}>
-                        <div style={styles.jogoNumero}>{idx + 1}</div>
-                        <div style={styles.jogoConteudo}>
-                          <div style={{ ...styles.dupla, ...(venceuA ? styles.vencedor : {}) }}>{jogo.dupla_a_1}{jogo.dupla_a_2 ? ` / ${jogo.dupla_a_2}` : ""}</div>
-                          <div style={styles.placarDisplay}>
-                            {temPlacar ? (<><span style={venceuA ? styles.placarVencedor : styles.placarPerdedor}>{jogo.placar_a}</span><span style={styles.placarSep}>×</span><span style={!venceuA ? styles.placarVencedor : styles.placarPerdedor}>{jogo.placar_b}</span></>) : <span style={styles.semPlacar}>–</span>}
-                          </div>
-                          <div style={{ ...styles.dupla, ...(!venceuA ? styles.vencedor : {}), textAlign: "right" }}>{jogo.dupla_b_1}{jogo.dupla_b_2 ? ` / ${jogo.dupla_b_2}` : ""}</div>
-                        </div>
-                        <div style={styles.jogoAcoes}>
-                          <button onClick={() => editarJogo(jogo)} style={styles.btnEdit}>✏️</button>
-                          <button onClick={() => excluirJogo(jogo.id)} style={styles.btnDel}>🗑️</button>
-                        </div>
+              : (() => {
+                  // Agrupa jogos de 3 em 3 (por rodada interna)
+                  const grupos = [];
+                  for (let i = 0; i < jogos.length; i += 3) grupos.push(jogos.slice(i, i + 3));
+                  return grupos.map((grupo, gi) => (
+                    <div key={gi} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
+                        Rodada {gi + 1}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      {grupo.map((jogo) => {
+                        const temPlacar = jogo.placar_a !== null && jogo.placar_b !== null;
+                        const venceuA = temPlacar && jogo.placar_a > jogo.placar_b;
+                        const inline = placaresInline[jogo.id] || { a: jogo.placar_a ?? "", b: jogo.placar_b ?? "" };
+                        return (
+                          <div key={jogo.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                            {/* Dupla A */}
+                            <div style={{ flex: 1, fontSize: 12 }}>
+                              <div style={{ fontWeight: venceuA ? 700 : 400, color: venceuA ? "#f5c518" : "#e8f5e9" }}>{jogo.dupla_a_1}</div>
+                              <div style={{ color: "rgba(255,255,255,0.5)" }}>{jogo.dupla_a_2}</div>
+                            </div>
+                            {/* Placares inline */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <input
+                                type="number" min="0" max="7"
+                                value={inline.a}
+                                onChange={e => setPlacaresInline(prev => ({ ...prev, [jogo.id]: { ...inline, a: e.target.value } }))}
+                                onBlur={() => salvarPlacarInline(jogo.id)}
+                                onKeyDown={e => e.key === "Enter" && salvarPlacarInline(jogo.id)}
+                                style={{ width: 40, textAlign: "center", background: venceuA ? "rgba(245,197,24,0.15)" : "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 0", color: venceuA ? "#f5c518" : "#e8f5e9", fontSize: 16, fontFamily: "'Bebas Neue', sans-serif" }}
+                              />
+                              <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>×</span>
+                              <input
+                                type="number" min="0" max="7"
+                                value={inline.b}
+                                onChange={e => setPlacaresInline(prev => ({ ...prev, [jogo.id]: { ...inline, b: e.target.value } }))}
+                                onBlur={() => salvarPlacarInline(jogo.id)}
+                                onKeyDown={e => e.key === "Enter" && salvarPlacarInline(jogo.id)}
+                                style={{ width: 40, textAlign: "center", background: !venceuA && temPlacar ? "rgba(245,197,24,0.15)" : "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 0", color: !venceuA && temPlacar ? "#f5c518" : "#e8f5e9", fontSize: 16, fontFamily: "'Bebas Neue', sans-serif" }}
+                              />
+                            </div>
+                            {/* Dupla B */}
+                            <div style={{ flex: 1, fontSize: 12, textAlign: "right" }}>
+                              <div style={{ fontWeight: !venceuA && temPlacar ? 700 : 400, color: !venceuA && temPlacar ? "#f5c518" : "#e8f5e9" }}>{jogo.dupla_b_1}</div>
+                              <div style={{ color: "rgba(255,255,255,0.5)" }}>{jogo.dupla_b_2}</div>
+                            </div>
+                            {/* Botão excluir */}
+                            <button onClick={() => excluirJogo(jogo.id)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.2)", cursor: "pointer", fontSize: 14, padding: "0 4px" }}>🗑️</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()
+            }
           </div>
 
           <div style={styles.card}>
