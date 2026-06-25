@@ -53,6 +53,10 @@ export default function Admin({ session }) {
   const [calculando, setCalculando] = useState(false);
   const [rankingPreview, setRankingPreview] = useState(null);
   const [sorteioPreview, setSorteioPreview] = useState(null);
+  const [modalSubst, setModalSubst] = useState(false);
+  const [substAusente, setSubstAusente] = useState("");
+  const [substReserva, setSubstReserva] = useState("");
+  const [substProcessando, setSubstProcessando] = useState(false);
   const [timesEspecial, setTimesEspecial] = useState({ time_a: [], time_b: [] });
   const [salvandoSorteio, setSalvandoSorteio] = useState(false);
   const [fechandoLista, setFechandoLista] = useState(false);
@@ -459,6 +463,72 @@ export default function Admin({ session }) {
     const { data } = await supabase.from("convites").select("*").order("created_at", { ascending: false }).limit(20);
     setConvites(data || []);
     setLoadingConvites(false);
+  }
+
+  async function substituirJogador() {
+    if (!substAusente || !substReserva || !rodadaSelecionada) return;
+    setSubstProcessando(true);
+
+    const jogadorAusente = jogadores.find(j => j.nome === substAusente);
+    if (!jogadorAusente) { mostrarMensagem("Jogador ausente não encontrado.", "erro"); setSubstProcessando(false); return; }
+
+    const { data: jogosRodada } = await supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
+    if (!jogosRodada) { mostrarMensagem("Erro ao buscar jogos.", "erro"); setSubstProcessando(false); return; }
+
+    if (jogadorAusente.chave === "ouro") {
+      // Busca ranking anterior da prata para pegar o 1º
+      const { data: rodAntData } = await supabase.from("rodadas").select("id").eq("status","finalizada").order("numero",{ascending:false}).limit(1);
+      const rodAntId = rodAntData?.[0]?.id;
+      const { data: rankAnt } = await supabase.from("ranking_rodada")
+        .select("*, jogadores(nome)")
+        .eq("rodada_id", rodAntId)
+        .eq("chave", "prata")
+        .order("posicao", {ascending: true});
+
+      const nomesNosJogos = new Set(jogosRodada.flatMap(j => [j.dupla_a_1, j.dupla_a_2, j.dupla_b_1, j.dupla_b_2].filter(Boolean)));
+      const primeiroPrata = rankAnt?.find(r => nomesNosJogos.has(r.jogadores?.nome))?.jogadores?.nome;
+
+      if (!primeiroPrata) { mostrarMensagem("Não foi possível identificar o 1º da Prata.", "erro"); setSubstProcessando(false); return; }
+
+      const updates = [];
+      for (const jogo of jogosRodada) {
+        const campos = {};
+        if (jogo.chave === "ouro") {
+          if (jogo.dupla_a_1 === substAusente) campos.dupla_a_1 = primeiroPrata;
+          if (jogo.dupla_a_2 === substAusente) campos.dupla_a_2 = primeiroPrata;
+          if (jogo.dupla_b_1 === substAusente) campos.dupla_b_1 = primeiroPrata;
+          if (jogo.dupla_b_2 === substAusente) campos.dupla_b_2 = primeiroPrata;
+        }
+        if (jogo.chave === "prata") {
+          if (jogo.dupla_a_1 === primeiroPrata) campos.dupla_a_1 = substReserva;
+          if (jogo.dupla_a_2 === primeiroPrata) campos.dupla_a_2 = substReserva;
+          if (jogo.dupla_b_1 === primeiroPrata) campos.dupla_b_1 = substReserva;
+          if (jogo.dupla_b_2 === primeiroPrata) campos.dupla_b_2 = substReserva;
+        }
+        if (Object.keys(campos).length > 0) updates.push(supabase.from("jogos").update(campos).eq("id", jogo.id));
+      }
+      await Promise.all(updates);
+      mostrarMensagem(`✅ ${substAusente} → ${primeiroPrata} (Ouro) | ${primeiroPrata} → ${substReserva} (Prata)`);
+    } else {
+      // Prata: substitui direto
+      const updates = [];
+      for (const jogo of jogosRodada) {
+        const campos = {};
+        if (jogo.dupla_a_1 === substAusente) campos.dupla_a_1 = substReserva;
+        if (jogo.dupla_a_2 === substAusente) campos.dupla_a_2 = substReserva;
+        if (jogo.dupla_b_1 === substAusente) campos.dupla_b_1 = substReserva;
+        if (jogo.dupla_b_2 === substAusente) campos.dupla_b_2 = substReserva;
+        if (Object.keys(campos).length > 0) updates.push(supabase.from("jogos").update(campos).eq("id", jogo.id));
+      }
+      await Promise.all(updates);
+      mostrarMensagem(`✅ ${substAusente} substituído por ${substReserva} na Prata.`);
+    }
+
+    setModalSubst(false);
+    setSubstAusente("");
+    setSubstReserva("");
+    await carregarJogos();
+    setSubstProcessando(false);
   }
 
   async function gerarNovoConvite() {
@@ -1064,6 +1134,42 @@ export default function Admin({ session }) {
                 )}
               </div>
             ))}
+        </div>
+      )}
+      {/* Modal de substituição */}
+      {modalSubst && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#162f20", border: "1px solid #2a5a3a", borderRadius: 12, padding: 24, width: "100%", maxWidth: 420 }}>
+            <h3 style={{ color: "#e8f5e9", margin: "0 0 16px", fontSize: 16 }}>🔄 Substituir Jogador</h3>
+            <p style={{ fontSize: 12, color: "#7fb89a", marginBottom: 16 }}>
+              Se o ausente for da <strong>Ouro</strong>: o 1° da Prata sobe, e o reserva entra na Prata.<br/>
+              Se for da <strong>Prata</strong>: o reserva entra direto na Prata.
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "#7fb89a", display: "block", marginBottom: 4 }}>Jogador ausente:</label>
+              <select value={substAusente} onChange={e => setSubstAusente(e.target.value)} style={styles.select}>
+                <option value="">selecionar</option>
+                {jogadores.filter(j => j.chave === "ouro" || j.chave === "prata").map(j => (
+                  <option key={j.id} value={j.nome}>{j.nome} ({j.chave})</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, color: "#7fb89a", display: "block", marginBottom: 4 }}>Reserva (quem entra):</label>
+              <input type="text" value={substReserva} onChange={e => setSubstReserva(e.target.value)}
+                placeholder="Nome do reserva..." style={{ ...styles.select, width: "100%", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { setModalSubst(false); setSubstAusente(""); setSubstReserva(""); }}
+                style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid #2a5a3a", borderRadius: 8, color: "#7fb89a", cursor: "pointer" }}>
+                Cancelar
+              </button>
+              <button onClick={substituirJogador} disabled={substProcessando || !substAusente || !substReserva}
+                style={{ flex: 1, padding: "10px", background: "#e74c3c", border: "none", borderRadius: 8, color: "#fff", fontWeight: 700, cursor: "pointer", opacity: (!substAusente || !substReserva) ? 0.5 : 1 }}>
+                {substProcessando ? "Processando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
