@@ -8,6 +8,8 @@ export default function Perfil() {
   const [perfil, setPerfil] = useState(null)
   const [stats, setStats] = useState(null)
   const [temporadas, setTemporadas] = useState([])
+  const [parceiros, setParceiros] = useState([])
+  const [adversarios, setAdversarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
@@ -34,6 +36,44 @@ export default function Perfil() {
           .eq('jogador_id', p.id)
           .order('ano', { ascending: false })
         setTemporadas(temps || [])
+
+        // Busca jogos para calcular parceiros e adversários
+        const { data: jogos } = await supabase
+          .from('jogos')
+          .select('*')
+          .or(`dupla_a_1.eq.${p.nome},dupla_a_2.eq.${p.nome},dupla_b_1.eq.${p.nome},dupla_b_2.eq.${p.nome}`)
+
+        if (jogos && jogos.length > 0) {
+          const statsParc = {}
+          const statsAdv = {}
+          for (const jogo of jogos) {
+            if (jogo.placar_a === null || jogo.placar_b === null) continue
+            const estouNoA = jogo.dupla_a_1 === p.nome || jogo.dupla_a_2 === p.nome
+            const euVenci = estouNoA ? jogo.placar_a > jogo.placar_b : jogo.placar_b > jogo.placar_a
+            const parceiro = estouNoA
+              ? (jogo.dupla_a_1 === p.nome ? jogo.dupla_a_2 : jogo.dupla_a_1)
+              : (jogo.dupla_b_1 === p.nome ? jogo.dupla_b_2 : jogo.dupla_b_1)
+            if (parceiro) {
+              if (!statsParc[parceiro]) statsParc[parceiro] = { jogos: 0, vitorias: 0 }
+              statsParc[parceiro].jogos++
+              if (euVenci) statsParc[parceiro].vitorias++
+            }
+            const advs = estouNoA
+              ? [jogo.dupla_b_1, jogo.dupla_b_2].filter(Boolean)
+              : [jogo.dupla_a_1, jogo.dupla_a_2].filter(Boolean)
+            for (const adv of advs) {
+              if (!statsAdv[adv]) statsAdv[adv] = { jogos: 0, vitorias: 0 }
+              statsAdv[adv].jogos++
+              if (euVenci) statsAdv[adv].vitorias++
+            }
+          }
+          setParceiros(Object.entries(statsParc)
+            .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
+            .sort((a, b) => b.jogos - a.jogos))
+          setAdversarios(Object.entries(statsAdv)
+            .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
+            .sort((a, b) => b.jogos - a.jogos))
+        }
       }
       setLoading(false)
     }
@@ -190,6 +230,55 @@ export default function Perfil() {
           </div>
         )}
       </div>
+      {/* Parceiros */}
+      {parceiros.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 16px' }}>
+            🤝 Histórico com Parceiros
+          </h3>
+          {parceiros.map((p, i) => (
+            <div key={p.nome} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#e8f5e9' }}>{p.nome}</div>
+                <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+                  <span style={{ color: '#2d7a45' }}>{p.vitorias}V</span>
+                  <span style={{ color: '#c0392b' }}>{p.derrotas}D</span>
+                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>{p.jogos} jogos</span>
+                  <span style={{ color: '#f5c518', fontWeight: 700 }}>{p.pct}%</span>
+                </div>
+              </div>
+              <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
+                <div style={{ height: '100%', width: `${p.pct}%`, background: p.pct >= 50 ? '#2d7a45' : '#c0392b', borderRadius: 2 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Adversários */}
+      {adversarios.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 16px' }}>
+            ⚔️ Histórico contra Adversários
+          </h3>
+          {adversarios.map((a, i) => (
+            <div key={a.nome} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#e8f5e9' }}>{a.nome}</div>
+                <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+                  <span style={{ color: '#2d7a45' }}>{a.vitorias}V</span>
+                  <span style={{ color: '#c0392b' }}>{a.derrotas}D</span>
+                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>{a.jogos} jogos</span>
+                  <span style={{ color: '#f5c518', fontWeight: 700 }}>{a.pct}%</span>
+                </div>
+              </div>
+              <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
+                <div style={{ height: '100%', width: `${a.pct}%`, background: a.pct >= 50 ? '#2d7a45' : '#c0392b', borderRadius: 2 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
