@@ -4,25 +4,29 @@ import { useNavigate } from 'react-router-dom'
 
 export default function Classificacao() {
   const [aba, setAba] = useState('geral')
+  const [modoDescarte, setModoDescarte] = useState(false)
   const [jogadores, setJogadores] = useState([])
+  const [jogadoresDescarte, setJogadoresDescarte] = useState([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('classificacao')
-        .select('*')
-        .order('posicao', { ascending: true })
-      setJogadores(data || [])
+      const [{ data: sem }, { data: com }] = await Promise.all([
+        supabase.from('classificacao').select('*').order('posicao', { ascending: true }),
+        supabase.from('classificacao_com_descarte').select('*').order('posicao', { ascending: true }),
+      ])
+      setJogadores(sem || [])
+      setJogadoresDescarte(com || [])
       setLoading(false)
     }
     load()
   }, [])
 
-  const ouro = jogadores.filter(j => j.chave === 'ouro')
-  const prata = jogadores.filter(j => j.chave === 'prata')
-  const lista = aba === 'geral' ? jogadores : aba === 'ouro' ? ouro : prata
+  const dados = modoDescarte ? jogadoresDescarte : jogadores
+  const ouro = dados.filter(j => j.chave === 'ouro')
+  const prata = dados.filter(j => j.chave === 'prata')
+  const lista = aba === 'geral' ? dados : aba === 'ouro' ? ouro : prata
 
   function corPos(pos) {
     if (pos === 1) return 'var(--ouro)'
@@ -41,6 +45,34 @@ export default function Classificacao() {
     <div>
       <h1 className="section-title">🏆 Classificação</h1>
 
+      {/* Toggle Descarte */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#e8f5e9' }}>
+            {modoDescarte ? '✂️ Com descarte' : '📊 Sem descarte'}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+            {modoDescarte ? '2 piores resultados descartados' : 'Todos os pontos somados'}
+          </div>
+        </div>
+        <div
+          onClick={() => setModoDescarte(!modoDescarte)}
+          style={{
+            width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+            background: modoDescarte ? '#c9a227' : 'rgba(255,255,255,0.15)',
+            position: 'relative', transition: 'background 0.2s',
+          }}
+        >
+          <div style={{
+            position: 'absolute', top: 2,
+            left: modoDescarte ? 22 : 2,
+            width: 20, height: 20, borderRadius: '50%',
+            background: '#fff', transition: 'left 0.2s',
+          }} />
+        </div>
+      </div>
+
+      {/* Tabs Geral / Ouro / Prata */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
         {[
           { key: 'geral', label: 'Geral' },
@@ -69,8 +101,7 @@ export default function Classificacao() {
           </thead>
           <tbody>
             {lista.map((j) => (
-              <tr key={j.id} onClick={() => navigate(`/jogador/${j.id}`)}
-                style={{ cursor: 'pointer' }}>
+              <tr key={j.id} onClick={() => navigate(`/jogador/${j.id}`)} style={{ cursor: 'pointer' }}>
                 <td style={{ textAlign: 'center' }}>
                   <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', color: corPos(j.posicao) }}>
                     {j.posicao}
@@ -79,8 +110,7 @@ export default function Classificacao() {
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{
-                      width: '36px', height: '36px',
-                      borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                      width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
                       border: `1px solid ${j.chave === 'ouro' ? 'rgba(255,215,0,0.3)' : 'rgba(192,192,192,0.3)'}`,
                       background: 'linear-gradient(135deg, #1a4d2e, #0d2b1a)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center'
