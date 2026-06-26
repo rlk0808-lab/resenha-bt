@@ -248,16 +248,102 @@ export default function Admin({ session }) {
 
     if (!confirmacoes || confirmacoes.length < 8) { mostrarMensagem("Confirmados insuficientes (mínimo 8).", "erro"); return; }
 
-    // Usa diretamente a chave atual do banco de cada jogador confirmado
-    const jogadoresOuro = confirmacoes
-      .filter(c => c.jogadores?.chave === "ouro")
-      .map(c => c.jogadores?.nome);
-    const jogadoresPrata = confirmacoes
-      .filter(c => c.jogadores?.chave === "prata")
-      .map(c => c.jogadores?.nome);
+    // Busca ranking da última rodada finalizada para calcular subida/descida
+    const { data: rodadasFinalizadas } = await supabase.from("rodadas").select("*")
+      .eq("status", "finalizada").order("numero", { ascending: false });
+    const rodAntNormal = rodadasFinalizadas?.find(r => r.tipo !== "especial") || rodadasFinalizadas?.[0];
+
+    const nomeConfirmados = new Set(confirmacoes.map(c => c.jogadores?.nome));
+    let jogadoresOuro = [];
+    let jogadoresPrata = [];
+
+    if (!rodAntNormal) {
+      // Primeira rodada: usa chave do banco
+      jogadoresOuro = confirmacoes.filter(c => c.jogadores?.chave === "ouro").map(c => c.jogadores?.nome);
+      jogadoresPrata = confirmacoes.filter(c => c.jogadores?.chave === "prata").map(c => c.jogadores?.nome);
+    } else {
+      const { data: rankAnt } = await supabase.from("ranking_rodada")
+        .select("*, jogadores(id, nome)")
+        .eq("rodada_id", rodAntNormal.id)
+        .order("posicao", { ascending: true });
+
+      const rankOuro = (rankAnt || []).filter(r => r.chave === "ouro");
+      const rankPrata = (rankAnt || []).filter(r => r.chave === "prata");
+
+      // Os 3 últimos da Ouro descem
+      const ouroDescem = new Set(rankOuro.slice(-3).map(r => r.jogadores?.nome));
+
+      // Ouro que fica (posições 1-9 que confirmaram)
+      const ouroFicam = rankOuro
+        .filter(r => !ouroDescem.has(r.jogadores?.nome) && nomeConfirmados.has(r.jogadores?.nome))
+        .map(r => r.jogadores?.nome);
+
+      // Quantos dos que ficam faltaram → precisa compensar subindo mais da Prata
+      const ouroEfetivos = rankOuro.filter(r => !ouroDescem.has(r.jogadores?.nome));
+      const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
+      let totalSubir = 3 + qtdFaltasEfetivas;
+
+      // Regra de manutenção (posições 10-12 se mantêm quando há muitas faltas)
+      const ouroMantem = [];
+      [10, 11, 12].forEach((pos, i) => {
+        if (qtdFaltasEfetivas >= 4 + i) {
+          const jogPos = rankOuro.find(r => r.posicao === pos);
+          if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
+            ouroMantem.push(jogPos.jogadores?.nome);
+            totalSubir--;
+          }
+        }
+      });
+
+      // Prata que sobe
+      const prataTodos = rankPrata
+        .filter(r => nomeConfirmados.has(r.jogadores?.nome))
+        .sort((a, b) => a.posicao - b.posicao);
+      const prataSobem = prataTodos.slice(0, totalSubir).map(r => r.jogadores?.nome);
+
+      jogadoresOuro = [...ouroFicam, ...ouroMantem, ...prataSobem];
+      const nomesOuro = new Set(jogadoresOuro);
+
+      // Prata: todos os confirmados que não foram para Ouro
+      const nomesUsados = new Set(nomesOuro);
+      jogadoresPrata = [];
+      prataTodos.slice(totalSubir).forEach(r => {
+        if (!nomesUsados.has(r.jogadores?.nome)) { jogadoresPrata.push(r.jogadores?.nome); nomesUsados.add(r.jogadores?.nome); }
+      });
+      // Quem desceu da Ouro e confirmou
+      ouroDescem.forEach(nome => {
+        if (nomeConfirmados.has(nome) && !nomesUsados.has(nome)) { jogadoresPrata.push(nome); nomesUsados.add(nome); }
+      });
+      // Confirmados que não aparecem no ranking (estreantes)
+      confirmacoes.forEach(c => {
+        const nome = c.jogadores?.nome;
+        if (nome && !nomesUsados.has(nome)) { jogadoresPrata.push(nome); nomesUsados.add(nome); }
+      });
+
+      // Atualiza a chave dos jogadores no banco de acordo com a prévia
+      for (const nome of jogadoresOuro) {
+        const jog = confirmacoes.find(c => c.jogadores?.nome === nome)?.jogadores;
+        if (jog && jog.chave !== "ouro") await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jog.id);
+      }
+      for (const nome of jogadoresPrata) {
+        const jog = confirmacoes.find(c => c.jogadores?.nome === nome)?.jogadores;
+        if (jog && jog.chave !== "prata") await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
+      }
+    }
+
+    // Ajusta para garantir exatamente 12 em cada chave quando possível
+    // Se sobrar jogadores (ex: prata com 13), move para prata
+    // Se faltar (ex: ouro com 11), avisa mas permite continuar
+    console.log("Ouro:", jogadoresOuro.length, jogadoresOuro);
+    console.log("Prata:", jogadoresPrata.length, jogadoresPrata);
 
     if (jogadoresOuro.length < 4) { mostrarMensagem(`Ouro com ${jogadoresOuro.length} confirmados. Mínimo 4.`, "erro"); return; }
     if (jogadoresPrata.length < 4) { mostrarMensagem(`Prata com ${jogadoresPrata.length} confirmados. Mínimo 4.`, "erro"); return; }
+    
+    // Garante múltiplo de 4 em cada chave para o sorteio funcionar
+    while (jogadoresOuro.length % 4 !== 0 && jogadoresPrata.length > 4) {
+      jogadoresPrata.unshift(jogadoresOuro.pop());
+    }
 
     setPreviewFechamento({ rodada: rodadaAlvo, ouro: jogadoresOuro, prata: jogadoresPrata, total: confirmacoes.length, foraDoPrazo });
   }
