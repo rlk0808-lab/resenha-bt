@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import Regulamento from './Regulamento'
 import { Calendar, Trophy, Users, CheckCircle } from 'lucide-react'
 
 export default function Home() {
@@ -10,6 +11,7 @@ export default function Home() {
   const [cancelando, setCancelando] = useState(false)
   const [confirmacaoId, setConfirmacaoId] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [verRegulamento, setVerRegulamento] = useState(false)
   const [totalConfirmados, setTotalConfirmados] = useState(0)
   const [totalJogadores, setTotalJogadores] = useState(0)
 
@@ -234,6 +236,24 @@ export default function Home() {
           }} />
         </div>
       </div>
+      {/* Card Regulamento */}
+      <div onClick={() => setVerRegulamento(true)} style={{
+        background: 'linear-gradient(135deg, #112918, #0d2b1a)',
+        border: '1px solid rgba(201,162,39,0.2)',
+        borderRadius: 12, padding: '16px', marginTop: 16,
+        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 28 }}>📋</span>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#c9a227' }}>Regulamento</div>
+            <div style={{ fontSize: 12, color: '#7fb89a', marginTop: 2 }}>Torneio de Inverno 2026</div>
+          </div>
+        </div>
+        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 20 }}>›</span>
+      </div>
+
+      {verRegulamento && <Regulamento onFechar={() => setVerRegulamento(false)} />}
     </div>
   )
 }
