@@ -162,7 +162,7 @@ export default function Classificacao() {
           </div>
         )}
       </div>
+      {verEvolucao && <Evolucao onFechar={() => setVerEvolucao(false)} jogadorAtualId={jogadorAtualId} />}
     </div>
-    {verEvolucao && <Evolucao onFechar={() => setVerEvolucao(false)} jogadorAtualId={jogadorAtualId} />}
   )
 }
