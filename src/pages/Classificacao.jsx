@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import Evolucao from './Evolucao'
 
 export default function Classificacao() {
   const [aba, setAba] = useState('geral')
   const [modoDescarte, setModoDescarte] = useState(false)
+  const [verEvolucao, setVerEvolucao] = useState(false)
+  const [jogadorAtualId, setJogadorAtualId] = useState(null)
   const [jogadores, setJogadores] = useState([])
   const [jogadoresDescarte, setJogadoresDescarte] = useState([])
   const [loading, setLoading] = useState(true)
@@ -18,6 +21,12 @@ export default function Classificacao() {
       ])
       setJogadores(sem || [])
       setJogadoresDescarte(com || [])
+      // Busca jogador atual para pré-selecionar no gráfico
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: jog } = await supabase.from('jogadores').select('id').eq('user_id', user.id).limit(1)
+        if (jog?.[0]) setJogadorAtualId(jog[0].id)
+      }
       setLoading(false)
     }
     load()
@@ -43,7 +52,12 @@ export default function Classificacao() {
 
   return (
     <div>
-      <h1 className="section-title">🏆 Classificação</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <h1 className="section-title" style={{ margin: 0 }}>🏆 Classificação</h1>
+        <button onClick={() => setVerEvolucao(true)} style={{ background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 8, padding: '6px 12px', color: '#c9a227', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+          📈 Evolução
+        </button>
+      </div>
 
       {/* Toggle Descarte */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -149,5 +163,6 @@ export default function Classificacao() {
         )}
       </div>
     </div>
+    {verEvolucao && <Evolucao onFechar={() => setVerEvolucao(false)} jogadorAtualId={jogadorAtualId} />}
   )
 }
