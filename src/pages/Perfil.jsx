@@ -11,6 +11,10 @@ export default function Perfil() {
   const [parceiros, setParceiros] = useState([])
   const [adversarios, setAdversarios] = useState([])
   const [badges, setBadges] = useState([])
+  const [jogosDetalhados, setJogosDetalhados] = useState([])
+  const [h2hAberto, setH2hAberto] = useState(null)
+  const [sequencia, setSequencia] = useState(null)
+  const [melhorDupla, setMelhorDupla] = useState(null)
   const [loading, setLoading] = useState(true)
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
@@ -76,12 +80,36 @@ export default function Perfil() {
               if (euVenci) statsAdv[adv].vitorias++
             }
           }
-          setParceiros(Object.entries(statsParc)
+          const parceirosList = Object.entries(statsParc)
             .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
-            .sort((a, b) => b.jogos - a.jogos))
+            .sort((a, b) => b.jogos - a.jogos)
+          setParceiros(parceirosList)
           setAdversarios(Object.entries(statsAdv)
             .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
             .sort((a, b) => b.jogos - a.jogos))
+
+          // Salva jogos detalhados para H2H
+          setJogosDetalhados(jogos.filter(j => j.placar_a !== null && j.placar_b !== null))
+
+          // Melhor dupla (mínimo 2 jogos juntos)
+          const melhor = parceirosList.filter(p => p.jogos >= 2).sort((a, b) => b.pct - a.pct)[0] || null
+          setMelhorDupla(melhor)
+
+          // Sequência atual — últimos jogos ordenados
+          const jogosOrdenados = jogos
+            .filter(j => j.placar_a !== null && j.placar_b !== null)
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          
+          let seq = 0; let tipo = null
+          for (const jogo of jogosOrdenados) {
+            const estouNoA = jogo.dupla_a_1 === p.nome || jogo.dupla_a_2 === p.nome
+            const venci = estouNoA ? jogo.placar_a > jogo.placar_b : jogo.placar_b > jogo.placar_a
+            const t = venci ? 'V' : 'D'
+            if (tipo === null) { tipo = t; seq = 1 }
+            else if (t === tipo) seq++
+            else break
+          }
+          setSequencia(tipo ? { tipo, seq } : null)
         }
       }
       setLoading(false)
@@ -239,6 +267,35 @@ export default function Perfil() {
           </div>
         )}
       </div>
+      {/* Sequência e Melhor Dupla */}
+      {(sequencia || melhorDupla) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          {sequencia && (
+            <div className="card" style={{ textAlign: 'center', borderLeft: sequencia.tipo === 'V' ? '3px solid #2ecc71' : '3px solid #e74c3c' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: sequencia.tipo === 'V' ? '#2ecc71' : '#e74c3c', lineHeight: 1 }}>
+                {sequencia.seq}
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+                {sequencia.tipo === 'V' ? '🔥 Sequência V' : '❄️ Sequência D'}
+              </div>
+            </div>
+          )}
+          {melhorDupla && (
+            <div className="card" style={{ textAlign: 'center', borderLeft: '3px solid #c9a227' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: '#c9a227', lineHeight: 1 }}>
+                {melhorDupla.pct}%
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#e8f5e9', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {melhorDupla.nome}
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                🤝 Melhor Dupla
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Badges */}
       {badges.length > 0 && (() => {
         const BADGE_INFO = {
@@ -326,28 +383,63 @@ export default function Perfil() {
         </div>
       )}
 
-      {/* Adversários */}
+      {/* Adversários com H2H expandível */}
       {adversarios.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 16px' }}>
             ⚔️ Histórico contra Adversários
           </h3>
-          {adversarios.map((a, i) => (
-            <div key={a.nome} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#e8f5e9' }}>{a.nome}</div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
-                  <span style={{ color: '#2d7a45' }}>{a.vitorias}V</span>
-                  <span style={{ color: '#c0392b' }}>{a.derrotas}D</span>
-                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>{a.jogos} jogos</span>
-                  <span style={{ color: '#f5c518', fontWeight: 700 }}>{a.pct}%</span>
+          {adversarios.map((a, i) => {
+            const aberto = h2hAberto === a.nome
+            const jogosH2H = jogosDetalhados.filter(j => {
+              const estouNoA = j.dupla_a_1 === perfil?.nome || j.dupla_a_2 === perfil?.nome
+              const advs = estouNoA ? [j.dupla_b_1, j.dupla_b_2] : [j.dupla_a_1, j.dupla_a_2]
+              return advs.includes(a.nome)
+            })
+            return (
+              <div key={a.nome} style={{ borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
+                <div
+                  onClick={() => setH2hAberto(aberto ? null : a.nome)}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: aberto ? '#c9a227' : 'rgba(255,255,255,0.2)', fontSize: 12 }}>{aberto ? '▾' : '▸'}</span>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: aberto ? '#c9a227' : '#e8f5e9' }}>{a.nome}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, fontSize: 12 }}>
+                    <span style={{ color: '#2d7a45' }}>{a.vitorias}V</span>
+                    <span style={{ color: '#c0392b' }}>{a.derrotas}D</span>
+                    <span style={{ color: '#f5c518', fontWeight: 700 }}>{a.pct}%</span>
+                  </div>
                 </div>
+                <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginBottom: aberto ? 8 : 0 }}>
+                  <div style={{ height: '100%', width: `${a.pct}%`, background: a.pct >= 50 ? '#2d7a45' : '#c0392b', borderRadius: 2 }} />
+                </div>
+                {aberto && (
+                  <div style={{ marginBottom: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px' }}>
+                    {jogosH2H.map((j, ji) => {
+                      const estouNoA = j.dupla_a_1 === perfil?.nome || j.dupla_a_2 === perfil?.nome
+                      const venci = estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
+                      const meuPlacar = estouNoA ? j.placar_a : j.placar_b
+                      const advPlacar = estouNoA ? j.placar_b : j.placar_a
+                      const meuParc = estouNoA ? (j.dupla_a_1 === perfil?.nome ? j.dupla_a_2 : j.dupla_a_1) : (j.dupla_b_1 === perfil?.nome ? j.dupla_b_2 : j.dupla_b_1)
+                      return (
+                        <div key={ji} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: ji < jogosH2H.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                          <span style={{ fontSize: 14 }}>{venci ? '✅' : '❌'}</span>
+                          <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                            c/ {meuParc || '–'}
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: venci ? '#2ecc71' : '#e74c3c' }}>
+                            {meuPlacar} × {advPlacar}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
-                <div style={{ height: '100%', width: `${a.pct}%`, background: a.pct >= 50 ? '#2d7a45' : '#c0392b', borderRadius: 2 }} />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
