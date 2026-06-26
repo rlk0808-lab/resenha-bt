@@ -41,7 +41,7 @@ export default function Perfil() {
         // Busca badges conquistados
         const { data: bads } = await supabase
           .from('badges')
-          .select('tipo, rodadas(numero)')
+          .select('tipo, created_at, rodadas(numero)')
           .eq('jogador_id', p.id)
           .order('created_at', { ascending: false })
         setBadges(bads || [])
@@ -240,32 +240,66 @@ export default function Perfil() {
         )}
       </div>
       {/* Badges */}
-      {badges.length > 0 && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 16px' }}>
-            🏅 Conquistas
-          </h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {badges.map((b, i) => {
-              const info = {
-                campeao_ouro:  { emoji: '🥇', label: 'Campeão Ouro',  cor: '#c9a227' },
-                campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
-                dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
-                hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
-              }[b.tipo] || { emoji: '🏅', label: b.tipo, cor: '#7fb89a' }
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: info.cor + '18', border: '1px solid ' + info.cor + '44', borderRadius: 20 }}>
-                  <span style={{ fontSize: 16 }}>{info.emoji}</span>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: info.cor }}>{info.label}</div>
-                    {b.rodadas?.numero && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>R{b.rodadas.numero}</div>}
-                  </div>
+      {badges.length > 0 && (() => {
+        const BADGE_INFO = {
+          campeao_ouro:  { emoji: '🥇', label: 'Campeão Ouro',  cor: '#c9a227' },
+          campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
+          dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
+          hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
+        }
+
+        // Badge da última rodada = ativos
+        const ultimaRodada = badges[0]?.rodadas?.numero
+        const ativos = badges.filter(b => b.rodadas?.numero === ultimaRodada)
+        const historico = badges.filter(b => b.rodadas?.numero !== ultimaRodada)
+
+        const BadgeCard = ({ b, destaque }) => {
+          const info = BADGE_INFO[b.tipo] || { emoji: '🏅', label: b.tipo, cor: '#7fb89a' }
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: destaque ? '8px 14px' : '5px 10px',
+              background: info.cor + (destaque ? '22' : '10'),
+              border: '1px solid ' + info.cor + (destaque ? '66' : '33'),
+              borderRadius: 20,
+            }}>
+              <span style={{ fontSize: destaque ? 18 : 14 }}>{info.emoji}</span>
+              <div>
+                <div style={{ fontSize: destaque ? 13 : 11, fontWeight: 700, color: info.cor }}>{info.label}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>R{b.rodadas?.numero}</div>
+              </div>
+            </div>
+          )
+        }
+
+        return (
+          <>
+            {/* Badges ativos — última rodada */}
+            {ativos.length > 0 && (
+              <div className="card" style={{ marginBottom: 16, border: '1px solid rgba(201,162,39,0.2)', background: 'linear-gradient(135deg, #112918, #0d2b1a)' }}>
+                <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#c9a227', margin: '0 0 12px' }}>
+                  ✨ Conquistas da Rodada {ultimaRodada}
+                </h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {ativos.map((b, i) => <BadgeCard key={i} b={b} destaque={true} />)}
                 </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+              </div>
+            )}
+
+            {/* Histórico de badges */}
+            {historico.length > 0 && (
+              <div className="card" style={{ marginBottom: 16 }}>
+                <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 12px' }}>
+                  🏅 Histórico de Conquistas
+                </h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {historico.map((b, i) => <BadgeCard key={i} b={b} destaque={false} />)}
+                </div>
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {/* Parceiros */}
       {parceiros.length > 0 && (
