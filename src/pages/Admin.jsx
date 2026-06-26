@@ -111,7 +111,13 @@ export default function Admin({ session }) {
   async function carregarRodadas() {
     const { data } = await supabase.from("rodadas").select("*").order("numero", { ascending: true });
     setRodadas(data || []);
-    if (data && data.length > 0) setRodadaSelecionada(data[0]);
+    if (data && data.length > 0) {
+      // Seleciona a rodada ativa, ou proxima, ou a última
+      const ativa = data.find(r => r.status === "ativa")
+        || data.find(r => r.status === "proxima")
+        || data[data.length - 1];
+      setRodadaSelecionada(ativa);
+    }
   }
 
   const [confirmacoes, setConfirmacoes] = useState([]);
