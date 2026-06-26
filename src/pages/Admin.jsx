@@ -477,6 +477,39 @@ export default function Admin({ session }) {
     setCalculando(false);
   }
 
+  async function calcularBadges(rodadaId, ranking) {
+    if (!ranking) return;
+    const badges = [];
+
+    // 1. Campeão da Ouro (1º lugar)
+    const campeaoOuro = ranking.ouro?.[0];
+    if (campeaoOuro) {
+      const jog = jogadores.find(j => j.nome === campeaoOuro.nome);
+      if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_ouro" });
+    }
+
+    // 2. Campeão da Prata (1º lugar)
+    const campeaoPrata = ranking.prata?.[0];
+    if (campeaoPrata) {
+      const jog = jogadores.find(j => j.nome === campeaoPrata.nome);
+      if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_prata" });
+    }
+
+    // 3. Dia Perfeito (4 vitórias) e Hat-trick (3 vitórias)
+    const todosRanking = [...(ranking.ouro || []), ...(ranking.prata || [])];
+    for (const j of todosRanking) {
+      const jog = jogadores.find(jg => jg.nome === j.nome);
+      if (!jog) continue;
+      if (j.vitorias >= 4) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "dia_perfeito" });
+      else if (j.vitorias >= 3) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "hat_trick" });
+    }
+
+    // Insere badges (ignora duplicatas pelo UNIQUE constraint)
+    if (badges.length > 0) {
+      await supabase.from("badges").upsert(badges, { onConflict: "jogador_id,rodada_id,tipo", ignoreDuplicates: true });
+    }
+  }
+
   async function salvarPontuacao() {
     if (!rankingPreview) return;
     setCalculando(true);
@@ -554,6 +587,9 @@ export default function Admin({ session }) {
     } else {
       mostrarMensagem("✅ Pontuação salva e chaves atualizadas!");
     }
+
+    // Calcula badges da rodada
+    await calcularBadges(rodadaSelecionada.id, rankingPreview);
 
     await carregarJogadores();
     setRankingPreview(null);

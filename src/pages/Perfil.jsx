@@ -10,6 +10,7 @@ export default function Perfil() {
   const [temporadas, setTemporadas] = useState([])
   const [parceiros, setParceiros] = useState([])
   const [adversarios, setAdversarios] = useState([])
+  const [badges, setBadges] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
@@ -36,6 +37,14 @@ export default function Perfil() {
           .eq('jogador_id', p.id)
           .order('ano', { ascending: false })
         setTemporadas(temps || [])
+
+        // Busca badges conquistados
+        const { data: bads } = await supabase
+          .from('badges')
+          .select('tipo, rodadas(numero)')
+          .eq('jogador_id', p.id)
+          .order('created_at', { ascending: false })
+        setBadges(bads || [])
 
         // Busca jogos para calcular parceiros e adversários
         const { data: jogos } = await supabase
@@ -230,6 +239,34 @@ export default function Perfil() {
           </div>
         )}
       </div>
+      {/* Badges */}
+      {badges.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 16px' }}>
+            🏅 Conquistas
+          </h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {badges.map((b, i) => {
+              const info = {
+                campeao_ouro:  { emoji: '🥇', label: 'Campeão Ouro',  cor: '#c9a227' },
+                campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
+                dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
+                hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
+              }[b.tipo] || { emoji: '🏅', label: b.tipo, cor: '#7fb89a' }
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: info.cor + '18', border: '1px solid ' + info.cor + '44', borderRadius: 20 }}>
+                  <span style={{ fontSize: 16 }}>{info.emoji}</span>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: info.cor }}>{info.label}</div>
+                    {b.rodadas?.numero && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>R{b.rodadas.numero}</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Parceiros */}
       {parceiros.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
