@@ -1058,7 +1058,19 @@ async function enviarNotificacao(titulo, corpo, url, jogadorIds) {
 
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>{editandoId ? "✏️ Editando jogo" : "➕ Inserir jogo"}</h2>
-            <div style={styles.duplaSection}>
+<div style={{ marginBottom: 12 }}>
+              <div style={styles.duplaLabel}>Rodada Interna</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[1, 2, 3, 4].map(n => (
+                  <button key={n} onClick={() => setNovoJogo({ ...novoJogo, rodada_interna: n })}
+                    style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14,
+                      background: novoJogo.rodada_interna === n ? "#c9a227" : "#1e3d2a",
+                      color: novoJogo.rodada_interna === n ? "#0d2b1a" : "#7fb89a" }}>
+                    R{n}
+                  </button>
+                ))}
+              </div>
+            </div>            <div style={styles.duplaSection}>
               <div style={styles.duplaLabel}>{rodadaSelecionada?.tipo === "especial" ? "🔴 Time A" : "🎾 Dupla A"}</div>
               <div style={styles.duplaInputs}>
                 <SelectJogador value={novoJogo.dupla_a_1} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_a_1: v })} placeholder="Jogador 1" dupla="a" />
@@ -1088,15 +1100,16 @@ async function enviarNotificacao(titulo, corpo, url, jogadorIds) {
             {loading ? <p style={styles.loadingText}>Carregando...</p>
               : jogos.length === 0 ? <p style={styles.emptyText}>Nenhum jogo inserido ainda.</p>
               : (() => {
-                  // Agrupa jogos de 3 em 3 (por rodada interna)
-                  const grupos = [];
-                  for (let i = 0; i < jogos.length; i += 3) grupos.push(jogos.slice(i, i + 3));
-                  return grupos.map((grupo, gi) => (
-                    <div key={gi} style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
-                        Rodada {gi + 1}
-                      </div>
-                      {grupo.map((jogo) => {
+                 // Agrupa jogos por rodada_interna
+const gruposMap = {};
+jogos.forEach(j => { const r = j.rodada_interna || 1; if (!gruposMap[r]) gruposMap[r] = []; gruposMap[r].push(j); });
+const gruposOrdenados = Object.keys(gruposMap).map(Number).sort((a,b) => a-b);
+return gruposOrdenados.map((gi) => (
+  <div key={gi} style={{ marginBottom: 16 }}>
+    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
+      Rodada {gi}
+    </div>
+    {gruposMap[gi].map((jogo) => {
                         const temPlacar = jogo.placar_a !== null && jogo.placar_b !== null;
                         const venceuA = temPlacar && jogo.placar_a > jogo.placar_b;
                         const inline = placaresInline[jogo.id] || { a: jogo.placar_a ?? "", b: jogo.placar_b ?? "" };
