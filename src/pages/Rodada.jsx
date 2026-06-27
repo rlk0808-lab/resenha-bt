@@ -19,6 +19,7 @@ export default function Rodada() {
   const [detalheView, setDetalheView] = useState('jogos')
   const [loading, setLoading] = useState(true)
   const [gerandoImagem, setGerandoImagem] = useState(false)
+  const [aoVivo, setAoVivo] = useState(false)
   const [compartilhandoModo, setCompartilhandoModo] = useState('classificacao')
   const cardRef = useRef(null)
   const [comentarios, setComentarios] = useState([])
@@ -32,6 +33,31 @@ export default function Rodada() {
   useEffect(() => {
     if (rodadaDetalhe) carregarComentarios(rodadaDetalhe.id)
   }, [rodadaDetalhe])
+
+  useEffect(() => {
+    if (!proximaRodada) return
+    // Subscrição realtime para jogos da rodada ativa
+    const channel = supabase
+      .channel('jogos-ao-vivo')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'jogos',
+        filter: `rodada_id=eq.${proximaRodada.id}`
+      }, (payload) => {
+        setProximaJogos(prev => {
+          const idx = prev.findIndex(j => j.id === payload.new?.id)
+          if (payload.eventType === 'UPDATE' && idx >= 0) {
+            const novo = [...prev]
+            novo[idx] = payload.new
+            return novo
+          }
+          if (payload.eventType === 'INSERT') return [...prev, payload.new]
+          if (payload.eventType === 'DELETE') return prev.filter(j => j.id !== payload.old?.id)
+          return prev
+        })
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [proximaRodada])
 
   async function carregarDados() {
     setLoading(true)
@@ -713,9 +739,23 @@ export default function Rodada() {
 
       {proximaRodada ? (
         <>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px' }}>
-            {new Date(proximaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
-            {proximaRodada.tipo === 'especial' && <span style={{ color: ouro, marginLeft: 8 }}>Rodada Especial</span>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+              {new Date(proximaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
+              {proximaRodada.tipo === 'especial' && <span style={{ color: ouro, marginLeft: 8 }}>Rodada Especial</span>}
+            </div>
+            {proximaJogos.length > 0 && (
+              <button onClick={() => setAoVivo(!aoVivo)} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: aoVivo ? 'rgba(231,76,60,0.15)' : 'rgba(255,255,255,0.05)',
+                border: aoVivo ? '1px solid rgba(231,76,60,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 20, padding: '5px 12px', cursor: 'pointer',
+                color: aoVivo ? '#e74c3c' : 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: aoVivo ? '#e74c3c' : 'rgba(255,255,255,0.2)', display: 'inline-block', animation: aoVivo ? 'pulse 1s infinite' : 'none' }} />
+                {aoVivo ? 'AO VIVO' : 'Ao Vivo'}
+              </button>
+            )}
           </div>
           {proximaJogos.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
@@ -725,6 +765,13 @@ export default function Rodada() {
           ) : (
             <>
               <ToggleChave />
+              {aoVivo && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: 8, marginBottom: 12 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e74c3c', display: 'inline-block' }} />
+                  <span style={{ fontSize: 12, color: '#e74c3c', fontWeight: 700 }}>Atualizando em tempo real</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginLeft: 4 }}>Os placares atualizam automaticamente</span>
+                </div>
+              )}
               {renderJogos(proximaJogos, chaveVis)}
             </>
           )}
