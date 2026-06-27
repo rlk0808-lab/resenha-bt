@@ -81,6 +81,21 @@ export default function Layout({ session }) {
         </div>
 
         <button
+          onClick={() => setTemaClaro(!temaClaro)}
+          style={{
+            background: 'transparent',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '20px',
+            padding: '5px 10px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            color: 'rgba(255,255,255,0.7)',
+            marginRight: '6px',
+          }}
+        >
+          {temaClaro ? '🌙' : '☀️'}
+        </button>
+        <button
           onClick={handleLogout}
           style={{
             background: 'transparent',
