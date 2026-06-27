@@ -390,9 +390,22 @@ export default function Admin({ session }) {
     await carregarRodadas();
     setPreviewFechamento(null);
     setFechandoLista(false);
-    mostrarMensagem(`✅ Lista fechada! Sorteio publicado para a Rodada ${rodada.numero}.`);
+    await enviarNotificacao("Sorteio publicado!", `O sorteio da Rodada ${rodada.numero} foi publicado. Confira seus jogos!`, "/rodada");
+    mostrarMensagem(`Lista fechada! Sorteio publicado para a Rodada ${rodada.numero}.`);
   }
-
+async function enviarNotificacao(titulo, corpo, url, jogadorIds) {
+    try {
+      let query = supabase.from("push_subscriptions").select("endpoint, p256dh, auth");
+      if (jogadorIds && jogadorIds.length > 0) query = query.in("jogador_id", jogadorIds);
+      const { data: subs } = await query;
+      if (!subs || subs.length === 0) return;
+      await fetch("/api/send-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscriptions: subs, title: titulo, body: corpo, url })
+      });
+    } catch (e) { console.error("Erro notificacao:", e); }
+  }
   // ─── PONTUAÇÃO ───────────────────────────────────────────────────────────
   function calcularRankingLocal(jogosChave, chave) {
     const ehEspecial = rodadaSelecionada?.tipo === "especial";
