@@ -301,7 +301,7 @@ export default function Home() {
           {feedJogos.length > 0 && (
             <div style={{ marginTop: 4, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>🏅 Conquistas</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
                 {feedJogos.map((b, i) => {
                   const info = {
                     campeao_ouro:  { emoji: '🥇', label: 'Campeão Ouro',  cor: '#c9a227' },
@@ -316,6 +316,22 @@ export default function Home() {
                     </div>
                   )
                 })}
+              </div>
+              {/* Legenda dos badges */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>O que significam?</div>
+                {[
+                  { emoji: '🥇', label: 'Campeão Ouro', desc: '1º lugar na Chave Ouro', cor: '#c9a227' },
+                  { emoji: '🥈', label: 'Campeão Prata', desc: '1º lugar na Chave Prata', cor: '#8e9eab' },
+                  { emoji: '💪', label: 'Dia Perfeito', desc: 'Venceu os 4 jogos do dia', cor: '#2ecc71' },
+                  { emoji: '🔥', label: 'Hat-trick', desc: '3 vitórias no mesmo dia', cor: '#e74c3c' },
+                ].map(({ emoji, label, desc, cor }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 14, width: 20, textAlign: 'center' }}>{emoji}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: cor, minWidth: 110 }}>{label}</span>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{desc}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
