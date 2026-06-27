@@ -116,6 +116,17 @@ export default function Perfil() {
     setTimeout(() => setMensagem(null), 3000)
   }
 
+  async function resetarSenha() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) return
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: 'https://resenha-bt.vercel.app/perfil'
+    })
+    if (error) setMensagem({ texto: 'Erro ao enviar email.', tipo: 'erro' })
+    else setMensagem({ texto: 'Email de redefinicao enviado!', tipo: 'sucesso' })
+    setTimeout(() => setMensagem(null), 4000)
+  }
+
   async function handleFoto(e) {
     const file = e.target.files?.[0]
     if (!file || !perfil) return
@@ -186,6 +197,14 @@ export default function Perfil() {
               color: notifAtiva ? '#2ecc71' : 'rgba(255,255,255,0.5)', fontWeight: 600
             }}>
               {ativandoNotif ? '...' : notifAtiva ? 'Notificacoes ativas' : 'Ativar notificacoes'}
+            </button>
+            <button onClick={resetarSenha} style={{
+              marginTop: 6, background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 20, padding: '4px 12px', cursor: 'pointer', fontSize: 11,
+              color: 'rgba(255,255,255,0.4)', fontWeight: 600
+            }}>
+              🔑 Redefinir senha
             </button>
           </div>
         </div>
