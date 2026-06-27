@@ -21,8 +21,17 @@ export default function Rodada() {
   const [gerandoImagem, setGerandoImagem] = useState(false)
   const [compartilhandoModo, setCompartilhandoModo] = useState('classificacao')
   const cardRef = useRef(null)
+  const [comentarios, setComentarios] = useState([])
+  const [novoComentario, setNovoComentario] = useState('')
+  const [enviandoComentario, setEnviandoComentario] = useState(false)
+  const [jogadorAtual, setJogadorAtual] = useState(null)
+  const [jogadoresList, setJogadoresList] = useState([])
+  const [mencaoAtiva, setMencaoAtiva] = useState(null)
 
   useEffect(() => { carregarDados() }, [])
+  useEffect(() => {
+    if (rodadaDetalhe) carregarComentarios(rodadaDetalhe.id)
+  }, [rodadaDetalhe])
 
   async function carregarDados() {
     setLoading(true)
@@ -45,6 +54,15 @@ export default function Rodada() {
       .eq('status', 'finalizada').order('numero', { ascending: false })
     setRodadasFinalizadas(finalizadas || [])
     setLoading(false)
+
+    // Busca jogador atual e lista de jogadores para menções
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: jog } = await supabase.from('jogadores').select('id, nome').eq('user_id', user.id).limit(1)
+      if (jog?.[0]) setJogadorAtual(jog[0])
+    }
+    const { data: jogs } = await supabase.from('jogadores').select('id, nome').order('nome')
+    setJogadoresList(jogs || [])
   }
 
   async function abrirDetalhe(rodada) {
@@ -264,6 +282,65 @@ export default function Rodada() {
         })}
       </div>
     )
+  }
+
+  async function carregarComentarios(rodadaId) {
+    const { data } = await supabase
+      .from('comentarios')
+      .select('*, jogadores(nome, foto_url)')
+      .eq('rodada_id', rodadaId)
+      .order('created_at', { ascending: true })
+    setComentarios(data || [])
+  }
+
+  async function enviarComentario() {
+    if (!novoComentario.trim() || !jogadorAtual || !rodadaDetalhe) return
+    setEnviandoComentario(true)
+    const { error } = await supabase.from('comentarios').insert({
+      rodada_id: rodadaDetalhe.id,
+      jogador_id: jogadorAtual.id,
+      texto: novoComentario.trim()
+    })
+    if (!error) {
+      setNovoComentario('')
+      await carregarComentarios(rodadaDetalhe.id)
+    }
+    setEnviandoComentario(false)
+  }
+
+  async function deletarComentario(id) {
+    await supabase.from('comentarios').delete().eq('id', id)
+    setComentarios(prev => prev.filter(c => c.id !== id))
+  }
+
+  function renderTextoComMencoes(texto) {
+    const partes = texto.split(/(@\w+(?:\s\w+\.?)?)/g)
+    return partes.map((parte, i) => {
+      if (parte.startsWith('@')) {
+        return <span key={i} style={{ color: '#c9a227', fontWeight: 700 }}>{parte}</span>
+      }
+      return parte
+    })
+  }
+
+  function handleTextoComentario(e) {
+    const val = e.target.value
+    setNovoComentario(val)
+    // Detecta @ para sugerir menções
+    const match = val.match(/@(\w*)$/)
+    if (match) {
+      const busca = match[1].toLowerCase()
+      const sugestoes = jogadoresList.filter(j => j.nome.toLowerCase().includes(busca)).slice(0, 5)
+      setMencaoAtiva(sugestoes.length > 0 ? sugestoes : null)
+    } else {
+      setMencaoAtiva(null)
+    }
+  }
+
+  function inserirMencao(nome) {
+    const semUltimaArroba = novoComentario.replace(/@\w*$/, '')
+    setNovoComentario(semUltimaArroba + '@' + nome + ' ')
+    setMencaoAtiva(null)
   }
 
   async function compartilharImagem(modo) {
@@ -489,6 +566,74 @@ export default function Rodada() {
               letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer',
             }}>{label}</button>
           ))}
+        </div>
+
+        {/* Seção de Comentários */}
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 16px' }}>
+            💬 Comentários ({comentarios.length})
+          </h3>
+
+          {/* Lista de comentários */}
+          {comentarios.length === 0 ? (
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: '16px 0' }}>
+              Seja o primeiro a comentar!
+            </p>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              {comentarios.map((c, i) => (
+                <div key={c.id} style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #1a4d2e, #2d7a45)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '1px solid rgba(201,162,39,0.2)' }}>
+                    {c.jogadores?.foto_url
+                      ? <img src={c.jogadores.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontSize: 13, fontWeight: 700 }}>{c.jogadores?.nome?.charAt(0)}</span>
+                    }
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#c9a227' }}>{c.jogadores?.nome}</span>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                        {new Date(c.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                      </span>
+                      {jogadorAtual?.id === c.jogador_id && (
+                        <button onClick={() => deletarComentario(c.id)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: 11, marginLeft: 'auto', padding: 0 }}>🗑️</button>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#e8f5e9', lineHeight: 1.5 }}>{renderTextoComMencoes(c.texto)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Input de novo comentário */}
+          {jogadorAtual ? (
+            <div style={{ position: 'relative' }}>
+              {mencaoAtiva && (
+                <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#162f20', border: '1px solid #2a5a3a', borderRadius: 8, marginBottom: 4, zIndex: 10, overflow: 'hidden' }}>
+                  {mencaoAtiva.map(j => (
+                    <div key={j.id} onClick={() => inserirMencao(j.nome)} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#e8f5e9', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      @{j.nome}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={novoComentario}
+                  onChange={handleTextoComentario}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && enviarComentario()}
+                  placeholder="Comentar... use @ para mencionar"
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid #2a5a3a', borderRadius: 8, padding: '10px 12px', color: '#e8f5e9', fontSize: 13 }}
+                />
+                <button onClick={enviarComentario} disabled={enviandoComentario || !novoComentario.trim()} style={{ background: '#c9a227', border: 'none', borderRadius: 8, padding: '10px 16px', color: '#0d2b1a', fontWeight: 700, cursor: 'pointer', fontSize: 13, opacity: !novoComentario.trim() ? 0.5 : 1 }}>
+                  {enviandoComentario ? '...' : '➤'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>Faça login para comentar</p>
+          )}
         </div>
 
         {(() => {

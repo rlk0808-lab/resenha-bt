@@ -66,14 +66,9 @@ export default function Home() {
       const ultima = rodsFin?.[0]
       if (ultima) {
         setUltimaRodada(ultima)
-        const { data: jogos } = await supabase.from('jogos').select('*')
-          .eq('rodada_id', ultima.id)
-          .not('placar_a', 'is', null)
-          .order('chave', { ascending: true })
-        setFeedJogos(jogos || [])
 
         const { data: rank } = await supabase.from('ranking_rodada')
-          .select('*, jogadores(nome)')
+          .select('*, jogadores(nome, foto_url)')
           .eq('rodada_id', ultima.id)
           .order('posicao', { ascending: true })
         if (rank) {
@@ -82,6 +77,12 @@ export default function Home() {
             prata: rank.filter(r => r.chave === 'prata' || r.chave === 'time_a').slice(0, 3),
           })
         }
+
+        // Busca badges da última rodada
+        const { data: bads } = await supabase.from('badges')
+          .select('tipo, jogadores(nome)')
+          .eq('rodada_id', ultima.id)
+        setFeedJogos(bads || []) // reaproveitando estado para badges
       }
 
       // Total jogadores ativos
@@ -296,27 +297,28 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Alguns jogos em destaque */}
-          {feedJogos.slice(0, 4).map((j, i) => {
-            const venceuA = j.placar_a > j.placar_b
-            return (
-              <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ flex: 1, textAlign: 'right' }}>
-                  <div style={{ fontSize: 11, fontWeight: venceuA ? 700 : 400, color: venceuA ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.dupla_a_1}</div>
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{j.dupla_a_2}</div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 60, justifyContent: 'center' }}>
-                  <span style={{ fontSize: 16, fontFamily: "'Bebas Neue', sans-serif", color: venceuA ? '#f5c518' : 'rgba(255,255,255,0.3)' }}>{j.placar_a}</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>×</span>
-                  <span style={{ fontSize: 16, fontFamily: "'Bebas Neue', sans-serif", color: !venceuA ? '#f5c518' : 'rgba(255,255,255,0.3)' }}>{j.placar_b}</span>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, fontWeight: !venceuA ? 700 : 400, color: !venceuA ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.dupla_b_1}</div>
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{j.dupla_b_2}</div>
-                </div>
+          {/* Badges da rodada */}
+          {feedJogos.length > 0 && (
+            <div style={{ marginTop: 4, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>🏅 Conquistas</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {feedJogos.map((b, i) => {
+                  const info = {
+                    campeao_ouro:  { emoji: '🥇', label: 'Campeão Ouro',  cor: '#c9a227' },
+                    campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
+                    dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
+                    hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
+                  }[b.tipo] || { emoji: '🏅', label: b.tipo, cor: '#7fb89a' }
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: info.cor + '18', border: '1px solid ' + info.cor + '44', borderRadius: 16 }}>
+                      <span style={{ fontSize: 12 }}>{info.emoji}</span>
+                      <span style={{ fontSize: 11, color: info.cor, fontWeight: 700 }}>{b.jogadores?.nome}</span>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          )}
         </div>
       )}
 
