@@ -283,29 +283,26 @@
         const ouroFicam = rankOuro
           .filter(r => !ouroDescem.has(r.jogadores?.nome) && nomeConfirmados.has(r.jogadores?.nome))
           .map(r => r.jogadores?.nome);
-
-        // Quantos dos que ficam faltaram → precisa compensar subindo mais da Prata
-        const ouroEfetivos = rankOuro.filter(r => !ouroDescem.has(r.jogadores?.nome));
-        const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
-        let totalSubir = 3 + qtdFaltasEfetivas;
-
-        // Regra de manutenção (posições 10-12 se mantêm quando há muitas faltas)
-        const ouroMantem = [];
-        [10, 11, 12].forEach((pos, i) => {
-          if (qtdFaltasEfetivas >= 4 + i) {
-            const jogPos = rankOuro.find(r => r.posicao === pos);
-            if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
-              ouroMantem.push(jogPos.jogadores?.nome);
-              totalSubir--;
-            }
-          }
-        });
-
-        // Prata que sobe
+        // Prata confirmada ordenada por posicao
         const prataTodos = rankPrata
           .filter(r => nomeConfirmados.has(r.jogadores?.nome))
           .sort((a, b) => a.posicao - b.posicao);
-        const prataSobem = prataTodos.slice(0, totalSubir).map(r => r.jogadores?.nome);
+        const prataSobemFixos = prataTodos.slice(0, 3).map(r => r.jogadores?.nome);
+        const ouroEfetivos = rankOuro.filter(r => !ouroDescem.has(r.jogadores?.nome));
+        const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
+        const prataSobemExtras = prataTodos.slice(3, 3 + qtdFaltasEfetivas).map(r => r.jogadores?.nome);
+        const vagasRestantes = qtdFaltasEfetivas - prataSobemExtras.length;
+        const ouroMantem = [];
+        if (vagasRestantes > 0) {
+          [10, 11, 12].slice(0, vagasRestantes).forEach(pos => {
+            const jogPos = rankOuro.find(r => r.posicao === pos);
+            if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
+              ouroMantem.push(jogPos.jogadores?.nome);
+            }
+          });
+        }
+        const prataSobem = [...prataSobemFixos, ...prataSobemExtras];
+        jogadoresOuro = [...ouroFicam, ...ouroMantem, ...prataSobem];
 
         jogadoresOuro = [...ouroFicam, ...ouroMantem, ...prataSobem];
         const nomesOuro = new Set(jogadoresOuro);
