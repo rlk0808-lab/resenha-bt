@@ -14,6 +14,9 @@ export default function Home() {
   const [verRegulamento, setVerRegulamento] = useState(false)
   const [totalConfirmados, setTotalConfirmados] = useState(0)
   const [totalJogadores, setTotalJogadores] = useState(0)
+  const [ultimaRodada, setUltimaRodada] = useState(null)
+  const [feedJogos, setFeedJogos] = useState([])
+  const [feedRanking, setFeedRanking] = useState({ ouro: [], prata: [] })
 
   useEffect(() => {
     async function load() {
@@ -54,6 +57,30 @@ export default function Home() {
             .from('confirmacoes').select('id')
             .eq('rodada_id', proxima.id).eq('status', 'confirmado')
           setTotalConfirmados(todos?.length || 0)
+        }
+      }
+
+      // Busca última rodada finalizada e seus resultados
+      const { data: rodsFin } = await supabase.from('rodadas').select('*')
+        .eq('status', 'finalizada').order('numero', { ascending: false }).limit(1)
+      const ultima = rodsFin?.[0]
+      if (ultima) {
+        setUltimaRodada(ultima)
+        const { data: jogos } = await supabase.from('jogos').select('*')
+          .eq('rodada_id', ultima.id)
+          .not('placar_a', 'is', null)
+          .order('chave', { ascending: true })
+        setFeedJogos(jogos || [])
+
+        const { data: rank } = await supabase.from('ranking_rodada')
+          .select('*, jogadores(nome)')
+          .eq('rodada_id', ultima.id)
+          .order('posicao', { ascending: true })
+        if (rank) {
+          setFeedRanking({
+            ouro: rank.filter(r => r.chave === 'ouro' || r.chave === 'time_b').slice(0, 3),
+            prata: rank.filter(r => r.chave === 'prata' || r.chave === 'time_a').slice(0, 3),
+          })
         }
       }
 
@@ -236,6 +263,63 @@ export default function Home() {
           }} />
         </div>
       </div>
+      {/* Feed de Resultados */}
+      {ultimaRodada && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#c9a227', textTransform: 'uppercase', letterSpacing: 1 }}>
+                🏆 Últimos Resultados
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                Rodada {ultimaRodada.numero} · {new Date(ultimaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' })}
+              </div>
+            </div>
+          </div>
+
+          {/* Pódio Ouro e Prata */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+            {[
+              { label: ultimaRodada.tipo === 'especial' ? '🔵 Time B' : '🥇 Ouro', lista: feedRanking.ouro, cor: ultimaRodada.tipo === 'especial' ? '#3498db' : '#c9a227' },
+              { label: ultimaRodada.tipo === 'especial' ? '🔴 Time A' : '🥈 Prata', lista: feedRanking.prata, cor: ultimaRodada.tipo === 'especial' ? '#e74c3c' : '#8e9eab' },
+            ].map(({ label, lista, cor }) => (
+              <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 12px', border: '1px solid ' + cor + '33' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{label}</div>
+                {lista.map((r, i) => (
+                  <div key={r.jogadores?.nome} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: i === 0 ? cor : 'rgba(255,255,255,0.3)', fontWeight: 700, width: 16 }}>{i + 1}º</span>
+                    <span style={{ fontSize: 12, color: i === 0 ? '#e8f5e9' : 'rgba(255,255,255,0.5)', fontWeight: i === 0 ? 700 : 400 }}>{r.jogadores?.nome}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: cor, fontWeight: 700 }}>{r.pontos_liga}pts</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Alguns jogos em destaque */}
+          {feedJogos.slice(0, 4).map((j, i) => {
+            const venceuA = j.placar_a > j.placar_b
+            return (
+              <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ flex: 1, textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, fontWeight: venceuA ? 700 : 400, color: venceuA ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.dupla_a_1}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{j.dupla_a_2}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 60, justifyContent: 'center' }}>
+                  <span style={{ fontSize: 16, fontFamily: "'Bebas Neue', sans-serif", color: venceuA ? '#f5c518' : 'rgba(255,255,255,0.3)' }}>{j.placar_a}</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>×</span>
+                  <span style={{ fontSize: 16, fontFamily: "'Bebas Neue', sans-serif", color: !venceuA ? '#f5c518' : 'rgba(255,255,255,0.3)' }}>{j.placar_b}</span>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: !venceuA ? 700 : 400, color: !venceuA ? '#f5c518' : 'rgba(255,255,255,0.4)' }}>{j.dupla_b_1}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{j.dupla_b_2}</div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Card Regulamento */}
       <div onClick={() => setVerRegulamento(true)} style={{
         background: 'linear-gradient(135deg, #112918, #0d2b1a)',
