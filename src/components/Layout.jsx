@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Home, Trophy, Calendar, User, LogOut, Settings, ClipboardList } from 'lucide-react'
@@ -11,6 +12,17 @@ const ADMINS = [
 export default function Layout({ session }) {
   const navigate = useNavigate()
   const isAdmin = ADMINS.includes(session?.user?.id)
+  const [temaClaro, setTemaClaro] = useState(() => localStorage.getItem('tema') === 'light')
+
+  useEffect(() => {
+    if (temaClaro) {
+      document.body.classList.add('light')
+      localStorage.setItem('tema', 'light')
+    } else {
+      document.body.classList.remove('light')
+      localStorage.setItem('tema', 'dark')
+    }
+  }, [temaClaro])
 
   async function handleLogout() {
     await supabase.auth.signOut()
