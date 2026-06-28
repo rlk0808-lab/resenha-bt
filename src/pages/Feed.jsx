@@ -68,7 +68,7 @@ export default function Feed() {
       texto: textoFinal,
     })
     // Notifica mencionados
-    const mencoes = textoFinal.match(/@(\w+(?:\s\w+\.?)?)/g)
+    const mencoes = textoFinal.match(/@[\w.]+/g)
     if (mencoes && mencoes.length > 0) {
       const nomesMencionados = mencoes.map(m => m.slice(1).trim())
       const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
