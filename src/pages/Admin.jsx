@@ -176,7 +176,11 @@
       const pa = parseInt(p.a);
       const pb = parseInt(p.b);
       if (isNaN(pa) || isNaN(pb)) return;
-      await supabase.from("jogos").update({ placar_a: pa, placar_b: pb }).eq("id", jogoId);
+      const tieA = placaresInline[jogoId]?.ta !== undefined && placaresInline[jogoId]?.ta !== "" ? parseInt(placaresInline[jogoId].ta) : undefined;
+    const tieB = placaresInline[jogoId]?.tb !== undefined && placaresInline[jogoId]?.tb !== "" ? parseInt(placaresInline[jogoId].tb) : undefined;
+    const updateData = { placar_a: pa, placar_b: pb };
+    if (!isNaN(tieA) && !isNaN(tieB)) { updateData.tie_a = tieA; updateData.tie_b = tieB; }
+    await supabase.from("jogos").update(updateData).eq("id", jogoId);
       await carregarJogos();
       setPlacaresInline(prev => { const n = {...prev}; delete n[jogoId]; return n; });
     }
@@ -186,7 +190,7 @@
       setNovoJogo({
         dupla_a_1: jogo.dupla_a_1 || "", dupla_a_2: jogo.dupla_a_2 || "",
         dupla_b_1: jogo.dupla_b_1 || "", dupla_b_2: jogo.dupla_b_2 || "",
-        placar_a: jogo.placar_a ?? "", placar_b: jogo.placar_b ?? "",
+        placar_a: jogo.placar_a ?? "", placar_b: jogo.placar_b ?? "", tie_a: jogo.tie_a ?? "", tie_b: jogo.tie_b ?? "",
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -435,7 +439,7 @@
       }
 
       const jogadoresList = Object.values(stats);
-      jogadoresList.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : b.saldo !== a.saldo ? b.saldo - a.saldo : ((confrontos[b.nome]?.[a.nome] || 0) - (confrontos[a.nome]?.[b.nome] || 0)));
+      jogadoresList.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : b.saldo !== a.saldo ? b.saldo - a.saldo : (b.saldoTie || 0) !== (a.saldoTie || 0) ? (b.saldoTie || 0) - (a.saldoTie || 0) : ((confrontos[b.nome]?.[a.nome] || 0) - (confrontos[a.nome]?.[b.nome] || 0)));
 
       if (ehEspecial) {
         // Rodada especial: times definidos pelo campo chave do jogo
@@ -1084,6 +1088,14 @@
                 <input type="number" min="0" max="7" placeholder="0" value={novoJogo.placar_a} onChange={(e) => setNovoJogo({ ...novoJogo, placar_a: e.target.value })} style={styles.placarInput} />
                 <span style={styles.placarVs}>×</span>
                 <input type="number" min="0" max="7" placeholder="0" value={novoJogo.placar_b} onChange={(e) => setNovoJogo({ ...novoJogo, placar_b: e.target.value })} style={styles.placarInput} />
+              {(novoJogo.placar_a === "6" && novoJogo.placar_b === "5") || (novoJogo.placar_a === "5" && novoJogo.placar_b === "6") ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, justifyContent: "center" }}>
+                  <span style={{ fontSize: 11, color: "#7fb89a" }}>Tie break:</span>
+                  <input type="number" min="0" max="15" placeholder="0" value={novoJogo.tie_a} onChange={(e) => setNovoJogo({ ...novoJogo, tie_a: e.target.value })} style={{ width: 48, textAlign: "center", background: "#0f2d1e", border: "1px solid #c9a227", borderRadius: 8, padding: "4px 0", color: "#c9a227", fontSize: 18, fontFamily: "'Bebas Neue', sans-serif" }} />
+                  <span style={{ color: "#5a8a6a", fontSize: 12 }}>x</span>
+                  <input type="number" min="0" max="15" placeholder="0" value={novoJogo.tie_b} onChange={(e) => setNovoJogo({ ...novoJogo, tie_b: e.target.value })} style={{ width: 48, textAlign: "center", background: "#0f2d1e", border: "1px solid #c9a227", borderRadius: 8, padding: "4px 0", color: "#c9a227", fontSize: 18, fontFamily: "'Bebas Neue', sans-serif" }} />
+                </div>
+              ) : null}
               </div>
               <div style={styles.duplaSection}>
                 <div style={styles.duplaLabel}>{rodadaSelecionada?.tipo === "especial" ? "🔵 Time B" : "🎾 Dupla B"}</div>
