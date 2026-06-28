@@ -17,6 +17,7 @@ export default function Home() {
   const [ultimaRodada, setUltimaRodada] = useState(null)
   const [feedJogos, setFeedJogos] = useState([])
   const [feedRanking, setFeedRanking] = useState({ ouro: [], prata: [] })
+  const [jogadorSemana, setJogadorSemana] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -83,6 +84,16 @@ export default function Home() {
           .select('tipo, jogadores(nome)')
           .eq('rodada_id', ultima.id)
         setFeedJogos(bads || []) // reaproveitando estado para badges
+      }
+
+      // Jogador da semana — maior pontuação na última rodada
+      if (ultima) {
+        const { data: pontsRodada } = await supabase
+          .from('pontuacao').select('pontos, vitorias, jogadores(nome, foto_url, chave)')
+          .eq('rodada_id', ultima.id)
+          .order('pontos', { ascending: false })
+          .limit(1)
+        if (pontsRodada && pontsRodada[0]) setJogadorSemana(pontsRodada[0])
       }
 
       // Total jogadores ativos
