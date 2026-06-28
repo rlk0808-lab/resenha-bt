@@ -101,12 +101,17 @@ export default function PerfilJogador() {
   const totalDerrotas = totalJogos - totalVitorias
   const pctGeral = totalJogos > 0 ? Math.round(totalVitorias / totalJogos * 100) : 0
 
-  // H2H com jogador atual
+  // H2H com jogador atual — apenas jogos onde foram ADVERSÁRIOS
   const nomeAtual = jogadorAtual?.nome
   const nomeJogador = jogador.nome
   const jogosH2H = jogosDetalhados.filter(j => {
-    const jogadoresJogo = [j.dupla_a_1, j.dupla_a_2, j.dupla_b_1, j.dupla_b_2].filter(Boolean)
-    return nomeAtual && jogadoresJogo.includes(nomeAtual)
+    if (!nomeAtual) return false
+    const euNoA = j.dupla_a_1 === nomeAtual || j.dupla_a_2 === nomeAtual
+    const euNoB = j.dupla_b_1 === nomeAtual || j.dupla_b_2 === nomeAtual
+    const eleNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
+    const eleNoB = j.dupla_b_1 === nomeJogador || j.dupla_b_2 === nomeJogador
+    // Adversários: eu no time A e ele no B, ou eu no B e ele no A
+    return (euNoA && eleNoB) || (euNoB && eleNoA)
   })
   const h2hStats = { vitorias: 0, derrotas: 0 }
   for (const j of jogosH2H) {
@@ -195,11 +200,27 @@ export default function PerfilJogador() {
             const meuParc = estouNoA
               ? (j.dupla_a_1 === nomeAtual ? j.dupla_a_2 : j.dupla_a_1)
               : (j.dupla_b_1 === nomeAtual ? j.dupla_b_2 : j.dupla_b_1)
+            const parcEle = estouNoA
+              ? (j.dupla_b_1 === nomeJogador ? j.dupla_b_2 : j.dupla_b_1)
+              : (j.dupla_a_1 === nomeJogador ? j.dupla_a_2 : j.dupla_a_1)
             return (
-              <div key={ji} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                <span style={{ fontSize: 14 }}>{venci ? '✅' : '❌'}</span>
-                <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>c/ {meuParc || '–'}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: venci ? '#2ecc71' : '#e74c3c' }}>{meuPlacar} × {advPlacar}</div>
+              <div key={ji} style={{ padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>{venci ? '✅' : '❌'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: '#e8f5e9' }}>
+                      <span style={{ color: '#2ecc71', fontWeight: 600 }}>{nomeAtual}</span>
+                      {meuParc ? <span style={{ color: 'rgba(255,255,255,0.5)' }}> / {meuParc}</span> : null}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#e8f5e9', marginTop: 2 }}>
+                      <span style={{ color: '#e74c3c', fontWeight: 600 }}>{nomeJogador}</span>
+                      {parcEle ? <span style={{ color: 'rgba(255,255,255,0.5)' }}> / {parcEle}</span> : null}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: venci ? '#2ecc71' : '#e74c3c', fontFamily: "'Bebas Neue', sans-serif" }}>
+                    {meuPlacar} × {advPlacar}
+                  </div>
+                </div>
               </div>
             )
           })}
