@@ -20,6 +20,7 @@ export default function Rodada() {
   const [loading, setLoading] = useState(true)
   const [gerandoImagem, setGerandoImagem] = useState(false)
   const [aoVivo, setAoVivo] = useState(false)
+  const [rankingVivo, setRankingVivo] = useState({ ouro: [], prata: [] })
   const [reacoes, setReacoes] = useState({})
   const [compartilhandoModo, setCompartilhandoModo] = useState('classificacao')
   const cardRef = useRef(null)
@@ -72,6 +73,7 @@ export default function Rodada() {
         event: '*', schema: 'public', table: 'jogos',
         filter: `rodada_id=eq.${proximaRodada.id}`
       }, (payload) => {
+        calcularRankingVivo([...proximaJogos])
         setProximaJogos(prev => {
           const idx = prev.findIndex(j => j.id === payload.new?.id)
           if (payload.eventType === 'UPDATE' && idx >= 0) {
@@ -206,6 +208,35 @@ export default function Rodada() {
         })),
       })
     }
+  }
+
+  function calcularRankingVivo(jogos) {
+    const PONTOS_OURO = [25,22,20,18,16,14,12,10,8,8,8,8]
+    const calcChave = (jogosChave, chave) => {
+      const stats = {}
+      for (const j of jogosChave) {
+        if (j.placar_a === null || j.placar_b === null) continue
+        const {dupla_a_1,dupla_a_2,dupla_b_1,dupla_b_2,placar_a,placar_b} = j
+        for (const n of [dupla_a_1,dupla_a_2,dupla_b_1,dupla_b_2].filter(Boolean))
+          if (!stats[n]) stats[n] = {nome:n, pts:0, vitorias:0, saldo:0}
+        const venceuA = placar_a > placar_b
+        const saldo = Math.abs(placar_a - placar_b)
+        const venc = venceuA ? [dupla_a_1,dupla_a_2] : [dupla_b_1,dupla_b_2]
+        const perd = venceuA ? [dupla_b_1,dupla_b_2] : [dupla_a_1,dupla_a_2]
+        venc.filter(Boolean).forEach(n => { stats[n].pts += 15+saldo; stats[n].vitorias += 1; stats[n].saldo += saldo })
+        perd.filter(Boolean).forEach(n => { stats[n].pts += venceuA ? placar_b : placar_a; stats[n].saldo -= saldo })
+      }
+      return Object.values(stats)
+        .sort((a,b) => b.pts !== a.pts ? b.pts-a.pts : b.saldo-a.saldo)
+        .map((j,idx) => ({
+          ...j,
+          pontosDia: j.pts,
+          pontos: (chave === 'ouro' ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === 'prata' && idx === 0 ? 3 : 0)
+        }))
+    }
+    const ouro = calcChave(jogos.filter(j => j.chave === 'ouro'), 'ouro')
+    const prata = calcChave(jogos.filter(j => j.chave === 'prata'), 'prata')
+    setRankingVivo({ ouro, prata })
   }
 
   function renderJogo(jogo, i, corBorda) {
@@ -386,16 +417,13 @@ export default function Rodada() {
       texto
     })
     if (!error) {
-      const textoEnviado = texto
       setNovoComentario('')
       await carregarComentarios(rodadaDetalhe.id)
       // Notifica jogadores mencionados
-      const mencoes = textoEnviado.match(/@[\w.]+/g)
+      const mencoes = texto.match(/@([\w\s.]+?)(?=\s@|\s*$|[^\w\s.])/g)
       if (mencoes && mencoes.length > 0) {
-        const prefixos = mencoes.map(m => m.slice(1).trim())
-        // Busca todos jogadores e filtra por prefixo (cobre nomes com espaco como "Joao V.")
-        const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
-        const jogs = (todosJogs || []).filter(j => prefixos.some(p => j.nome.startsWith(p) || j.nome === p))
+        const nomesMencionados = mencoes.map(m => m.slice(1).trim())
+        const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
         if (jogs && jogs.length > 0) {
           const ids = jogs.map(j => j.id)
           const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
@@ -849,11 +877,46 @@ export default function Rodada() {
             <>
               <ToggleChave />
               {aoVivo && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: 8, marginBottom: 12 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e74c3c', display: 'inline-block' }} />
-                  <span style={{ fontSize: 12, color: '#e74c3c', fontWeight: 700 }}>Atualizando em tempo real</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginLeft: 4 }}>Os placares atualizam automaticamente</span>
-                </div>
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: 8, marginBottom: 12 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#e74c3c', display: 'inline-block' }} />
+                    <span style={{ fontSize: 12, color: '#e74c3c', fontWeight: 700 }}>Atualizando em tempo real</span>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginLeft: 4 }}>Os placares atualizam automaticamente</span>
+                  </div>
+                  {(rankingVivo.ouro.length > 0 || rankingVivo.prata.length > 0) && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+                        📊 Classificacao do dia (parcial)
+                      </div>
+                      {rankingVivo.ouro.length > 0 && (
+                        <div className="card" style={{ marginBottom: 8, padding: 12, borderLeft: '3px solid #c9a227' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a227', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>🥇 Ouro</div>
+                          {rankingVivo.ouro.map((j, idx) => (
+                            <div key={j.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: idx < rankingVivo.ouro.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                              <div style={{ width: 20, fontSize: 11, fontWeight: 700, color: idx === 0 ? '#c9a227' : 'rgba(255,255,255,0.4)', textAlign: 'center' }}>{idx+1}</div>
+                              <div style={{ flex: 1, fontSize: 13, color: '#e8f5e9' }}>{j.nome}</div>
+                              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{j.vitorias}V</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#c9a227' }}>{j.pontos}pts</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {rankingVivo.prata.length > 0 && (
+                        <div className="card" style={{ padding: 12, borderLeft: '3px solid #8e9eab' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#8e9eab', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>🥈 Prata</div>
+                          {rankingVivo.prata.map((j, idx) => (
+                            <div key={j.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: idx < rankingVivo.prata.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                              <div style={{ width: 20, fontSize: 11, fontWeight: 700, color: idx === 0 ? '#8e9eab' : 'rgba(255,255,255,0.4)', textAlign: 'center' }}>{idx+1}</div>
+                              <div style={{ flex: 1, fontSize: 13, color: '#e8f5e9' }}>{j.nome}</div>
+                              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{j.vitorias}V</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#8e9eab' }}>{j.pontos}pts</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
               {renderJogos(proximaJogos, chaveVis)}
             </>
