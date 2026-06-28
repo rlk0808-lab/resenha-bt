@@ -18,7 +18,7 @@ const BADGE_INFO = {
 
 export default function Stats() {
   const [badges, setBadges] = useState([])
-  const [pontuacao, setPontuacao] = useState([])
+  const [jogos, setJogos] = useState([])
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState('badges')
 
@@ -29,10 +29,10 @@ export default function Stats() {
         .select('tipo, jogadores(nome, foto_url)')
       setBadges(b || [])
 
-      const { data: p } = await supabase
-        .from('pontuacao')
-        .select('jogador_id, vitorias, jogadores(nome, foto_url)')
-      setPontuacao(p || [])
+      const { data: jogos } = await supabase
+        .from('jogos')
+        .select('dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2, placar_a, placar_b, chave')
+      setJogos(jogos || [])
 
       setLoading(false)
     }
@@ -52,16 +52,30 @@ export default function Stats() {
     return { tipo, info, ranking }
   }).filter(r => r.ranking.length > 0)
 
-  // Stats gerais
+  // Stats gerais - calcula vitórias por chave direto dos jogos
   const statsJogadores = {}
-  pontuacao.forEach(p => {
-    const nome = p.jogadores?.nome
-    if (!nome) return
-    if (!statsJogadores[nome]) statsJogadores[nome] = { nome, foto: p.jogadores?.foto_url, vitorias: 0, rodadas: 0 }
-    statsJogadores[nome].vitorias += p.vitorias || 0
-    statsJogadores[nome].rodadas++
+  jogos.forEach(j => {
+    const venceuA = j.placar_a > j.placar_b
+    const vencedores = venceuA ? [j.dupla_a_1, j.dupla_a_2] : [j.dupla_b_1, j.dupla_b_2]
+    vencedores.filter(Boolean).forEach(nome => {
+      if (!statsJogadores[nome]) statsJogadores[nome] = { nome, vitoriasOuro: 0, vitoriasPrata: 0 }
+      if (j.chave === 'ouro') statsJogadores[nome].vitoriasOuro++
+      else statsJogadores[nome].vitoriasPrata++
+    })
   })
-  const rankingVitorias = Object.values(statsJogadores).sort((a,b) => b.vitorias - a.vitorias).slice(0, 10)
+  const rankingVitorias = Object.values(statsJogadores).map(j => ({
+    ...j,
+    total: j.vitoriasOuro + j.vitoriasPrata
+  })).sort((a,b) => b.total - a.total).slice(0, 10)
+
+  // Pneu — conta quantas vezes cada jogador tomou 6x0
+  const pneuCount = {}
+  jogos.forEach(j => {
+    const perdeuA = j.placar_a === 0 && j.placar_b === 6
+    const perdeuB = j.placar_b === 0 && j.placar_a === 6
+    if (perdeuA) [j.dupla_a_1, j.dupla_a_2].filter(Boolean).forEach(n => { pneuCount[n] = (pneuCount[n] || 0) + 1 })
+    if (perdeuB) [j.dupla_b_1, j.dupla_b_2].filter(Boolean).forEach(n => { pneuCount[n] = (pneuCount[n] || 0) + 1 })
+  })
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
@@ -115,6 +129,24 @@ export default function Stats() {
         </div>
       )}
 
+      {aba === 'badges' && Object.keys(pneuCount).length > 0 && (
+        <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid #fd79a8', marginTop: -4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 20 }}>🍩</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#fd79a8' }}>Pneu — Contador de 6x0</span>
+          </div>
+          {Object.entries(pneuCount).sort((a,b) => b[1]-a[1]).slice(0,5).map(([nome, count], idx) => (
+            <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+              <div style={{ width: 20, fontSize: 12, fontWeight: 700, color: '#fd79a8', textAlign: 'center' }}>
+                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx+1}
+              </div>
+              <div style={{ flex: 1, fontSize: 13, color: '#e8f5e9' }}>{nome}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#fd79a8' }}>{count}x 🍩</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {aba === 'vitorias' && (
         <div className="card">
           <div style={{ fontSize: 12, fontWeight: 700, color: '#c9a227', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
@@ -125,16 +157,21 @@ export default function Stats() {
               <div style={{ width: 24, fontSize: 13, fontWeight: 700, color: idx < 3 ? '#c9a227' : 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
                 {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx+1}
               </div>
-              {j.foto ? (
-                <img src={j.foto} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(201,162,39,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#c9a227' }}>
-                  {j.nome[0]}
-                </div>
-              )}
               <div style={{ flex: 1, fontSize: 14, color: '#e8f5e9' }}>{j.nome}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#2ecc71' }}>{j.vitorias}V</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{j.rodadas} rodadas</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: '#c9a227' }}>Ouro</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#c9a227' }}>{j.vitoriasOuro}V</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: '#8e9eab' }}>Prata</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#8e9eab' }}>{j.vitoriasPrata}V</div>
+                </div>
+                <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: 8 }}>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Total</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#2ecc71' }}>{j.total}V</div>
+                </div>
+              </div>
             </div>
           ))}
         </div>
