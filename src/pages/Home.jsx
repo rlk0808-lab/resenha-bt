@@ -276,6 +276,34 @@ export default function Home() {
         </div>
       </div>
       {/* Feed de Resultados */}
+      {jogadorSemana && ultimaRodada && (
+        <div className="card" style={{ marginBottom: 16, background: 'linear-gradient(135deg, #1a3a1a, #0d2b1a)', border: '1px solid rgba(245,197,24,0.3)', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: -20, right: -20, fontSize: 80, opacity: 0.05 }}>🏆</div>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#c9a227', marginBottom: 10 }}>
+            ⭐ Jogador da Semana — R{ultimaRodada.numero}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', border: '2px solid #c9a227', background: 'linear-gradient(135deg, #1a4d2e, #2d7a45)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {jogadorSemana.jogadores?.foto_url
+                ? <img src={jogadorSemana.jogadores.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span style={{ fontSize: 22, fontFamily: "'Bebas Neue', sans-serif" }}>{jogadorSemana.jogadores?.nome?.charAt(0)}</span>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: 1, color: '#ffffff', lineHeight: 1 }}>
+                {jogadorSemana.jogadores?.nome}
+              </div>
+              <div style={{ fontSize: 12, color: jogadorSemana.jogadores?.chave === 'ouro' ? '#c9a227' : '#8e9eab', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>
+                {jogadorSemana.jogadores?.chave === 'ouro' ? 'Chave Ouro' : 'Chave Prata'}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: '#f5c518', lineHeight: 1 }}>{jogadorSemana.pontos}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>pts na rodada</div>
+              <div style={{ fontSize: 11, color: '#2ecc71', marginTop: 2 }}>{jogadorSemana.vitorias}V na rodada</div>
+            </div>
+          </div>
+        </div>
+      )}
       {ultimaRodada && (
         <div className="card" style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
