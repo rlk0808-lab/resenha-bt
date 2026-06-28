@@ -9,6 +9,17 @@ export default function Login() {
   const [resetando, setResetando] = useState(false)
   const [msgReset, setMsgReset] = useState('')
 
+  async function handleReset() {
+    if (!email) { setErro('Digite seu email para resetar a senha'); return }
+    setResetando(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://resenha-bt.vercel.app'
+    })
+    if (error) setErro('Erro ao enviar email. Verifique o email digitado.')
+    else setMsgReset('Email enviado! Verifique sua caixa de entrada.')
+    setResetando(false)
+  }
+
   async function handleLogin(e) {
     e.preventDefault()
     setLoading(true)
