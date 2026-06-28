@@ -385,6 +385,7 @@ export default function Rodada() {
       jogador_id: jogadorAtual.id,
       texto
     })
+    console.log('erro comentario:', error)
     if (!error) {
       const textoEnviado = texto
       setNovoComentario('')
