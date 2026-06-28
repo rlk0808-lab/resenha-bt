@@ -923,22 +923,22 @@
           </div>
         )}
 
-        {rodadaProxima && !previewFechamento && (
-          <div style={{ background: "#1a3020", border: "1px solid #2a5a3a", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: "#7fb89a", marginBottom: 10 }}>📢 Lembretes de Confirmacao</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => enviarLembrete("Faltam 2 dias!", "A lista de confirmacao fecha na quarta as 10h. Confirme sua presenca!")} style={{ flex: 1, background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, color: "#7fb89a", padding: "8px 4px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                📅 2 dias
-              </button>
-              <button onClick={() => enviarLembrete("Falta 1 dia!", "A lista fecha amanha as 10h. Confirme sua presenca!")} style={{ flex: 1, background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, color: "#7fb89a", padding: "8px 4px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                📅 1 dia
-              </button>
-              <button onClick={() => enviarLembrete("Ultimas 12 horas!", "A lista fecha hoje as 10h. Corra e confirme sua presenca!")} style={{ flex: 1, background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, color: "#c0392b", padding: "8px 4px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                ⚡ 12h
-              </button>
-            </div>
+        <div style={{ background: "#1a3020", border: "1px solid #2a5a3a", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#7fb89a", marginBottom: 10 }}>📢 Lembretes de Confirmacao</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => enviarLembrete("Faltam 2 dias!", "A lista de confirmacao fecha na quarta as 10h. Confirme sua presenca!")} style={{ flex: 1, background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, color: "#7fb89a", padding: "8px 4px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+              📅 2 dias
+            </button>
+            <button onClick={() => enviarLembrete("Falta 1 dia!", "A lista fecha amanha as 10h. Confirme sua presenca!")} style={{ flex: 1, background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, color: "#7fb89a", padding: "8px 4px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+              📅 1 dia
+            </button>
+            <button onClick={() => enviarLembrete("Ultimas 12 horas!", "A lista fecha hoje as 10h. Corra e confirme sua presenca!")} style={{ flex: 1, background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, color: "#c0392b", padding: "8px 4px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+              ⚡ 12h
+            </button>
           </div>
+        </div>
 
+        {rodadaProxima && !previewFechamento && (
           <div style={styles.cardDestaque}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
               <span style={{ fontSize: 24 }}>🔒</span>
