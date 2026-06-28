@@ -389,7 +389,7 @@ export default function Rodada() {
       setNovoComentario('')
       await carregarComentarios(rodadaDetalhe.id)
       // Notifica jogadores mencionados
-      const mencoes = texto.match(/@([\w\s.]+?)(?=\s@|\s*$|[^\w\s.])/g)
+      const mencoes = texto.match(/@([\w]+(?:\s[\w]+\.?)?)/g)
       if (mencoes && mencoes.length > 0) {
         const nomesMencionados = mencoes.map(m => m.slice(1).trim())
         const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
