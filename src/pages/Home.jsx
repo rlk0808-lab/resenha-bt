@@ -385,7 +385,13 @@ export default function Home() {
                   ))}
                 </div>
               )}
-              {/* Legenda dos badges */}
+            </div>
+            )
+          })()}
+
+          {/* Legenda dos badges */}
+          {feedJogos.length > 0 && (
+            <div style={{ marginTop: 8 }}>
               <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>O que significam?</div>
                 {[
