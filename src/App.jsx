@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import RedefinirSenha from './pages/RedefinirSenha'
+import Stats from './pages/Stats'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="feed" element={<Feed />} />
           <Route path="jogador/:id" element={<PerfilJogador />} />
           <Route path="confirmacao" element={<Confirmacao session={session} />} />
+          <Route path="stats" element={<Stats />} />
         </Route>
       </Routes>
     </BrowserRouter>
