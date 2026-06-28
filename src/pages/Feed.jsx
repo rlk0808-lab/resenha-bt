@@ -62,10 +62,33 @@ export default function Feed() {
   async function publicarPost() {
     if (!texto.trim() || !jogadorAtual) return
     setEnviando(true)
+    const textoFinal = texto.trim()
     await supabase.from('feed_posts').insert({
       jogador_id: jogadorAtual.id,
-      texto: texto.trim(),
+      texto: textoFinal,
     })
+    // Notifica mencionados
+    const mencoes = textoFinal.match(/@(\w+(?:\s\w+\.?)?)/g)
+    if (mencoes && mencoes.length > 0) {
+      const nomesMencionados = mencoes.map(m => m.slice(1).trim())
+      const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
+      if (jogs && jogs.length > 0) {
+        const ids = jogs.map(j => j.id)
+        const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
+        if (subs && subs.length > 0) {
+          await fetch('/api/send-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subscriptions: subs,
+              title: jogadorAtual.nome + ' te mencionou no Feed!',
+              body: textoFinal,
+              url: '/feed'
+            })
+          })
+        }
+      }
+    }
     setTexto('')
     setEnviando(false)
   }
