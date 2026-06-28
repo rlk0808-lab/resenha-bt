@@ -41,7 +41,7 @@ export default function Perfil() {
         setTemporadas(temps || [])
 
         const { data: bads } = await supabase
-          .from('badges').select('tipo, created_at, rodadas(numero)')
+          .from('badges').select('tipo, created_at, rodada_id, rodadas(id, numero)')
           .eq('jogador_id', p.id).order('created_at', { ascending: false })
         setBadges(bads || [])
 
@@ -104,6 +104,18 @@ export default function Perfil() {
     }
     load()
   }, [])
+
+  async function compartilharBadge(tipo, rodadaId) {
+    if (!perfil) return
+    await supabase.from('feed_posts').insert({
+      jogador_id: perfil.id,
+      texto: '',
+      badge_tipo: tipo,
+      rodada_id: rodadaId || null,
+    })
+    setMensagem({ texto: 'Badge compartilhado no Feed!', tipo: 'sucesso' })
+    setTimeout(() => setMensagem(null), 3000)
+  }
 
   async function ativarNotificacoes() {
     if (!perfil) return
@@ -299,6 +311,15 @@ export default function Perfil() {
                 <div style={{ fontSize: destaque ? 13 : 11, fontWeight: 700, color: info.cor }}>{info.label}</div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>R{b.rodadas?.numero}</div>
               </div>
+              {destaque && (
+                <button onClick={() => compartilharBadge(b.tipo, b.rodadas?.id)} style={{
+                  marginLeft: 4, background: 'transparent', border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 12, padding: '2px 8px', cursor: 'pointer', fontSize: 10,
+                  color: 'rgba(255,255,255,0.4)'
+                }}>
+                  Compartilhar
+                </button>
+              )}
             </div>
           )
         }
