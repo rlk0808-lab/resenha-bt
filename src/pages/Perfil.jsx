@@ -334,22 +334,53 @@ export default function Perfil() {
           <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', margin: '0 0 16px' }}>
             Historico com Parceiros
           </h3>
-          {parceiros.map((p, i) => (
-            <div key={p.nome} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#e8f5e9' }}>{p.nome}</div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
-                  <span style={{ color: '#2d7a45' }}>{p.vitorias}V</span>
-                  <span style={{ color: '#c0392b' }}>{p.derrotas}D</span>
-                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>{p.jogos} jogos</span>
-                  <span style={{ color: '#f5c518', fontWeight: 700 }}>{p.pct}%</span>
+          {parceiros.map((p, i) => {
+            const aberto = h2hAberto === ('parc_' + p.nome)
+            const jogosParc = jogosDetalhados.filter(j => {
+              const estouNoA = j.dupla_a_1 === perfil?.nome || j.dupla_a_2 === perfil?.nome
+              const parceiro = estouNoA
+                ? (j.dupla_a_1 === perfil?.nome ? j.dupla_a_2 : j.dupla_a_1)
+                : (j.dupla_b_1 === perfil?.nome ? j.dupla_b_2 : j.dupla_b_1)
+              return parceiro === p.nome
+            })
+            return (
+              <div key={p.nome} style={{ borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
+                <div onClick={() => setH2hAberto(aberto ? null : ('parc_' + p.nome))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: aberto ? '#c9a227' : 'rgba(255,255,255,0.2)', fontSize: 12 }}>{aberto ? '▾' : '▸'}</span>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: aberto ? '#c9a227' : '#e8f5e9' }}>{p.nome}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+                    <span style={{ color: '#2d7a45' }}>{p.vitorias}V</span>
+                    <span style={{ color: '#c0392b' }}>{p.derrotas}D</span>
+                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>{p.jogos} jogos</span>
+                    <span style={{ color: '#f5c518', fontWeight: 700 }}>{p.pct}%</span>
+                  </div>
                 </div>
+                <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginBottom: aberto ? 8 : 0 }}>
+                  <div style={{ height: '100%', width: `${p.pct}%`, background: p.pct >= 50 ? '#2d7a45' : '#c0392b', borderRadius: 2 }} />
+                </div>
+                {aberto && (
+                  <div style={{ marginBottom: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px' }}>
+                    {jogosParc.map((j, ji) => {
+                      const estouNoA = j.dupla_a_1 === perfil?.nome || j.dupla_a_2 === perfil?.nome
+                      const venci = estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
+                      const meuPlacar = estouNoA ? j.placar_a : j.placar_b
+                      const advPlacar = estouNoA ? j.placar_b : j.placar_a
+                      const advs = estouNoA ? [j.dupla_b_1, j.dupla_b_2].filter(Boolean) : [j.dupla_a_1, j.dupla_a_2].filter(Boolean)
+                      return (
+                        <div key={ji} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: ji < jogosParc.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                          <span style={{ fontSize: 14 }}>{venci ? '✅' : '❌'}</span>
+                          <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>vs {advs.join(' / ')}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: venci ? '#2ecc71' : '#e74c3c' }}>{meuPlacar} x {advPlacar}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
-                <div style={{ height: '100%', width: `${p.pct}%`, background: p.pct >= 50 ? '#2d7a45' : '#c0392b', borderRadius: 2 }} />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
