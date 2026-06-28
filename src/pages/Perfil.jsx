@@ -18,6 +18,7 @@ export default function Perfil() {
   const [sequencia, setSequencia] = useState(null)
   const [melhorDupla, setMelhorDupla] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [titulos, setTitulos] = useState({ ouro: 0, prata: 0 })
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
   const [notifAtiva, setNotifAtiva] = useState(false)
@@ -47,6 +48,10 @@ export default function Perfil() {
           .from('badges').select('tipo, created_at, rodada_id, rodadas(id, numero)')
           .eq('jogador_id', p.id).order('created_at', { ascending: false })
         setBadges(bads || [])
+        setTitulos({
+          ouro: (bads || []).filter(b => b.tipo === 'campeao_ouro').length,
+          prata: (bads || []).filter(b => b.tipo === 'campeao_prata').length,
+        })
 
         // Busca mapa de nome -> id dos jogadores
         const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
@@ -233,6 +238,24 @@ export default function Perfil() {
           </div>
         </div>
       </div>
+
+      {/* Titulos */}
+      {(titulos.ouro > 0 || titulos.prata > 0) && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          {titulos.ouro > 0 && (
+            <div className="card" style={{ flex: 1, textAlign: 'center', background: 'linear-gradient(135deg, rgba(201,162,39,0.1), rgba(201,162,39,0.05))', border: '1px solid rgba(201,162,39,0.3)' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: '#c9a227', lineHeight: 1 }}>{titulos.ouro}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#c9a227', marginTop: 4 }}>Titulos Ouro</div>
+            </div>
+          )}
+          {titulos.prata > 0 && (
+            <div className="card" style={{ flex: 1, textAlign: 'center', background: 'linear-gradient(135deg, rgba(142,158,171,0.1), rgba(142,158,171,0.05))', border: '1px solid rgba(142,158,171,0.3)' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: '#8e9eab', lineHeight: 1 }}>{titulos.prata}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#8e9eab', marginTop: 4 }}>Titulos Prata</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
