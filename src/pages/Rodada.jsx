@@ -385,7 +385,6 @@ export default function Rodada() {
       jogador_id: jogadorAtual.id,
       texto
     })
-    console.log('erro comentario:', error)
     if (!error) {
       const textoEnviado = texto
       setNovoComentario('')
@@ -397,11 +396,9 @@ export default function Rodada() {
         // Busca todos jogadores e filtra por prefixo (cobre nomes com espaco como "Joao V.")
         const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
         const jogs = (todosJogs || []).filter(j => prefixos.some(p => j.nome.startsWith(p) || j.nome === p))
-        console.log('prefixos:', prefixos, 'jogs:', jogs?.map(j=>j.nome))
         if (jogs && jogs.length > 0) {
           const ids = jogs.map(j => j.id)
           const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
-        console.log('ids:', ids, 'subs:', subs)
           if (subs && subs.length > 0) {
             await fetch('/api/send-notification', {
               method: 'POST',
