@@ -309,33 +309,82 @@ export default function Home() {
           </div>
 
           {/* Badges da rodada */}
-          {feedJogos.length > 0 && (
-            <div style={{ marginTop: 4, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>🏅 Conquistas</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                {feedJogos.map((b, i) => {
-                  const info = {
-                    campeao_ouro:  { emoji: '🥇', label: 'Campeao Ouro',  cor: '#c9a227' },
-                    campeao_prata: { emoji: '🥈', label: 'Campeao Prata', cor: '#8e9eab' },
-                    dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
-                    hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
-                    artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12' },
-                    relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f' },
-                    ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c' },
-                    dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72' },
-                    congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff' },
-                    pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8' },
-                    dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3' },
-                    queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031' },
-                  }[b.tipo] || { emoji: '🏅', label: b.tipo, cor: '#7fb89a' }
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: info.cor + '18', border: '1px solid ' + info.cor + '44', borderRadius: 16 }}>
-                      <span style={{ fontSize: 12 }}>{info.emoji}</span>
-                      <span style={{ fontSize: 11, color: info.cor, fontWeight: 700 }}>{b.jogadores?.nome}</span>
-                    </div>
-                  )
-                })}
+          {feedJogos.length > 0 && (() => {
+            const BADGE_INFO = {
+              campeao_ouro:  { emoji: '🥇', label: 'Campeao Ouro',  cor: '#c9a227', positivo: true },
+              campeao_prata: { emoji: '🥈', label: 'Campeao Prata', cor: '#8e9eab', positivo: true },
+              dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71', positivo: true },
+              hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c', positivo: true },
+              artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12', positivo: true },
+              relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f', positivo: true },
+              ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c', positivo: true },
+              dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72', positivo: false },
+              congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff', positivo: false },
+              pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8', positivo: false },
+              dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3', positivo: false },
+              queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031', positivo: false },
+            }
+
+            // Agrupa por jogador
+            const porJogador = {}
+            for (const b of feedJogos) {
+              const nome = b.jogadores?.nome
+              if (!nome) continue
+              if (!porJogador[nome]) porJogador[nome] = []
+              porJogador[nome].push(b)
+            }
+
+            const positivos = feedJogos.filter(b => BADGE_INFO[b.tipo]?.positivo !== false)
+            const negativos = feedJogos.filter(b => BADGE_INFO[b.tipo]?.positivo === false)
+
+            // Agrupa positivos por jogador
+            const positivosPorJog = {}
+            for (const b of positivos) {
+              const nome = b.jogadores?.nome; if (!nome) continue
+              if (!positivosPorJog[nome]) positivosPorJog[nome] = []
+              positivosPorJog[nome].push(b)
+            }
+            const negativosPorJog = {}
+            for (const b of negativos) {
+              const nome = b.jogadores?.nome; if (!nome) continue
+              if (!negativosPorJog[nome]) negativosPorJog[nome] = []
+              negativosPorJog[nome].push(b)
+            }
+
+            const BadgeJogador = ({ nome, badges, destaque }) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#e8f5e9', minWidth: 60 }}>{nome}</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {badges.map((b, i) => {
+                    const info = BADGE_INFO[b.tipo] || { emoji: '🏅', cor: '#7fb89a' }
+                    return (
+                      <span key={i} style={{ fontSize: 14, padding: '2px 6px', background: info.cor + '20', border: '1px solid ' + info.cor + '40', borderRadius: 12 }} title={info.label}>
+                        {info.emoji}
+                      </span>
+                    )
+                  })}
+                </div>
               </div>
+            )
+
+            return (
+            <div style={{ marginTop: 4, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              {Object.keys(positivosPorJog).length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: '#2ecc71', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>🏆 Destaques</div>
+                  {Object.entries(positivosPorJog).map(([nome, badges]) => (
+                    <BadgeJogador key={nome} nome={nome} badges={badges} />
+                  ))}
+                </div>
+              )}
+              {Object.keys(negativosPorJog).length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: '#e74c3c', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>😅 Micos</div>
+                  {Object.entries(negativosPorJog).map(([nome, badges]) => (
+                    <BadgeJogador key={nome} nome={nome} badges={badges} />
+                  ))}
+                </div>
+              )}
               {/* Legenda dos badges */}
               <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>O que significam?</div>
