@@ -491,44 +491,67 @@
       setCalculando(false);
     }
 
-    async function calcularBadges(rodadaId, ranking) {
-      if (!ranking) return;
-
-      // Busca jogadores direto do banco para garantir dados atualizados
-      const { data: jogsDB } = await supabase.from("jogadores").select("id, nome");
-      if (!jogsDB) return;
-
-      const findJog = (nome) => jogsDB.find(j => j.nome === nome);
-      const badges = [];
-
-      // 1. Campeao da Ouro (1o lugar)
-      const campeaoOuro = ranking.ouro?.[0];
-      if (campeaoOuro) {
-        const jog = findJog(campeaoOuro.nome);
-        if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_ouro" });
+  async function calcularBadges(rodadaId, ranking) {
+    if (!ranking) return;
+    const { data: jogsDB } = await supabase.from("jogadores").select("id, nome, chave");
+    if (!jogsDB) return;
+    const { data: jogosRodada } = await supabase.from("jogos").select("*").eq("rodada_id", rodadaId);
+    const findJog = (nome) => jogsDB.find(j => j.nome === nome);
+    const badges = [];
+    const todosRanking = [...(ranking.ouro || []), ...(ranking.prata || [])];
+    const campeaoOuro = ranking.ouro?.[0];
+    if (campeaoOuro) { const jog = findJog(campeaoOuro.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_ouro" }); }
+    const campeaoPrata = ranking.prata?.[0];
+    if (campeaoPrata) { const jog = findJog(campeaoPrata.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_prata" }); }
+    const ultimoOuro = ranking.ouro?.[(ranking.ouro?.length || 0) - 1];
+    if (ultimoOuro) { const jog = findJog(ultimoOuro.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "congelado" }); }
+    const ultimoPrata = ranking.prata?.[(ranking.prata?.length || 0) - 1];
+    if (ultimoPrata) { const jog = findJog(ultimoPrata.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "congelado" }); }
+    for (const j of todosRanking) {
+      const jog = findJog(j.nome); if (!jog) continue;
+      if (j.vitorias >= 4) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "dia_perfeito" });
+      else if (j.vitorias >= 3) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "hat_trick" });
+      if (j.vitorias === 0) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "dia_negro" });
+    }
+    for (const j of (ranking.ouro || []).slice(-3)) { const jog = findJog(j.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "queda_livre" }); }
+    for (const j of (ranking.prata || []).slice(0, 3)) { const jog = findJog(j.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "ascensao" }); }
+    if (jogosRodada) {
+      const statsJog = {};
+      for (const jogo of jogosRodada) {
+        if (jogo.placar_a === null || jogo.placar_b === null) continue;
+        const lados = [
+          { nome: jogo.dupla_a_1, meu: jogo.placar_a, adv: jogo.placar_b },
+          { nome: jogo.dupla_a_2, meu: jogo.placar_a, adv: jogo.placar_b },
+          { nome: jogo.dupla_b_1, meu: jogo.placar_b, adv: jogo.placar_a },
+          { nome: jogo.dupla_b_2, meu: jogo.placar_b, adv: jogo.placar_a },
+        ].filter(x => x.nome);
+        for (const { nome, meu, adv } of lados) {
+          if (!statsJog[nome]) statsJog[nome] = { saldo: 0, tomouPneu: false, vitoriasRelamp: 0, derrotas: 0, todosDiff3: true, total: 0 };
+          const venceu = meu > adv;
+          statsJog[nome].saldo += (meu - adv);
+          statsJog[nome].total++;
+          if (venceu) { if (adv <= 1) statsJog[nome].vitoriasRelamp++; }
+          else {
+            statsJog[nome].derrotas++;
+            if (meu === 0) statsJog[nome].tomouPneu = true;
+            if (adv - meu < 3) statsJog[nome].todosDiff3 = false;
+          }
+        }
       }
-
-      // 2. Campeao da Prata (1o lugar)
-      const campeaoPrata = ranking.prata?.[0];
-      if (campeaoPrata) {
-        const jog = findJog(campeaoPrata.nome);
-        if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_prata" });
-      }
-
-      // 3. Dia Perfeito (4 vitorias) e Hat-trick (3 vitorias)
-      const todosRanking = [...(ranking.ouro || []), ...(ranking.prata || [])];
-      for (const j of todosRanking) {
-        const jog = findJog(j.nome);
-        if (!jog) continue;
-        if (j.vitorias >= 4) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "dia_perfeito" });
-        else if (j.vitorias >= 3) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "hat_trick" });
-      }
-
-      // Insere badges
-      if (badges.length > 0) {
-        await supabase.from("badges").upsert(badges, { onConflict: "jogador_id,rodada_id,tipo", ignoreDuplicates: true });
+      const maxSaldo = Math.max(...Object.values(statsJog).map(s => s.saldo));
+      for (const [nome, s] of Object.entries(statsJog)) {
+        const jog = findJog(nome); if (!jog) continue;
+        if (s.saldo === maxSaldo && maxSaldo > 0) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "artilheiro" });
+        if (s.tomouPneu) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "pneu" });
+        if (s.derrotas === s.total && s.total > 0 && s.todosDiff3) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "dormindo" });
+        const rankJ = todosRanking.find(r => r.nome === nome);
+        if (rankJ && rankJ.vitorias === s.total && s.vitoriasRelamp === s.total && s.total > 0) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "relampago" });
       }
     }
+    if (badges.length > 0) {
+      await supabase.from("badges").upsert(badges, { onConflict: "jogador_id,rodada_id,tipo", ignoreDuplicates: true });
+    }
+  }
 
     async function salvarPontuacao() {
       if (!rankingPreview) return;

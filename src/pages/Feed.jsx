@@ -8,6 +8,14 @@ const BADGE_INFO = {
   campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
   dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
   hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
+  artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12' },
+  relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f' },
+  ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c' },
+  dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72' },
+  congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff' },
+  pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8' },
+  dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3' },
+  queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031' },
 }
 
 export default function Feed() {

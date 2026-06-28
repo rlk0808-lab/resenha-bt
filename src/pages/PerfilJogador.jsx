@@ -102,18 +102,14 @@ export default function PerfilJogador() {
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="spinner" /></div>
   if (!jogador) return <div><button onClick={() => navigate(-1)} style={btnVoltar}>← Voltar</button><p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Jogador não encontrado.</p></div>
 
+  const totalJogos = adversarios.reduce((s, a) => s + a.jogos, 0)
+  const totalVitorias = adversarios.reduce((s, a) => s + a.vitorias, 0)
+  const totalDerrotas = totalJogos - totalVitorias
+  const pctGeral = totalJogos > 0 ? Math.round(totalVitorias / totalJogos * 100) : 0
+
   // H2H com jogador atual
   const nomeAtual = jogadorAtual?.nome
   const nomeJogador = jogador.nome
-
-  // Conta jogos únicos
-  const totalJogos = jogosDetalhados.length
-  const totalVitorias = jogosDetalhados.filter(j => {
-    const estouNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
-    return estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
-  }).length
-  const totalDerrotas = totalJogos - totalVitorias
-  const pctGeral = totalJogos > 0 ? Math.round(totalVitorias / totalJogos * 100) : 0
 
   // Jogos como adversários
   const jogosH2H = jogosDetalhados.filter(j => {
@@ -154,6 +150,14 @@ export default function PerfilJogador() {
     campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
     dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
     hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
+  artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12' },
+  relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f' },
+  ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c' },
+  dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72' },
+  congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff' },
+  pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8' },
+  dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3' },
+  queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031' },
   }
 
   function Barra({ pct }) {
