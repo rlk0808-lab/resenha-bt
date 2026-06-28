@@ -340,10 +340,18 @@ export default function Home() {
               <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>O que significam?</div>
                 {[
-                  { emoji: '🥇', label: 'Campeão Ouro', desc: '1º lugar na Chave Ouro', cor: '#c9a227' },
-                  { emoji: '🥈', label: 'Campeão Prata', desc: '1º lugar na Chave Prata', cor: '#8e9eab' },
+                  { emoji: '🥇', label: 'Campeao Ouro', desc: '1o lugar na Chave Ouro', cor: '#c9a227' },
+                  { emoji: '🥈', label: 'Campeao Prata', desc: '1o lugar na Chave Prata', cor: '#8e9eab' },
                   { emoji: '💪', label: 'Dia Perfeito', desc: 'Venceu os 4 jogos do dia', cor: '#2ecc71' },
-                  { emoji: '🔥', label: 'Hat-trick', desc: '3 vitórias no mesmo dia', cor: '#e74c3c' },
+                  { emoji: '🔥', label: 'Hat-trick', desc: '3 vitorias no mesmo dia', cor: '#e74c3c' },
+                  { emoji: '🎯', label: 'Artilheiro', desc: 'Maior saldo de games do dia', cor: '#f39c12' },
+                  { emoji: '⚡', label: 'Relampago', desc: 'Venceu todos por 6x0 ou 6x1', cor: '#f1c40f' },
+                  { emoji: '📈', label: 'Ascensao', desc: 'Subiu da Prata para Ouro', cor: '#1abc9c' },
+                  { emoji: '💀', label: 'Dia Negro', desc: 'Perdeu os 4 jogos do dia', cor: '#636e72' },
+                  { emoji: '🥶', label: 'Congelado', desc: 'Ultimo lugar na chave', cor: '#74b9ff' },
+                  { emoji: '🍩', label: 'Pneu', desc: 'Tomou um 6x0', cor: '#fd79a8' },
+                  { emoji: '😴', label: 'Dormindo', desc: 'Perdeu todos por 3+ de diferenca', cor: '#b2bec3' },
+                  { emoji: '📉', label: 'Queda Livre', desc: 'Desceu da Ouro para Prata', cor: '#d63031' },
                 ].map(({ emoji, label, desc, cor }) => (
                   <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 14, width: 20, textAlign: 'center' }}>{emoji}</span>
