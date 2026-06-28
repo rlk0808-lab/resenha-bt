@@ -9,7 +9,8 @@ const CORES = [
 const MODOS = [
   { key: 'pontos', label: 'Pontos', desc: 'sem descarte' },
   { key: 'descarte', label: 'Pontos', desc: 'com descarte' },
-  { key: 'posicao', label: 'Posição', desc: 'na classificação' },
+  { key: 'posicao', label: 'Posição', desc: 'sem descarte' },
+  { key: 'posicao_desc', label: 'Posição', desc: 'com descarte' },
 ]
 
 export default function Evolucao({ onFechar, jogadorAtualId }) {
@@ -79,13 +80,12 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
     }
     setDadosDescarte(comDescarte)
 
-    // Posição na classificação por rodada
+    // Posição na classificação por rodada (sem descarte)
     const posicao = {}
     for (const jogId in mapaPts) posicao[jogId] = {}
 
     for (let i = 0; i < (rods || []).length; i++) {
       const rod = (rods || [])[i]
-      // Calcula total acumulado de cada jogador até essa rodada
       const ranking = Object.entries(acumulado).map(([id, dados]) => ({
         id, pts: dados[rod.numero] || 0
       })).sort((a, b) => b.pts - a.pts)
@@ -94,7 +94,23 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
         posicao[j.id][rod.numero] = idx + 1
       })
     }
-    setDadosPosicao(posicao)
+
+    // Posição na classificação por rodada (com descarte)
+    const posicaoDesc = {}
+    for (const jogId in comDescarte) posicaoDesc[jogId] = {}
+
+    for (let i = 0; i < (rods || []).length; i++) {
+      const rod = (rods || [])[i]
+      const ranking = Object.entries(comDescarte).map(([id, dados]) => ({
+        id, pts: dados[rod.numero] || 0
+      })).sort((a, b) => b.pts - a.pts)
+      ranking.forEach((j, idx) => {
+        if (!posicaoDesc[j.id]) posicaoDesc[j.id] = {}
+        posicaoDesc[j.id][rod.numero] = idx + 1
+      })
+    }
+
+    setDadosPosicao({ sem: posicao, com: posicaoDesc })
 
     setLoading(false)
   }
@@ -105,8 +121,8 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
     )
   }
 
-  const dadosAtivos = modo === 'pontos' ? dadosPontos : modo === 'descarte' ? dadosDescarte : dadosPosicao
-  const inverter = modo === 'posicao' // posição: menor é melhor, inverte o eixo Y
+  const dadosAtivos = modo === 'pontos' ? dadosPontos : modo === 'descarte' ? dadosDescarte : modo === 'posicao' ? (dadosPosicao.sem || {}) : (dadosPosicao.com || {})
+  const inverter = modo === 'posicao' || modo === 'posicao_desc'
 
   const valores = selecionados.flatMap(id => rodadas.map(r => dadosAtivos[id]?.[r.numero] || 0))
   const maxVal = Math.max(1, ...valores)
@@ -248,7 +264,7 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
               Atletas ({selecionados.length}/6 selecionados)
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {jogadores.filter(j => Object.keys(dadosPontos).includes(j.id)).map((jog, ci) => {
+              {jogadores.filter(j => Object.keys(dadosPontos).includes(j.id) || Object.keys(dadosDescarte).includes(j.id)).map((jog, ci) => {
                 const sel = selecionados.includes(jog.id)
                 const idx = selecionados.indexOf(jog.id)
                 const cor = sel ? CORES[idx % CORES.length] : null
