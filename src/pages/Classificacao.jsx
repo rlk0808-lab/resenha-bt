@@ -53,6 +53,13 @@ export default function Classificacao() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+      <div onClick={() => navigate('/stats')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>📊</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#c9a227' }}>Ver Estatísticas</span>
+        </div>
+        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>›</span>
+      </div>
         <h1 className="section-title" style={{ margin: 0 }}>🏆 Classificação</h1>
         <button onClick={() => setVerEvolucao(true)} style={{ background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 8, padding: '6px 12px', color: '#c9a227', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
           📈 Evolução

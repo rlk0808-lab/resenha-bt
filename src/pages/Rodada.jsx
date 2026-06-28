@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -15,6 +16,7 @@ export default function Rodada() {
   const [rodadaDetalhe, setRodadaDetalhe] = useState(null)
   const [detalheJogos, setDetalheJogos] = useState([])
   const [detalheRanking, setDetalheRanking] = useState({ ouro: [], prata: [] })
+  const navigate = useNavigate()
   const [chaveVis, setChaveVis] = useState('ouro')
   const [detalheView, setDetalheView] = useState('jogos')
   const [loading, setLoading] = useState(true)
@@ -836,6 +838,13 @@ export default function Rodada() {
   // VIEW: PROXIMA RODADA
   return (
     <div>
+      <div onClick={() => navigate('/confirmacao')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>📋</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#c9a227' }}>Confirmar Presença</span>
+        </div>
+        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>›</span>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h1 className="section-title" style={{ margin: 0 }}>
           {proximaRodada ? "Rodada " + proximaRodada.numero : 'Rodada'}

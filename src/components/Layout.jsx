@@ -36,8 +36,7 @@ export default function Layout({ session }) {
     { to: '/rodada', icon: Calendar, label: 'Rodada' },
     { to: '/perfil', icon: User, label: 'Perfil' },
     ...(isAdmin ? [{ to: '/admin', icon: Settings, label: 'Admin' }] : []),
-    { to: '/confirmacao', icon: ClipboardList, label: 'Presença' },
-    { to: '/stats', icon: Activity, label: 'Stats' },
+
   ]
 
   return (
