@@ -166,7 +166,7 @@ export default function Perfil() {
     { label: 'Pontos', valor: stats?.pontos_total || 0, cor: '#f5c518' },
     { label: 'Vitorias', valor: stats?.vitorias || 0, cor: '#2d7a45' },
     { label: 'Rodadas', valor: stats?.rodadas_jogadas || 0, cor: '#4d8ab5' },
-    { label: 'Posicao', valor: stats?.posicao ? (String(stats.posicao) + 'o') : '-', cor: '#e8621a' },
+    { label: 'Posicao', valor: stats?.posicao ? `${stats.posicao}º` : '-', cor: '#e8621a' },
   ]
 
   return (
@@ -244,7 +244,7 @@ export default function Perfil() {
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', color: '#f5c518' }}>{stats?.pontos_total || '-'}</div>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{stats?.posicao ? `${stats.posicao}o lugar` : '-'}</div>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{stats?.posicao ? `${stats.posicao}º lugar` : '-'}</div>
           </div>
         </div>
         {temporadas.length > 0 ? temporadas.map((t, i) => {
@@ -261,7 +261,7 @@ export default function Perfil() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', color: corChave }}>{t.pontos}</div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{t.posicao + 'o'} lugar</div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{t.posicao}º lugar</div>
               </div>
             </div>
           )
