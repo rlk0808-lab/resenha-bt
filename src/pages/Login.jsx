@@ -6,6 +6,8 @@ export default function Login() {
   const [senha, setSenha] = useState('')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
+  const [resetando, setResetando] = useState(false)
+  const [msgReset, setMsgReset] = useState('')
 
   async function handleLogin(e) {
     e.preventDefault()
