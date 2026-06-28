@@ -101,23 +101,42 @@ export default function PerfilJogador() {
   const totalDerrotas = totalJogos - totalVitorias
   const pctGeral = totalJogos > 0 ? Math.round(totalVitorias / totalJogos * 100) : 0
 
-  // H2H com jogador atual — apenas jogos onde foram ADVERSÁRIOS
+  // H2H com jogador atual
   const nomeAtual = jogadorAtual?.nome
   const nomeJogador = jogador.nome
+
+  // Jogos como adversários
   const jogosH2H = jogosDetalhados.filter(j => {
     if (!nomeAtual) return false
     const euNoA = j.dupla_a_1 === nomeAtual || j.dupla_a_2 === nomeAtual
     const euNoB = j.dupla_b_1 === nomeAtual || j.dupla_b_2 === nomeAtual
     const eleNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
     const eleNoB = j.dupla_b_1 === nomeJogador || j.dupla_b_2 === nomeJogador
-    // Adversários: eu no time A e ele no B, ou eu no B e ele no A
     return (euNoA && eleNoB) || (euNoB && eleNoA)
   })
+
+  // Jogos como parceiros
+  const jogosJuntos = jogosDetalhados.filter(j => {
+    if (!nomeAtual) return false
+    const euNoA = j.dupla_a_1 === nomeAtual || j.dupla_a_2 === nomeAtual
+    const euNoB = j.dupla_b_1 === nomeAtual || j.dupla_b_2 === nomeAtual
+    const eleNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
+    const eleNoB = j.dupla_b_1 === nomeJogador || j.dupla_b_2 === nomeJogador
+    return (euNoA && eleNoA) || (euNoB && eleNoB)
+  })
+
   const h2hStats = { vitorias: 0, derrotas: 0 }
   for (const j of jogosH2H) {
     const estouNoA = j.dupla_a_1 === nomeAtual || j.dupla_a_2 === nomeAtual
     const venci = estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
     if (venci) h2hStats.vitorias++; else h2hStats.derrotas++
+  }
+
+  const juntosStats = { vitorias: 0, derrotas: 0 }
+  for (const j of jogosJuntos) {
+    const estouNoA = j.dupla_a_1 === nomeAtual || j.dupla_a_2 === nomeAtual
+    const venci = estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
+    if (venci) juntosStats.vitorias++; else juntosStats.derrotas++
   }
 
   const BADGE_INFO = {
@@ -216,6 +235,48 @@ export default function PerfilJogador() {
                       <span style={{ color: '#e74c3c', fontWeight: 600 }}>{nomeJogador}</span>
                       {parcEle ? <span style={{ color: 'rgba(255,255,255,0.5)' }}> / {parcEle}</span> : null}
                     </div>
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: venci ? '#2ecc71' : '#e74c3c', fontFamily: "'Bebas Neue', sans-serif" }}>
+                    {meuPlacar} × {advPlacar}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Jogos juntos */}
+      {nomeAtual && nomeAtual !== nomeJogador && jogosJuntos.length > 0 && (
+        <div className="card" style={{ marginBottom: 16, border: '1px solid rgba(46,204,113,0.3)', background: 'linear-gradient(135deg, #0d2b1a, #112918)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#2ecc71', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
+            🤝 Jogos juntos com {nomeJogador}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 40, color: '#2ecc71', lineHeight: 1 }}>{juntosStats.vitorias}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Vitórias juntos</div>
+            </div>
+            <div style={{ fontSize: 20, color: 'rgba(255,255,255,0.2)' }}>×</div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 40, color: '#e74c3c', lineHeight: 1 }}>{juntosStats.derrotas}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Derrotas juntos</div>
+            </div>
+          </div>
+          {jogosJuntos.map((j, ji) => {
+            const estouNoA = j.dupla_a_1 === nomeAtual || j.dupla_a_2 === nomeAtual
+            const venci = estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
+            const meuPlacar = estouNoA ? j.placar_a : j.placar_b
+            const advPlacar = estouNoA ? j.placar_b : j.placar_a
+            const adv1 = estouNoA ? j.dupla_b_1 : j.dupla_a_1
+            const adv2 = estouNoA ? j.dupla_b_2 : j.dupla_a_2
+            return (
+              <div key={ji} style={{ padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>{venci ? '✅' : '❌'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: '#2ecc71', fontWeight: 600 }}>{nomeAtual} / {nomeJogador}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>vs {[adv1, adv2].filter(Boolean).join(' / ')}</div>
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: venci ? '#2ecc71' : '#e74c3c', fontFamily: "'Bebas Neue', sans-serif" }}>
                     {meuPlacar} × {advPlacar}
