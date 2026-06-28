@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { registrarNotificacoes, verificarNotificacoes } from '../lib/useNotificacoes'
 
@@ -22,6 +23,8 @@ export default function Perfil() {
   const [notifAtiva, setNotifAtiva] = useState(false)
   const [ativandoNotif, setAtivandoNotif] = useState(false)
   const fileRef = useRef()
+  const navigate = useNavigate()
+  const [jogadoresMap, setJogadoresMap] = useState({})
 
   useEffect(() => {
     async function load() {
@@ -44,6 +47,12 @@ export default function Perfil() {
           .from('badges').select('tipo, created_at, rodada_id, rodadas(id, numero)')
           .eq('jogador_id', p.id).order('created_at', { ascending: false })
         setBadges(bads || [])
+
+        // Busca mapa de nome -> id dos jogadores
+        const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
+        const mapa = {}
+        for (const j of (todosJogs || [])) mapa[j.nome] = j.id
+        setJogadoresMap(mapa)
 
         const { data: jogos } = await supabase.from('jogos').select('*')
           .or(`dupla_a_1.eq.${p.nome},dupla_a_2.eq.${p.nome},dupla_b_1.eq.${p.nome},dupla_b_2.eq.${p.nome}`)
@@ -423,7 +432,7 @@ export default function Perfil() {
                 <div onClick={() => setH2hAberto(aberto ? null : a.nome)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: aberto ? '#c9a227' : 'rgba(255,255,255,0.2)', fontSize: 12 }}>{aberto ? '▾' : '▸'}</span>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: aberto ? '#c9a227' : '#e8f5e9' }}>{a.nome}</div>
+                    <div onClick={(e) => { e.stopPropagation(); jogadoresMap[a.nome] && navigate('/jogador/' + jogadoresMap[a.nome]) }} style={{ fontSize: 13, fontWeight: 600, color: '#c9a227', cursor: jogadoresMap[a.nome] ? 'pointer' : 'default' }}>{a.nome}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 10, fontSize: 12 }}>
                     <span style={{ color: '#2d7a45' }}>{a.vitorias}V</span>
