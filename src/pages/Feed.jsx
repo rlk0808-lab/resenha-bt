@@ -70,8 +70,9 @@ export default function Feed() {
     // Notifica mencionados
     const mencoes = textoFinal.match(/@[\w.]+/g)
     if (mencoes && mencoes.length > 0) {
-      const nomesMencionados = mencoes.map(m => m.slice(1).trim())
-      const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
+      const prefixos = mencoes.map(m => m.slice(1).trim())
+      const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
+      const jogs = (todosJogs || []).filter(j => prefixos.some(p => j.nome.startsWith(p) || j.nome === p))
       if (jogs && jogs.length > 0) {
         const ids = jogs.map(j => j.id)
         const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)

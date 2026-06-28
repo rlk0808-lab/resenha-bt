@@ -392,10 +392,11 @@ export default function Rodada() {
       await carregarComentarios(rodadaDetalhe.id)
       // Notifica jogadores mencionados
       const mencoes = textoEnviado.match(/@[\w.]+/g)
-      console.log('texto:', textoEnviado, 'mencoes:', mencoes)
       if (mencoes && mencoes.length > 0) {
-        const nomesMencionados = mencoes.map(m => m.slice(1).trim())
-        const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
+        const prefixos = mencoes.map(m => m.slice(1).trim())
+        // Busca todos jogadores e filtra por prefixo (cobre nomes com espaco como "Joao V.")
+        const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
+        const jogs = (todosJogs || []).filter(j => prefixos.some(p => j.nome.startsWith(p) || j.nome === p))
         if (jogs && jogs.length > 0) {
           const ids = jogs.map(j => j.id)
           const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
