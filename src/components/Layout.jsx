@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Home, Trophy, Calendar, User, LogOut, Settings, ClipboardList } from 'lucide-react'
+import { Home, Trophy, Calendar, User, LogOut, Settings, ClipboardList, MessageCircle } from 'lucide-react'
 
 const ADMINS = [
   'a60b3e0f-5528-400c-8e0f-8fb3f9226070', // Robson
@@ -31,6 +31,7 @@ export default function Layout({ session }) {
 
   const navItems = [
     { to: '/', icon: Home, label: 'Início' },
+    { to: '/feed', icon: MessageCircle, label: 'Feed' },
     { to: '/classificacao', icon: Trophy, label: 'Classificação' },
     { to: '/rodada', icon: Calendar, label: 'Rodada' },
     { to: '/perfil', icon: User, label: 'Perfil' },
