@@ -109,14 +109,18 @@ export default function Stats() {
       const venceuA = j.placar_a > j.placar_b
       const duplaA = [j.dupla_a_1, j.dupla_a_2].filter(Boolean)
       const duplaB = [j.dupla_b_1, j.dupla_b_2].filter(Boolean)
-      ;[duplaA, duplaB].forEach((d, idx) => {
-        if (d.length === 2) {
-          const key = d.sort().join(' / ')
-          if (!duplaMap[key]) duplaMap[key] = { dupla: key, vitorias: 0, jogos: 0 }
-          duplaMap[key].jogos++
-          if ((idx === 0 && venceuA) || (idx === 1 && !venceuA)) duplaMap[key].vitorias++
-        }
-      })
+      if (duplaA.length === 2) {
+        const key = [...duplaA].sort().join(' / ')
+        if (!duplaMap[key]) duplaMap[key] = { dupla: key, vitorias: 0, jogos: 0 }
+        duplaMap[key].jogos++
+        if (venceuA) duplaMap[key].vitorias++
+      }
+      if (duplaB.length === 2) {
+        const key = [...duplaB].sort().join(' / ')
+        if (!duplaMap[key]) duplaMap[key] = { dupla: key, vitorias: 0, jogos: 0 }
+        duplaMap[key].jogos++
+        if (!venceuA) duplaMap[key].vitorias++
+      }
     })
     const rankDuplas = Object.values(duplaMap).filter(d => d.jogos >= 3)
       .sort((a,b) => b.vitorias - a.vitorias).slice(0, 8)
