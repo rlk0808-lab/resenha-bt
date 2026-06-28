@@ -137,6 +137,12 @@ export default function Login() {
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
+            {msgReset && (
+              <div style={{ color: '#2ecc71', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{msgReset}</div>
+            )}
+            <button type="button" onClick={handleReset} disabled={resetando} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer', marginTop: 8, textDecoration: 'underline', width: '100%', textAlign: 'center' }}>
+              {resetando ? 'Enviando...' : 'Esqueci minha senha'}
+            </button>
           </form>
         </div>
 
