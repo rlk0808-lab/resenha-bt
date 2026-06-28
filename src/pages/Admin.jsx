@@ -626,9 +626,11 @@
         proximoSabado.setDate(hoje.getDate() + diasParaSabado);
         const proximoNumero = rodadaSelecionada.numero + 1;
         await supabase.from("rodadas").insert({ numero: proximoNumero, data: proximoSabado.toISOString().split("T")[0], status: "proxima", liga: rodadaSelecionada.liga, tipo: (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal" });
+        await enviarNotificacao("Lista aberta!", `A lista para a Rodada ${proximoNumero} esta aberta. Confirme sua presenca!`, "/confirmacao");
         mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} criada.`);
       } else {
-        mostrarMensagem("✅ Pontuação salva e chaves atualizadas!");
+        await enviarNotificacao("Resultado da Rodada " + rodadaSelecionada.numero + "!", "A pontuacao foi calculada. Confira a classificacao!", "/classificacao");
+      mostrarMensagem("✅ Pontuação salva e chaves atualizadas!");
       }
 
       // Calcula badges da rodada
