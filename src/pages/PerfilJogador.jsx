@@ -102,7 +102,11 @@ export default function PerfilJogador() {
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="spinner" /></div>
   if (!jogador) return <div><button onClick={() => navigate(-1)} style={btnVoltar}>← Voltar</button><p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Jogador não encontrado.</p></div>
 
-  // Conta jogos únicos (não duplica por adversário)
+  // H2H com jogador atual
+  const nomeAtual = jogadorAtual?.nome
+  const nomeJogador = jogador.nome
+
+  // Conta jogos únicos
   const totalJogos = jogosDetalhados.length
   const totalVitorias = jogosDetalhados.filter(j => {
     const estouNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
@@ -110,10 +114,6 @@ export default function PerfilJogador() {
   }).length
   const totalDerrotas = totalJogos - totalVitorias
   const pctGeral = totalJogos > 0 ? Math.round(totalVitorias / totalJogos * 100) : 0
-
-  // H2H com jogador atual
-  const nomeAtual = jogadorAtual?.nome
-  const nomeJogador = jogador.nome
 
   // Jogos como adversários
   const jogosH2H = jogosDetalhados.filter(j => {
