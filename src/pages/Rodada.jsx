@@ -400,6 +400,7 @@ export default function Rodada() {
         if (jogs && jogs.length > 0) {
           const ids = jogs.map(j => j.id)
           const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
+        console.log('ids:', ids, 'subs:', subs)
           if (subs && subs.length > 0) {
             await fetch('/api/send-notification', {
               method: 'POST',
