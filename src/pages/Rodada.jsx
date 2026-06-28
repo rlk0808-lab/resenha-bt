@@ -20,6 +20,7 @@ export default function Rodada() {
   const [loading, setLoading] = useState(true)
   const [gerandoImagem, setGerandoImagem] = useState(false)
   const [aoVivo, setAoVivo] = useState(false)
+  const [reacoes, setReacoes] = useState({})
   const [compartilhandoModo, setCompartilhandoModo] = useState('classificacao')
   const cardRef = useRef(null)
   const [comentarios, setComentarios] = useState([])
@@ -30,6 +31,34 @@ export default function Rodada() {
   const [mencaoAtiva, setMencaoAtiva] = useState(null)
 
   useEffect(() => { carregarDados() }, [])
+
+  async function carregarReacoes(jogoIds) {
+    if (!jogoIds || jogoIds.length === 0) return
+    const { data } = await supabase
+      .from('jogo_reacoes')
+      .select('jogo_id, emoji, jogador_id')
+      .in('jogo_id', jogoIds)
+    const mapa = {}
+    for (const r of (data || [])) {
+      if (!mapa[r.jogo_id]) mapa[r.jogo_id] = []
+      mapa[r.jogo_id].push(r)
+    }
+    setReacoes(mapa)
+  }
+
+  async function reagirJogo(jogoId, emoji) {
+    if (!jogadorAtual) return
+    const lista = reacoes[jogoId] || []
+    const jaReagiu = lista.some(r => r.jogador_id === jogadorAtual.id && r.emoji === emoji)
+    if (jaReagiu) {
+      await supabase.from('jogo_reacoes').delete()
+        .eq('jogo_id', jogoId).eq('jogador_id', jogadorAtual.id).eq('emoji', emoji)
+    } else {
+      await supabase.from('jogo_reacoes').insert({ jogo_id: jogoId, jogador_id: jogadorAtual.id, emoji })
+    }
+    const ids = [...Object.keys(reacoes), jogoId]
+    await carregarReacoes([...new Set(ids)])
+  }
   useEffect(() => {
     if (rodadaDetalhe) carregarComentarios(rodadaDetalhe.id)
   }, [rodadaDetalhe])
@@ -180,34 +209,62 @@ export default function Rodada() {
   }
 
   function renderJogo(jogo, i, corBorda) {
+    const listaReacoes = reacoes[jogo.id] || []
+    const grupoReacoes = {}
+    for (const r of listaReacoes) {
+      if (!grupoReacoes[r.emoji]) grupoReacoes[r.emoji] = []
+      grupoReacoes[r.emoji].push(r.jogador_id)
+    }
+    const temPlacar = jogo.placar_a !== null && jogo.placar_b !== null
     return (
-      <div key={jogo.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-        <div style={{ flex: 1, textAlign: 'right' }}>
-          <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_a_1}</div>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_a_2}</div>
+      <div key={jogo.id} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ flex: 1, textAlign: 'right' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_a_1}</div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_a_2}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '80px', justifyContent: 'center' }}>
+            {[
+              { placar: jogo.placar_a, venceu: jogo.placar_a > jogo.placar_b },
+              { placar: jogo.placar_b, venceu: jogo.placar_b > jogo.placar_a }
+            ].map((lado, li) => (
+              <span key={li} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {li === 1 && <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>X</span>}
+                <div style={{
+                  background: lado.venceu ? 'rgba(245,197,24,0.15)' : 'rgba(255,255,255,0.05)',
+                  border: "1px solid " + (lado.venceu ? 'rgba(245,197,24,0.3)' : 'rgba(255,255,255,0.1)'),
+                  borderRadius: '6px', padding: '4px 10px',
+                  fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px',
+                  color: lado.venceu ? '#f5c518' : 'rgba(255,255,255,0.5)',
+                  minWidth: '32px', textAlign: 'center'
+                }}>{lado.placar ?? '-'}</div>
+              </span>
+            ))}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_b_1}</div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_b_2}</div>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '80px', justifyContent: 'center' }}>
-          {[
-            { placar: jogo.placar_a, venceu: jogo.placar_a > jogo.placar_b },
-            { placar: jogo.placar_b, venceu: jogo.placar_b > jogo.placar_a }
-          ].map((lado, li) => (
-            <span key={li} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {li === 1 && <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>X</span>}
-              <div style={{
-                background: lado.venceu ? 'rgba(245,197,24,0.15)' : 'rgba(255,255,255,0.05)',
-                border: "1px solid " + (lado.venceu ? 'rgba(245,197,24,0.3)' : 'rgba(255,255,255,0.1)'),
-                borderRadius: '6px', padding: '4px 10px',
-                fontFamily: "'Bebas Neue', sans-serif", fontSize: '20px',
-                color: lado.venceu ? '#f5c518' : 'rgba(255,255,255,0.5)',
-                minWidth: '32px', textAlign: 'center'
-              }}>{lado.placar ?? '-'}</div>
-            </span>
-          ))}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_b_1}</div>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_b_2}</div>
-        </div>
+        {temPlacar && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            {['👏', '🔥', '😮', '😂', '💪'].map(emoji => {
+              const count = grupoReacoes[emoji]?.length || 0
+              const euReagi = grupoReacoes[emoji]?.includes(jogadorAtual?.id)
+              return (
+                <button key={emoji} onClick={() => reagirJogo(jogo.id, emoji)} style={{
+                  display: 'flex', alignItems: 'center', gap: 3,
+                  background: euReagi ? 'rgba(201,162,39,0.2)' : 'rgba(255,255,255,0.04)',
+                  border: euReagi ? '1px solid rgba(201,162,39,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 20, padding: '3px 8px', cursor: 'pointer', fontSize: 13
+                }}>
+                  <span>{emoji}</span>
+                  {count > 0 && <span style={{ fontSize: 11, color: euReagi ? '#c9a227' : 'rgba(255,255,255,0.4)', fontWeight: 600 }}>{count}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -322,14 +379,37 @@ export default function Rodada() {
   async function enviarComentario() {
     if (!novoComentario.trim() || !jogadorAtual || !rodadaDetalhe) return
     setEnviandoComentario(true)
+    const texto = novoComentario.trim()
     const { error } = await supabase.from('comentarios').insert({
       rodada_id: rodadaDetalhe.id,
       jogador_id: jogadorAtual.id,
-      texto: novoComentario.trim()
+      texto
     })
     if (!error) {
       setNovoComentario('')
       await carregarComentarios(rodadaDetalhe.id)
+      // Notifica jogadores mencionados
+      const mencoes = texto.match(/@([\w\s.]+?)(?=\s@|\s*$|[^\w\s.])/g)
+      if (mencoes && mencoes.length > 0) {
+        const nomesMencionados = mencoes.map(m => m.slice(1).trim())
+        const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
+        if (jogs && jogs.length > 0) {
+          const ids = jogs.map(j => j.id)
+          const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
+          if (subs && subs.length > 0) {
+            await fetch('/api/send-notification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subscriptions: subs,
+                title: jogadorAtual.nome + ' te mencionou!',
+                body: texto,
+                url: '/rodada'
+              })
+            })
+          }
+        }
+      }
     }
     setEnviandoComentario(false)
   }
