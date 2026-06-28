@@ -7,6 +7,7 @@ import Classificacao from './pages/Classificacao'
 import Rodada from './pages/Rodada'
 import Perfil from './pages/Perfil'
 import PerfilJogador from './pages/PerfilJogador'
+import Feed from './pages/Feed'
 import Admin from './pages/Admin'
 import Layout from './components/Layout'
 import Confirmacao from './pages/Confirmacao'
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="rodada" element={<Rodada />} />
           <Route path="admin" element={<Admin session={session} />} />
           <Route path="perfil" element={<Perfil />} />
+          <Route path="feed" element={<Feed />} />
           <Route path="jogador/:id" element={<PerfilJogador />} />
           <Route path="confirmacao" element={<Confirmacao session={session} />} />
         </Route>
