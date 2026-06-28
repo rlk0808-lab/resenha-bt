@@ -777,7 +777,7 @@ export default function Rodada() {
           const isEspecial = detalheJogos.some(j => ['time_a','time_b','especial'].includes(j.chave))
           return (
             <>
-              {detalheView === 'classificacao' && !isEspecial && <ToggleChave isEspecial={false} />}
+              {!isEspecial && <ToggleChave isEspecial={false} />}
               {detalheView === 'jogos'
                 ? renderJogos(detalheJogos, chaveVis)
                 : isEspecial
