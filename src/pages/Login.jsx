@@ -13,7 +13,7 @@ export default function Login() {
     if (!email) { setErro('Digite seu email para resetar a senha'); return }
     setResetando(true)
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://resenha-bt.vercel.app'
+      redirectTo: 'https://resenha-bt.vercel.app/redefinir-senha'
     })
     if (error) setErro('Erro ao enviar email. Verifique o email digitado.')
     else setMsgReset('Email enviado! Verifique sua caixa de entrada.')
