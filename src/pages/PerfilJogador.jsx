@@ -71,14 +71,20 @@ export default function PerfilJogador() {
         if (euVenci) statsParc[parceiro].vitorias++
       }
 
+      // Conta o jogo uma vez para cada adversário (mas o jogo é 1 só)
       const advs = estouNoA
         ? [jogo.dupla_b_1, jogo.dupla_b_2].filter(Boolean)
         : [jogo.dupla_a_1, jogo.dupla_a_2].filter(Boolean)
 
+      // Usa um Set para evitar duplicar o jogo
+      const jogoKey = jogo.id
       for (const adv of advs) {
-        if (!statsAdv[adv]) statsAdv[adv] = { jogos: 0, vitorias: 0 }
-        statsAdv[adv].jogos++
-        if (euVenci) statsAdv[adv].vitorias++
+        if (!statsAdv[adv]) statsAdv[adv] = { jogos: 0, vitorias: 0, jogoIds: new Set() }
+        if (!statsAdv[adv].jogoIds.has(jogoKey)) {
+          statsAdv[adv].jogoIds.add(jogoKey)
+          statsAdv[adv].jogos++
+          if (euVenci) statsAdv[adv].vitorias++
+        }
       }
     }
 

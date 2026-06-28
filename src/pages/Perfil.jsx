@@ -76,9 +76,12 @@ export default function Perfil() {
               ? [jogo.dupla_b_1, jogo.dupla_b_2].filter(Boolean)
               : [jogo.dupla_a_1, jogo.dupla_a_2].filter(Boolean)
             for (const adv of advs) {
-              if (!statsAdv[adv]) statsAdv[adv] = { jogos: 0, vitorias: 0 }
-              statsAdv[adv].jogos++
-              if (euVenci) statsAdv[adv].vitorias++
+              if (!statsAdv[adv]) statsAdv[adv] = { jogos: 0, vitorias: 0, jogoIds: new Set() }
+              if (!statsAdv[adv].jogoIds.has(jogo.id)) {
+                statsAdv[adv].jogoIds.add(jogo.id)
+                statsAdv[adv].jogos++
+                if (euVenci) statsAdv[adv].vitorias++
+              }
             }
           }
           const parceirosList = Object.entries(statsParc)
