@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 import Regulamento from './Regulamento'
 import { Calendar, Trophy, Users, CheckCircle } from 'lucide-react'
 
 export default function Home() {
+  const navigate = useNavigate()
   const [proximaRodada, setProximaRodada] = useState(null)
   const [rodadaAtual, setRodadaAtual] = useState(null)
   const TOTAL_RODADAS = 12
@@ -209,8 +211,15 @@ export default function Home() {
             ) : (
               <div>
                 <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginBottom: '12px' }}>
-                  ⚠️ Confirme sua presença na aba Presença
+                  ⚠️ Confirme sua presença até quarta às 10h
                 </p>
+                <button onClick={() => navigate('/confirmacao')} style={{
+                  width: '100%', background: 'linear-gradient(135deg, #2d7a45, #1a5c30)',
+                  border: 'none', color: '#fff', borderRadius: '10px', padding: '12px 0',
+                  fontWeight: 700, fontSize: '15px', cursor: 'pointer'
+                }}>
+                  📋 Confirmar Presença
+                </button>
               </div>
             )}
           </>

@@ -72,9 +72,14 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
       // Para cada rodada, calcula total descontando os 2 piores até aquela rodada
       for (let i = 0; i < (rods || []).length; i++) {
         const slice = rodsJogadas.slice(0, i + 1)
-        const sorted = [...slice].sort((a, b) => a - b)
-        const descartados = sorted.slice(0, Math.min(2, sorted.length))
-        const totalDesc = slice.reduce((s, v) => s + v, 0) - descartados.reduce((s, v) => s + v, 0)
+        const total = slice.reduce((s, v) => s + v, 0)
+        // Só descarta se tiver mais de 2 rodadas jogadas
+        let totalDesc = total
+        if (slice.length > 2) {
+          const sorted = [...slice].sort((a, b) => a - b)
+          const descartados = sorted.slice(0, 2)
+          totalDesc = total - descartados.reduce((s, v) => s + v, 0)
+        }
         comDescarte[jogId][(rods || [])[i].numero] = totalDesc
       }
     }

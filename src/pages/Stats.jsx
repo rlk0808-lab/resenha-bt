@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const BADGE_INFO = {
@@ -17,6 +18,7 @@ const BADGE_INFO = {
 }
 
 export default function Stats() {
+  const navigate = useNavigate()
   const [badges, setBadges] = useState([])
   const [jogos, setJogos] = useState([])
   const [pontuacao, setPontuacao] = useState([])
@@ -178,8 +180,11 @@ export default function Stats() {
 
   return (
     <div style={{ padding: '16px 16px 100px' }}>
-      <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 2, color: '#c9a227', marginBottom: 16 }}>
-        📊 ESTATÍSTICAS
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 22, cursor: 'pointer', padding: 0 }}>‹</button>
+        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 2, color: '#c9a227' }}>
+          📊 ESTATÍSTICAS
+        </div>
       </div>
 
       {/* Abas */}
