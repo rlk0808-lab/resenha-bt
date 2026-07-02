@@ -37,6 +37,7 @@
 
   export default function Admin({ session }) {
     const [abaAtiva, setAbaAtiva] = useState("jogos");
+  const [tamanhoPrata, setTamanhoPrata] = useState(12);
     const [rodadas, setRodadas] = useState([]);
     const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
     const [jogadores, setJogadores] = useState([]);
@@ -232,7 +233,8 @@
       const { data: confirmadosAtuais } = await supabase.from("confirmacoes").select("id")
         .eq("rodada_id", rodadaAlvo.id).eq("status", "confirmado");
       const totalConfirmados = confirmadosAtuais?.length || 0;
-      const vagas = 24 - totalConfirmados;
+      const totalEsperado = 12 + tamanhoPrata;
+      const vagas = totalEsperado - totalConfirmados;
       if (vagas > 0) {
         const { data: listaEspera } = await supabase.from("confirmacoes").select("id")
           .eq("rodada_id", rodadaAlvo.id).eq("status", "espera")
@@ -938,6 +940,17 @@
               <span style={{ fontSize: 24 }}>🔒</span>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: ouro }}>Fechar Lista e Sortear</div>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Tamanho da Prata:</span>
+                  {[12, 16].map(n => (
+                    <button key={n} onClick={() => setTamanhoPrata(n)} style={{
+                      padding: '4px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      fontWeight: 700, fontSize: 13,
+                      background: tamanhoPrata === n ? ouro : 'rgba(255,255,255,0.08)',
+                      color: tamanhoPrata === n ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
+                    }}>{n} atletas</button>
+                  ))}
+                </div>
                 <div style={{ fontSize: 12, color: "#7fb89a" }}>Rodada {rodadaProxima.numero} — Faça isso sexta-feira às 14h</div>
               </div>
             </div>
