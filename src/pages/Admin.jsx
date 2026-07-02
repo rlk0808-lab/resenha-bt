@@ -37,7 +37,17 @@
 
   export default function Admin({ session }) {
     const [abaAtiva, setAbaAtiva] = useState("jogos");
-  const [formatoRodada, setFormatoRodada] = useState({ ouro: 12, prata: 12, total: 24 });
+  const [formatoRodada, setFormatoRodada] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('resenha_formato_rodada')
+      return salvo ? JSON.parse(salvo) : { label: "24", ouro: 12, prata: 12, total: 24 }
+    } catch { return { label: "24", ouro: 12, prata: 12, total: 24 } }
+  });
+
+  function setFormatoRodadaPersistido(f) {
+    setFormatoRodadaPersistido(f)
+    localStorage.setItem('resenha_formato_rodada', JSON.stringify(f))
+  }
     const [rodadas, setRodadas] = useState([]);
     const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
     const [jogadores, setJogadores] = useState([]);
@@ -310,7 +320,7 @@
         // Prata: todos os confirmados que não foram para Ouro
         const nomesUsados = new Set(nomesOuro);
         jogadoresPrata = [];
-        prataTodos.slice(totalSubir).forEach(r => {
+        prataTodos.slice(prataSobem.length).forEach(r => {
           if (!nomesUsados.has(r.jogadores?.nome)) { jogadoresPrata.push(r.jogadores?.nome); nomesUsados.add(r.jogadores?.nome); }
         });
         // Quem desceu da Ouro e confirmou
@@ -826,7 +836,7 @@
     async function expandirFormato(novoFormato) {
       const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
       if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
-      setFormatoRodada(novoFormato);
+      setFormatoRodadaPersistido(novoFormato);
       // Promove automaticamente da espera
       const { data: confirmados } = await supabase
         .from("confirmacoes").select("id")
