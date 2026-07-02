@@ -45,7 +45,7 @@
   });
 
   function setFormatoRodadaPersistido(f) {
-    setFormatoRodadaPersistido(f)
+    setFormatoRodada(f)
     localStorage.setItem('resenha_formato_rodada', JSON.stringify(f))
   }
     const [rodadas, setRodadas] = useState([]);
