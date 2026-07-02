@@ -37,8 +37,7 @@
 
   export default function Admin({ session }) {
     const [abaAtiva, setAbaAtiva] = useState("jogos");
-  const [tamanhoOuro, setTamanhoOuro] = useState(12);
-  const [tamanhoPrata, setTamanhoPrata] = useState(12);
+  const [formatoRodada, setFormatoRodada] = useState({ ouro: 12, prata: 12, total: 24 });
     const [rodadas, setRodadas] = useState([]);
     const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
     const [jogadores, setJogadores] = useState([]);
@@ -234,7 +233,7 @@
       const { data: confirmadosAtuais } = await supabase.from("confirmacoes").select("id")
         .eq("rodada_id", rodadaAlvo.id).eq("status", "confirmado");
       const totalConfirmados = confirmadosAtuais?.length || 0;
-      const totalEsperado = tamanhoOuro + tamanhoPrata;
+      const totalEsperado = formatoRodada.total;
       const vagas = totalEsperado - totalConfirmados;
       if (vagas > 0) {
         const { data: listaEspera } = await supabase.from("confirmacoes").select("id")
@@ -942,30 +941,23 @@
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: ouro }}>Fechar Lista e Sortear</div>
                 <div style={{ marginTop: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', minWidth: 60 }}>🥇 Ouro:</span>
-                    {[12, 16].map(n => (
-                      <button key={n} onClick={() => setTamanhoOuro(n)} style={{
-                        padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        fontWeight: 700, fontSize: 12,
-                        background: tamanhoOuro === n ? '#c9a227' : 'rgba(255,255,255,0.08)',
-                        color: tamanhoOuro === n ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-                      }}>{n}</button>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>Formato da rodada:</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[
+                      { label: '24', sub: '12+12', ouro: 12, prata: 12, total: 24 },
+                      { label: '28', sub: '12+16', ouro: 12, prata: 16, total: 28 },
+                      { label: '32', sub: '16+16', ouro: 16, prata: 16, total: 32 },
+                    ].map(f => (
+                      <button key={f.label} onClick={() => setFormatoRodada(f)} style={{
+                        flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                        fontWeight: 700, fontSize: 13, textAlign: 'center',
+                        background: formatoRodada.total === f.total ? '#c9a227' : 'rgba(255,255,255,0.08)',
+                        color: formatoRodada.total === f.total ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
+                      }}>
+                        <div>{f.label}</div>
+                        <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.8 }}>{f.sub}</div>
+                      </button>
                     ))}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', minWidth: 60 }}>🥈 Prata:</span>
-                    {[12, 16].map(n => (
-                      <button key={n} onClick={() => setTamanhoPrata(n)} style={{
-                        padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        fontWeight: 700, fontSize: 12,
-                        background: tamanhoPrata === n ? '#8e9eab' : 'rgba(255,255,255,0.08)',
-                        color: tamanhoPrata === n ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-                      }}>{n}</button>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 6 }}>
-                    Total: {tamanhoOuro + tamanhoPrata} atletas
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#7fb89a" }}>Rodada {rodadaProxima.numero} — Faça isso sexta-feira às 14h</div>
