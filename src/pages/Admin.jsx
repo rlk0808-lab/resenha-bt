@@ -397,8 +397,8 @@
       const sorteioPrata = gerarSorteio(jogPrata);
       if (!sorteioOuro || !sorteioPrata) { mostrarMensagem("Erro ao gerar sorteio.", "erro"); setFechandoLista(false); return; }
 
-      const insertsOuro = sorteioOuro.flatMap(rj => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "ouro" })));
-      const insertsPrata = sorteioPrata.flatMap(rj => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "prata" })));
+      const insertsOuro = sorteioOuro.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "ouro", rodada_interna: ri + 1 })));
+      const insertsPrata = sorteioPrata.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "prata", rodada_interna: ri + 1 })));
 
       await supabase.from("jogos").delete().eq("rodada_id", rodada.id).is("placar_a", null);
       const { error: erroInsert } = await supabase.from("jogos").insert([...insertsOuro, ...insertsPrata]);
