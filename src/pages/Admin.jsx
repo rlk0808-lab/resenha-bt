@@ -16,6 +16,18 @@
     [[0,11, 7,8],  [1,10, 4,9],  [2,3,  5,6]],
   ];
 
+  // Estrutura fixa para 16 jogadores — sem repetir parceiro nem adversário
+  const ESTRUTURA_CHAVE_16 = [
+    // Rodada 1
+    [[0,1,2,3], [4,5,6,7], [8,9,10,11], [12,13,14,15]],
+    // Rodada 2
+    [[0,4,8,12], [1,5,9,13], [2,6,10,14], [3,7,11,15]],
+    // Rodada 3
+    [[0,5,10,15], [1,4,11,14], [2,7,8,13], [3,6,9,12]],
+    // Rodada 4
+    [[0,6,11,13], [1,7,10,12], [2,4,9,15], [3,5,8,14]],
+  ];
+
   function gerarSorteio(jogadores) {
     const n = jogadores?.length;
     if (!jogadores || (n !== 12 && n !== 16)) {
