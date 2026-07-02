@@ -823,6 +823,35 @@
       setListaEsperaAdmin(data || []);
     }
 
+    async function expandirFormato(novoFormato) {
+      const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
+      if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
+      setFormatoRodada(novoFormato);
+      // Promove automaticamente da espera
+      const { data: confirmados } = await supabase
+        .from("confirmacoes").select("id")
+        .eq("rodada_id", rodadaProx.id).eq("status", "confirmado");
+      const total = confirmados?.length || 0;
+      const vagas = novoFormato.total - total;
+      if (vagas > 0 && listaEsperaAdmin.length > 0) {
+        const promover = listaEsperaAdmin.slice(0, vagas);
+        for (const c of promover) {
+          await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", c.id);
+          const jogId = c.jogadores?.id || c.jogador_id;
+          if (jogId) {
+            const { data: sub } = await supabase.from("push_subscriptions").select("endpoint, p256dh, auth").eq("jogador_id", jogId);
+            if (sub && sub.length > 0) {
+              await fetch("/api/send-notification", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscriptions: sub, title: "Voce entrou na lista!", body: "Voce foi promovido da lista de espera para a lista principal. Ate sabado!", url: "/confirmacao" }) });
+            }
+          }
+        }
+        mostrarMensagem(`✅ Formato ${novoFormato.label} ativado! ${promover.length} jogador(es) promovido(s).`);
+        await carregarListaEspera();
+      } else {
+        mostrarMensagem(`✅ Formato ${novoFormato.label} atletas ativado!`);
+      }
+    }
+
     async function promoverListaEspera() {
       const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
       if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
@@ -833,10 +862,10 @@
         .from("confirmacoes").select("id")
         .eq("rodada_id", rodadaProx.id).eq("status", "confirmado");
       const total = confirmados?.length || 0;
-      const vagas = 24 - total;
+      const vagas = formatoRodada.total - total;
 
       if (vagas <= 0) {
-        mostrarMensagem("Lista principal já está completa (24/24).", "info");
+        mostrarMensagem(`Lista principal já está completa (${formatoRodada.total}/${formatoRodada.total}).`, "info");
         setPromovendo(false); return;
       }
       if (listaEsperaAdmin.length === 0) {
@@ -920,6 +949,30 @@
         )}
 
         <div style={{ background: "#1a3020", border: "1px solid #2a5a3a", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#7fb89a", marginBottom: 10 }}>👥 Formato da Rodada</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            {[
+              { label: "24", sub: "12🥇+12🥈", ouro: 12, prata: 12, total: 24 },
+              { label: "28", sub: "12🥇+16🥈", ouro: 12, prata: 16, total: 28 },
+              { label: "32", sub: "16🥇+16🥈", ouro: 16, prata: 16, total: 32 },
+            ].map(f => (
+              <button key={f.label} onClick={() => expandirFormato(f)} style={{
+                flex: 1, padding: "10px 4px", borderRadius: 8, border: "none", cursor: "pointer",
+                fontWeight: 700, fontSize: 14, textAlign: "center",
+                background: formatoRodada.total === f.total ? "#c9a227" : "rgba(255,255,255,0.08)",
+                color: formatoRodada.total === f.total ? "#0d2b1a" : "rgba(255,255,255,0.5)",
+              }}>
+                <div>{f.label}</div>
+                <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.8 }}>{f.sub}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
+            Ao expandir, atletas da lista de espera são promovidos automaticamente
+          </div>
+        </div>
+
+        <div style={{ background: "#1a3020", border: "1px solid #2a5a3a", borderRadius: 12, padding: 16, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "#7fb89a", marginBottom: 10 }}>📢 Lembretes de Confirmacao</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={() => enviarLembrete("Faltam 2 dias!", "A lista de confirmacao fecha na quarta as 10h. Confirme sua presenca!")} style={{ flex: 1, background: "#1a3a20", border: "1px solid #2a5a3a", borderRadius: 8, color: "#7fb89a", padding: "8px 4px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
@@ -940,26 +993,7 @@
               <span style={{ fontSize: 24 }}>🔒</span>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: ouro }}>Fechar Lista e Sortear</div>
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>Formato da rodada:</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {[
-                      { label: '24', sub: '12+12', ouro: 12, prata: 12, total: 24 },
-                      { label: '28', sub: '12+16', ouro: 12, prata: 16, total: 28 },
-                      { label: '32', sub: '16+16', ouro: 16, prata: 16, total: 32 },
-                    ].map(f => (
-                      <button key={f.label} onClick={() => setFormatoRodada(f)} style={{
-                        flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        fontWeight: 700, fontSize: 13, textAlign: 'center',
-                        background: formatoRodada.total === f.total ? '#c9a227' : 'rgba(255,255,255,0.08)',
-                        color: formatoRodada.total === f.total ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-                      }}>
-                        <div>{f.label}</div>
-                        <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.8 }}>{f.sub}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+
                 <div style={{ fontSize: 12, color: "#7fb89a" }}>Rodada {rodadaProxima.numero} — Faça isso sexta-feira às 14h</div>
               </div>
             </div>
