@@ -845,6 +845,21 @@
       setListaEsperaAdmin(data || []);
     }
 
+    function imprimirRodada(chave) {
+      const jogosChave = jogos.filter(j => j.chave === chave)
+      if (jogosChave.length === 0) { mostrarMensagem("Nenhum jogo na chave " + chave, "erro"); return; }
+      const gruposMap = {}
+      jogosChave.forEach(j => { const r = j.rodada_interna || 1; if (!gruposMap[r]) gruposMap[r] = []; gruposMap[r].push(j); })
+      const grupos = Object.keys(gruposMap).map(Number).sort((a,b) => a-b)
+      const corChave = chave === "ouro" ? "#c9a227" : "#8e9eab"
+      const nomeChave = chave === "ouro" ? "CHAVE OURO" : "CHAVE PRATA"
+      const dataRodada = rodadaSelecionada ? new Date(rodadaSelecionada.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" }) : ""
+      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Resenha BT - R${rodadaSelecionada?.numero} - ${nomeChave}</title><style>@page{size:A4;margin:15mm}*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;color:#1a1a1a}.header{display:flex;align-items:center;gap:16px;border-bottom:3px solid ${corChave};padding-bottom:12px;margin-bottom:20px}.header img{width:60px;height:60px;border-radius:12px}.header h1{font-size:22px;color:${corChave};letter-spacing:3px;font-weight:900}.header h2{font-size:14px;color:#444;margin-top:2px}.header h3{font-size:12px;color:#888;margin-top:2px}.ri{margin-bottom:18px;break-inside:avoid}.ri-titulo{background:${corChave}22;border-left:4px solid ${corChave};padding:6px 12px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${corChave};margin-bottom:8px}.jogo{display:flex;align-items:center;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:6px;background:#fafafa}.dupla{flex:1}.j1{font-size:13px;font-weight:700}.j2{font-size:11px;color:#666;margin-top:2px}.placar{display:flex;align-items:center;gap:8px;padding:0 16px}.pbox{width:40px;height:36px;border:2px solid #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#ccc}.vs{font-size:11px;color:#999;font-weight:700}</style></head><body><div class="header"><img src="https://resenha-bt.vercel.app/logo.png" onerror="this.style.display='none'"/><div><h1>RESENHA BT</h1><h2>Rodada ${rodadaSelecionada?.numero} — ${nomeChave} · ${jogosChave.length} jogos</h2><h3>${dataRodada} · 08h00 · Verônica Beach Tennis</h3></div></div>${grupos.map(gi => `<div class="ri"><div class="ri-titulo">Rodada ${gi}</div>${gruposMap[gi].map(j => `<div class="jogo"><div class="dupla"><div class="j1">${j.dupla_a_1}</div><div class="j2">${j.dupla_a_2||""}</div></div><div class="placar"><div class="pbox"></div><div class="vs">×</div><div class="pbox"></div></div><div class="dupla" style="text-align:right"><div class="j1">${j.dupla_b_1}</div><div class="j2">${j.dupla_b_2||""}</div></div></div>`).join("")}</div>`).join("")}<script>window.onload=()=>window.print()</script></body></html>`
+      const win = window.open("", "_blank")
+      win.document.write(html)
+      win.document.close()
+    }
+
     async function expandirFormato(novoFormato) {
       const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
       if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
@@ -1234,7 +1249,13 @@
             </div>
 
             <div style={styles.card}>
-              <h2 style={styles.cardTitulo}>📋 Jogos da rodada <span style={styles.badgeCount}>{jogos.length} jogos</span></h2>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <h2 style={{ ...styles.cardTitulo, marginBottom: 0 }}>📋 Jogos da rodada <span style={styles.badgeCount}>{jogos.length} jogos</span></h2>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => imprimirRodada("ouro")} style={{ background: "rgba(201,162,39,0.15)", border: "1px solid rgba(201,162,39,0.4)", borderRadius: 8, padding: "6px 10px", color: "#c9a227", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>🖨️ Ouro</button>
+                  <button onClick={() => imprimirRodada("prata")} style={{ background: "rgba(142,158,171,0.15)", border: "1px solid rgba(142,158,171,0.4)", borderRadius: 8, padding: "6px 10px", color: "#8e9eab", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>🖨️ Prata</button>
+                </div>
+              </div>
               {loading ? <p style={styles.loadingText}>Carregando...</p>
                 : jogos.length === 0 ? <p style={styles.emptyText}>Nenhum jogo inserido ainda.</p>
                 : (() => {
