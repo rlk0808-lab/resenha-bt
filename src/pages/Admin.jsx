@@ -847,9 +847,13 @@
 
     async function imprimirRodada(chave) {
       if (!rodadaSelecionada) { mostrarMensagem("Selecione uma rodada primeiro.", "erro"); return; }
+      // Abre a janela ANTES do await para não ser bloqueado pelo Safari
+      const win = window.open("", "_blank")
+      if (!win) { mostrarMensagem("Permita pop-ups para imprimir.", "erro"); return; }
+      win.document.write("<html><body><p>Carregando...</p></body></html>")
       const { data: jogosChave } = await supabase.from("jogos").select("*")
         .eq("rodada_id", rodadaSelecionada.id).eq("chave", chave).order("rodada_interna")
-      if (!jogosChave || jogosChave.length === 0) { mostrarMensagem("Nenhum jogo na chave " + chave, "erro"); return; }
+      if (!jogosChave || jogosChave.length === 0) { win.close(); mostrarMensagem("Nenhum jogo na chave " + chave, "erro"); return; }
       const gruposMap = {}
       jogosChave.forEach(j => { const r = j.rodada_interna || 1; if (!gruposMap[r]) gruposMap[r] = []; gruposMap[r].push(j); })
       const grupos = Object.keys(gruposMap).map(Number).sort((a,b) => a-b)
@@ -857,7 +861,7 @@
       const nomeChave = chave === "ouro" ? "CHAVE OURO" : "CHAVE PRATA"
       const dataRodada = rodadaSelecionada ? new Date(rodadaSelecionada.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" }) : ""
       const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Resenha BT - R${rodadaSelecionada?.numero} - ${nomeChave}</title><style>@page{size:A4;margin:8mm}*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;color:#1a1a1a;font-size:11px}.header{display:flex;align-items:center;gap:10px;border-bottom:2px solid ${corChave};padding-bottom:6px;margin-bottom:10px}.header img{width:40px;height:40px;border-radius:8px}.header h1{font-size:16px;color:${corChave};letter-spacing:2px;font-weight:900}.header h2{font-size:11px;color:#444;margin-top:1px}.header h3{font-size:10px;color:#888;margin-top:1px}.ri{margin-bottom:10px;break-inside:avoid}.ri-titulo{background:${corChave}22;border-left:3px solid ${corChave};padding:3px 8px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${corChave};margin-bottom:4px}.jogo{display:flex;align-items:center;padding:5px 8px;border:1px solid #e0e0e0;border-radius:5px;margin-bottom:3px;background:#fafafa}.dupla{flex:1}.j1{font-size:11px;font-weight:700}.j2{font-size:9px;color:#666;margin-top:1px}.placar{display:flex;align-items:center;gap:6px;padding:0 10px}.pbox{width:32px;height:28px;border:2px solid #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#ccc}.vs{font-size:9px;color:#999;font-weight:700}</style></head><body><div class="header"><img src="https://resenha-bt.vercel.app/logo.png" onerror="this.style.display='none'"/><div><h1>RESENHA BT</h1><h2>Rodada ${rodadaSelecionada?.numero} — ${nomeChave} · ${jogosChave.length} jogos</h2><h3>${dataRodada} · 08h00 · Verônica Beach Tennis</h3></div></div>${grupos.map(gi => `<div class="ri"><div class="ri-titulo">Rodada ${gi}</div>${gruposMap[gi].map(j => `<div class="jogo"><div class="dupla"><div class="j1">${j.dupla_a_1}</div><div class="j2">${j.dupla_a_2||""}</div></div><div class="placar"><div class="pbox"></div><div class="vs">×</div><div class="pbox"></div></div><div class="dupla" style="text-align:right"><div class="j1">${j.dupla_b_1}</div><div class="j2">${j.dupla_b_2||""}</div></div></div>`).join("")}</div>`).join("")}<div style='text-align:center;margin-top:12px;display:none' class='no-print'><button onclick='window.close()' style='padding:8px 20px;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:12px'>✕ Fechar</button></div><style>@media print{.no-print{display:none!important}}@media screen{.no-print{display:block!important}}</style><script>window.onload=()=>{window.print()}</script></body></html>`
-      const win = window.open("", "_blank")
+      win.document.open()
       win.document.write(html)
       win.document.close()
     }
