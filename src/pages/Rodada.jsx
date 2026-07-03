@@ -323,10 +323,15 @@ export default function Rodada() {
       )
     }
 
-    // Rodada normal: agrupa de 3 em 3
+    // Rodada normal: agrupa por rodada_interna
     const filtrados = jogos.filter(j => j.chave === chave)
-    const subRodadas = []
-    for (let i = 0; i < filtrados.length; i += 3) subRodadas.push(filtrados.slice(i, i + 3))
+    const gruposMap = {}
+    filtrados.forEach(j => {
+      const r = j.rodada_interna || 1
+      if (!gruposMap[r]) gruposMap[r] = []
+      gruposMap[r].push(j)
+    })
+    const subRodadas = Object.keys(gruposMap).map(Number).sort((a,b) => a-b).map(k => gruposMap[k])
     const corChave = chave === 'ouro' ? ouro : prata
 
     if (filtrados.length === 0) return (
