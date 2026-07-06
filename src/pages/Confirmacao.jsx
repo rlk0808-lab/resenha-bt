@@ -141,29 +141,36 @@ export default function Confirmacao({ session }) {
       .filter(r => !ouroDescem.has(r.jogadores?.nome) && nomeConfirmados.has(r.jogadores?.nome))
       .map(r => ({ nome: r.jogadores?.nome, status: "normal" }));
 
-    // Passo 3: quantos dos que ficam faltaram → precisa compensar subindo mais da Prata
+    // Passo 3: faltas na Ouro pos 1-9
     const ouroEfetivos = rankingAnt.ouro.filter(r => !ouroDescem.has(r.jogadores?.nome));
     const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
-    let totalSubir = 3 + qtdFaltasEfetivas;
-
-    // Passo 4: regra de manutenção (posições 10-12 se mantêm quando há muitas faltas)
-    const ouroMantem = [];
-    [10, 11, 12].forEach((pos, i) => {
-      if (qtdFaltasEfetivas >= 4 + i) {
-        const jogPos = rankingAnt.ouro.find(r => r.posicao === pos);
-        if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
-          ouroMantem.push({ nome: jogPos.jogadores?.nome, status: "mantido" });
-          totalSubir--;
-        }
-      }
-    });
-
-    // Passo 5: Prata que sobe (excluindo os que desceram da Ouro)
+    // Prata confirmada ordenada por posição
     const prataTodos = rankingAnt.prata
       .filter(r => nomeConfirmados.has(r.jogadores?.nome))
       .sort((a, b) => a.posicao - b.posicao);
-    const prataSobem = prataTodos.slice(0, totalSubir)
-      .map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
+    // Passo 4: sobem fixos (pos 1-3 da Prata que confirmaram)
+    const prataSobemFixos = prataTodos.filter(r => r.posicao <= 3).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
+    const vagasFixasNaoPreenchidas = 3 - prataSobemFixos.length;
+    // Passo 5: sobem extras (pos 4-6 por falta na Ouro)
+    const prataSobemExtras = prataTodos.filter(r => r.posicao >= 4 && r.posicao <= 6)
+      .slice(0, qtdFaltasEfetivas).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
+    // Passo 6: vagas restantes → mantém 10-12 da Ouro
+    const vagasRestantes = qtdFaltasEfetivas - prataSobemExtras.length + vagasFixasNaoPreenchidas;
+    const ouroMantem = [];
+    if (vagasRestantes > 0) {
+      [10, 11, 12].slice(0, vagasRestantes).forEach(pos => {
+        const jogPos = rankingAnt.ouro.find(r => r.posicao === pos);
+        if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
+          ouroMantem.push({ nome: jogPos.jogadores?.nome, status: "mantido" });
+        }
+      });
+    }
+    // Passo 7: ainda falta → sobe pos 7+ da Prata
+    const vagasAindaRestantes = vagasRestantes - ouroMantem.length;
+    const prataSobemUltimos = vagasAindaRestantes > 0
+      ? prataTodos.filter(r => r.posicao >= 7).slice(0, vagasAindaRestantes).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }))
+      : [];
+    const prataSobem = [...prataSobemFixos, ...prataSobemExtras, ...prataSobemUltimos];
 
     // Passo 6: monta Ouro final
     const ouroFinal = [...ouroFicam, ...ouroMantem, ...prataSobem].slice(0, 12);
@@ -177,7 +184,7 @@ export default function Confirmacao({ session }) {
     const prataFinal = [];
 
     // Prata que não subiu
-    prataTodos.slice(totalSubir).forEach(r => {
+    prataTodos.slice(prataSobem.length).forEach(r => {
       const nome = r.jogadores?.nome;
       if (!nomesUsados.has(nome)) { prataFinal.push({ nome, status: "normal" }); nomesUsados.add(nome); }
     });
