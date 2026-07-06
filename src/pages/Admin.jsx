@@ -309,11 +309,18 @@
         const prataTodos = rankPrata
           .filter(r => nomeConfirmados.has(r.jogadores?.nome))
           .sort((a, b) => a.posicao - b.posicao);
-        const prataSobemFixos = prataTodos.slice(0, 3).map(r => r.jogadores?.nome);
+        // Top 3 da Prata que confirmaram (sempre sobem)
+        const prataSobemFixos = prataTodos.filter(r => r.posicao <= 3).map(r => r.jogadores?.nome);
+        // Vagas não preenchidas pelos top 3 (ex: 1º não confirmou)
+        const vagasFixasNaoPreenchidas = 3 - prataSobemFixos.length;
+        // Faltas na Ouro (pos 1-9)
         const ouroEfetivos = rankOuro.filter(r => !ouroDescem.has(r.jogadores?.nome));
         const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
-        const prataSobemExtras = prataTodos.slice(3, 3 + qtdFaltasEfetivas).map(r => r.jogadores?.nome);
-        const vagasRestantes = qtdFaltasEfetivas - prataSobemExtras.length;
+        // Sobe pos 4, 5, 6 da Prata por falta na Ouro
+        const prataSobemExtras = prataTodos.filter(r => r.posicao >= 4 && r.posicao <= 6)
+          .slice(0, qtdFaltasEfetivas).map(r => r.jogadores?.nome);
+        // Vagas ainda restantes → mantém 10º, 11º, 12º da Ouro
+        const vagasRestantes = qtdFaltasEfetivas - prataSobemExtras.length + vagasFixasNaoPreenchidas;
         const ouroMantem = [];
         if (vagasRestantes > 0) {
           [10, 11, 12].slice(0, vagasRestantes).forEach(pos => {
@@ -323,7 +330,12 @@
             }
           });
         }
-        const prataSobem = [...prataSobemFixos, ...prataSobemExtras];
+        // Se ainda faltar → sobe pos 7, 8, 9... da Prata
+        const vagasAindaRestantes = vagasRestantes - ouroMantem.length;
+        const prataSobemUltimos = vagasAindaRestantes > 0
+          ? prataTodos.filter(r => r.posicao >= 7).slice(0, vagasAindaRestantes).map(r => r.jogadores?.nome)
+          : [];
+        const prataSobem = [...prataSobemFixos, ...prataSobemExtras, ...prataSobemUltimos];
         jogadoresOuro = [...ouroFicam, ...ouroMantem, ...prataSobem];
 
         jogadoresOuro = [...ouroFicam, ...ouroMantem, ...prataSobem];
