@@ -866,33 +866,9 @@
       win.document.close()
     }
 
-    async function expandirFormato(novoFormato) {
-      const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
-      if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
+    function expandirFormato(novoFormato) {
       setFormatoRodadaPersistido(novoFormato);
-      // Promove automaticamente da espera
-      const { data: confirmados } = await supabase
-        .from("confirmacoes").select("id")
-        .eq("rodada_id", rodadaProx.id).eq("status", "confirmado");
-      const total = confirmados?.length || 0;
-      const vagas = novoFormato.total - total;
-      if (vagas > 0 && listaEsperaAdmin.length > 0) {
-        const promover = listaEsperaAdmin.slice(0, vagas);
-        for (const c of promover) {
-          await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", c.id);
-          const jogId = c.jogadores?.id || c.jogador_id;
-          if (jogId) {
-            const { data: sub } = await supabase.from("push_subscriptions").select("endpoint, p256dh, auth").eq("jogador_id", jogId);
-            if (sub && sub.length > 0) {
-              await fetch("/api/send-notification", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscriptions: sub, title: "Voce entrou na lista!", body: "Voce foi promovido da lista de espera para a lista principal. Ate sabado!", url: "/confirmacao" }) });
-            }
-          }
-        }
-        mostrarMensagem(`✅ Formato ${novoFormato.label} ativado! ${promover.length} jogador(es) promovido(s).`);
-        await carregarListaEspera();
-      } else {
-        mostrarMensagem(`✅ Formato ${novoFormato.label} atletas ativado!`);
-      }
+      mostrarMensagem(`✅ Formato ${novoFormato.label} atletas selecionado! Use o botão "Promover para Lista Principal" para subir atletas da espera.`);
     }
 
     async function promoverListaEspera() {

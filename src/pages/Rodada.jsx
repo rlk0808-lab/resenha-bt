@@ -75,17 +75,18 @@ export default function Rodada() {
         event: '*', schema: 'public', table: 'jogos',
         filter: `rodada_id=eq.${proximaRodada.id}`
       }, (payload) => {
-        calcularRankingVivo([...proximaJogos])
         setProximaJogos(prev => {
           const idx = prev.findIndex(j => j.id === payload.new?.id)
+          let novo = prev
           if (payload.eventType === 'UPDATE' && idx >= 0) {
-            const novo = [...prev]
-            novo[idx] = payload.new
-            return novo
+            novo = [...prev]; novo[idx] = payload.new
+          } else if (payload.eventType === 'INSERT') {
+            novo = [...prev, payload.new]
+          } else if (payload.eventType === 'DELETE') {
+            novo = prev.filter(j => j.id !== payload.old?.id)
           }
-          if (payload.eventType === 'INSERT') return [...prev, payload.new]
-          if (payload.eventType === 'DELETE') return prev.filter(j => j.id !== payload.old?.id)
-          return prev
+          calcularRankingVivo(novo)
+          return novo
         })
       })
       .subscribe()

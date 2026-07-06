@@ -17,6 +17,7 @@ export default function PerfilJogador() {
   const [jogosDetalhados, setJogosDetalhados] = useState([])
   const [badges, setBadges] = useState([])
   const [h2hAberto, setH2hAberto] = useState(null)
+  const [parceiroAberto, setParceiroAberto] = useState(null)
   const [jogadoresMap, setJogadoresMap] = useState({})
   const [loading, setLoading] = useState(true)
 
@@ -331,23 +332,53 @@ export default function PerfilJogador() {
         </h3>
         {parceiros.length === 0
           ? <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: 20 }}>Nenhum dado disponível</p>
-          : parceiros.map((p, i) => (
-            <div key={p.nome} style={{ padding: '10px 0', borderTop: i > 0 ? `1px solid ${borda}` : 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div onClick={() => jogadoresMap[p.nome] && navigate('/jogador/' + jogadoresMap[p.nome])}
-                  style={{ fontSize: 13, fontWeight: 600, color: jogadoresMap[p.nome] ? ouro : '#e8f5e9', cursor: jogadoresMap[p.nome] ? 'pointer' : 'default' }}>
-                  {p.nome}
+          : parceiros.map((p, i) => {
+            const aberto = parceiroAberto === p.nome
+            const jogosParceiro = jogosDetalhados.filter(j => {
+              const estouNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
+              const parcs = estouNoA ? [j.dupla_a_1, j.dupla_a_2] : [j.dupla_b_1, j.dupla_b_2]
+              return parcs.includes(p.nome) && parcs.includes(nomeJogador)
+            })
+            return (
+              <div key={p.nome} style={{ borderTop: i > 0 ? `1px solid ${borda}` : 'none' }}>
+                <div onClick={() => setParceiroAberto(aberto ? null : p.nome)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div onClick={e => { e.stopPropagation(); jogadoresMap[p.nome] && navigate('/jogador/' + jogadoresMap[p.nome]) }}
+                      style={{ fontSize: 13, fontWeight: 600, color: jogadoresMap[p.nome] ? ouro : '#e8f5e9', cursor: jogadoresMap[p.nome] ? 'pointer' : 'default' }}>
+                      {p.nome}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, fontSize: 12 }}>
+                      <span style={{ color: '#2d7a45' }}>{p.vitorias}V</span>
+                      <span style={{ color: '#c0392b' }}>{p.derrotas}D</span>
+                      <span style={{ color: 'rgba(255,255,255,0.4)' }}>{p.jogos}j</span>
+                      <span style={{ color: '#f5c518', fontWeight: 700 }}>{p.pct}%</span>
+                    </div>
+                  </div>
+                  <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16, transform: aberto ? 'rotate(90deg)' : 'none', transition: '0.2s' }}>›</span>
                 </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
-                  <span style={{ color: '#2d7a45' }}>{p.vitorias}V</span>
-                  <span style={{ color: '#c0392b' }}>{p.derrotas}D</span>
-                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>{p.jogos}j</span>
-                  <span style={{ color: '#f5c518', fontWeight: 700 }}>{p.pct}%</span>
-                </div>
+                <Barra pct={p.pct} />
+                {aberto && (
+                  <div style={{ paddingBottom: 8 }}>
+                    {jogosParceiro.map((j, ji) => {
+                      const estouNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
+                      const venci = estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
+                      const meuPlacar = estouNoA ? j.placar_a : j.placar_b
+                      const advPlacar = estouNoA ? j.placar_b : j.placar_a
+                      const adv1 = estouNoA ? j.dupla_b_1 : j.dupla_a_1
+                      const adv2 = estouNoA ? j.dupla_b_2 : j.dupla_a_2
+                      return (
+                        <div key={ji} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0 5px 12px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                          <span style={{ fontSize: 12 }}>{venci ? '✅' : '❌'}</span>
+                          <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>vs {[adv1, adv2].filter(Boolean).join(' / ')}</div>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: venci ? '#2ecc71' : '#e74c3c', fontFamily: "'Bebas Neue', sans-serif" }}>{meuPlacar} × {advPlacar}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              <Barra pct={p.pct} />
-            </div>
-          ))}
+            )
+          })}
       </div>
 
       {/* Adversários com H2H expandível */}

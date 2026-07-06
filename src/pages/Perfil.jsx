@@ -179,9 +179,20 @@ export default function Perfil() {
     </div>
   )
 
+  // Calcula total de jogos, vitórias e derrotas dos jogos individuais
+  const totalJogosReal = jogosDetalhados?.length || 0
+  const totalVitoriasReal = (jogosDetalhados || []).filter(j => {
+    const estouNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
+    return estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
+  }).length
+  const totalDerrotasReal = totalJogosReal - totalVitoriasReal
+  const pctReal = totalJogosReal > 0 ? Math.round(totalVitoriasReal / totalJogosReal * 100) : 0
+
   const statCards = [
     { label: 'Pontos', valor: stats?.pontos_total || 0, cor: '#f5c518' },
-    { label: 'Vitorias', valor: stats?.vitorias || 0, cor: '#2d7a45' },
+    { label: 'Vitorias', valor: totalVitoriasReal, cor: '#2d7a45' },
+    { label: 'Derrotas', valor: totalDerrotasReal, cor: '#c0392b' },
+    { label: 'Aproveit.', valor: `${pctReal}%`, cor: '#1abc9c' },
     { label: 'Rodadas', valor: stats?.rodadas_jogadas || 0, cor: '#4d8ab5' },
     { label: 'Posicao', valor: stats?.posicao ? `${stats.posicao}º` : '-', cor: '#e8621a' },
   ]
