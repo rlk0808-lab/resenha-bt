@@ -180,9 +180,10 @@ export default function Perfil() {
   )
 
   // Calcula total de jogos, vitórias e derrotas dos jogos individuais
+  const nomeAtualPerfil = jogador?.nome || ''
   const totalJogosReal = jogosDetalhados?.length || 0
   const totalVitoriasReal = (jogosDetalhados || []).filter(j => {
-    const estouNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
+    const estouNoA = j.dupla_a_1 === nomeAtualPerfil || j.dupla_a_2 === nomeAtualPerfil
     return estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
   }).length
   const totalDerrotasReal = totalJogosReal - totalVitoriasReal
