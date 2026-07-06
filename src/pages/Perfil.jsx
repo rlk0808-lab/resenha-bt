@@ -101,7 +101,12 @@ export default function Perfil() {
           setMelhorDupla(melhor)
           const jogosOrdenados = jogos
             .filter(j => j.placar_a !== null && j.placar_b !== null)
-            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .sort((a, b) => {
+              // Ordena por rodada DESC, depois rodada_interna DESC
+              if (b.numero_rodada !== a.numero_rodada) return (b.numero_rodada || 0) - (a.numero_rodada || 0)
+              if (b.rodada_interna !== a.rodada_interna) return (b.rodada_interna || 0) - (a.rodada_interna || 0)
+              return new Date(b.created_at) - new Date(a.created_at)
+            })
           let seq = 0; let tipo = null
           for (const jogo of jogosOrdenados) {
             const estouNoA = jogo.dupla_a_1 === p.nome || jogo.dupla_a_2 === p.nome
