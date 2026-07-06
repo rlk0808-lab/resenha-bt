@@ -173,7 +173,7 @@ export default function Confirmacao({ session }) {
     const prataSobem = [...prataSobemFixos, ...prataSobemExtras, ...prataSobemUltimos];
 
     // Passo 6: monta Ouro final
-    const ouroFinal = [...ouroFicam, ...ouroMantem, ...prataSobem].slice(0, 12);
+    const ouroFinal = [...ouroFicam, ...prataSobemFixos, ...prataSobemExtras, ...ouroMantem, ...prataSobemUltimos].slice(0, 12);
     const nomesOuro = new Set(ouroFinal.map(j => j.nome));
 
     // Passo 7: monta Prata final
