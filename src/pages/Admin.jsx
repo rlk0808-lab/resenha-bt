@@ -657,8 +657,7 @@
       }
 
       // Calcula badges da rodada
-      console.log('Calculando badges...', rodadaSelecionada.id, rankingPreview)
-      try { await calcularBadges(rodadaSelecionada.id, rankingPreview); console.log('Badges OK'); } catch(e) { console.error('Erro badges:', e) }
+      await calcularBadges(rodadaSelecionada.id, rankingPreview);
 
       await carregarJogadores();
       setRankingPreview(null);
@@ -1244,7 +1243,6 @@
                 : (() => {
                   // Agrupa jogos por rodada_interna
   const gruposMap = {};
-  console.log('jogos prata:', jogos.length, jogos.map(j => j.rodada_interna));
   jogos.forEach(j => { const r = j.rodada_interna || 1; if (!gruposMap[r]) gruposMap[r] = []; gruposMap[r].push(j); });
   const gruposOrdenados = Object.keys(gruposMap).map(Number).sort((a,b) => a-b);
   return gruposOrdenados.map((gi) => (
