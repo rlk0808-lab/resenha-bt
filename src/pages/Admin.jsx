@@ -657,7 +657,8 @@
       }
 
       // Calcula badges da rodada
-      await calcularBadges(rodadaSelecionada.id, rankingPreview);
+      console.log('Calculando badges...', rodadaSelecionada.id, rankingPreview)
+      try { await calcularBadges(rodadaSelecionada.id, rankingPreview); console.log('Badges OK'); } catch(e) { console.error('Erro badges:', e) }
 
       await carregarJogadores();
       setRankingPreview(null);
