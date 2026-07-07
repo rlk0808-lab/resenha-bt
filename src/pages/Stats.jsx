@@ -35,6 +35,8 @@ export default function Stats() {
       const { data: jogos } = await supabase
         .from('jogos')
         .select('dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2, placar_a, placar_b, chave')
+        .not('placar_a', 'is', null)
+        .not('placar_b', 'is', null)
       setJogos(jogos || [])
 
       const { data: p } = await supabase
