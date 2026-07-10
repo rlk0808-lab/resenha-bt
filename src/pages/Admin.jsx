@@ -145,6 +145,11 @@
       setJogadores(data || []);
     }
 
+    async function salvarSlot(jogoId, campo, valor) {
+      await supabase.from("jogos").update({ [campo]: valor || null }).eq("id", jogoId)
+      await carregarJogos()
+    }
+
     async function carregarJogos() {
       setLoading(true);
       setRankingPreview(null);
@@ -1166,10 +1171,6 @@
                 const gruposMap = {}
                 jogosEsp.forEach(j => { const r = j.rodada_interna || 1; if (!gruposMap[r]) gruposMap[r] = []; gruposMap[r].push(j) })
                 const grupos = Object.keys(gruposMap).map(Number).sort((a,b) => a-b)
-                const salvarSlot = async (jogoId, campo, valor) => {
-                  await supabase.from("jogos").update({ [campo]: valor || null }).eq("id", jogoId)
-                  await carregarJogos()
-                }
                 return grupos.map(gi => {
                   const usadosNaRodada = new Set()
                   gruposMap[gi].forEach(j => { [j.dupla_a_1,j.dupla_a_2,j.dupla_b_1,j.dupla_b_2].filter(Boolean).forEach(n => usadosNaRodada.add(n)) })
