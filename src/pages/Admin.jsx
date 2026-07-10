@@ -111,6 +111,7 @@
               // Carrega times já salvos no banco
               const ta = (data || []).filter(c => c.time === "time_a").map(c => c.jogadores?.nome).filter(Boolean);
               const tb = (data || []).filter(c => c.time === "time_b").map(c => c.jogadores?.nome).filter(Boolean);
+              console.log('Times:', ta, tb);
               setTimesEspecial({ time_a: ta, time_b: tb });
             });
         }
