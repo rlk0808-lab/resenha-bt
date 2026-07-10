@@ -147,11 +147,12 @@
     async function carregarJogos() {
       setLoading(true);
       setRankingPreview(null);
-      const { data } = await supabase
-        .from("jogos").select("*")
-        .eq("rodada_id", rodadaSelecionada.id)
-        .eq("chave", chaveAtiva)
-        .order("created_at", { ascending: true });
+      let query = supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
+      // Rodada especial: carrega todos os jogos (especial, time_a, time_b)
+      if (rodadaSelecionada.tipo !== "especial") {
+        query = query.eq("chave", chaveAtiva);
+      }
+      const { data } = await query.order("rodada_interna").order("created_at", { ascending: true });
       setJogos(data || []);
       setLoading(false);
     }
