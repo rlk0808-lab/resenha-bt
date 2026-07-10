@@ -1159,11 +1159,50 @@
               {rodadaSelecionada?.tipo !== "especial" && (
                 <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio Manual</button>
               )}
-              {rodadaSelecionada?.tipo === "especial" && (
-                <div style={{ background: "#1a3a20", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#c9a227", border: "1px solid rgba(201,162,39,0.3)" }}>
-                  ⭐ Rodada Especial — insira os jogos manualmente abaixo
-                </div>
-              )}
+              {rodadaSelecionada?.tipo === "especial" && jogos.filter(j => j.chave === "especial").length > 0 && (() => {
+                const jogosEsp = jogos.filter(j => j.chave === "especial")
+                const gruposMap = {}
+                jogosEsp.forEach(j => { const r = j.rodada_interna || 1; if (!gruposMap[r]) gruposMap[r] = []; gruposMap[r].push(j) })
+                const grupos = Object.keys(gruposMap).map(Number).sort((a,b) => a-b)
+                const salvarSlot = async (jogoId, campo, valor) => {
+                  await supabase.from("jogos").update({ [campo]: valor || null }).eq("id", jogoId)
+                  await carregarJogos()
+                }
+                return grupos.map(gi => {
+                  const usadosNaRodada = new Set()
+                  gruposMap[gi].forEach(j => { [j.dupla_a_1,j.dupla_a_2,j.dupla_b_1,j.dupla_b_2].filter(Boolean).forEach(n => usadosNaRodada.add(n)) })
+                  const SlotSelect = ({ jogoId, campo, valor, time }) => {
+                    const disponiveis = (timesEspecial[time] || []).filter(n => !usadosNaRodada.has(n) || n === valor)
+                    return (
+                      <select value={valor || ""} onChange={e => salvarSlot(jogoId, campo, e.target.value)}
+                        style={{ background: "#0d2b1a", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, color: valor ? "#e8f5e9" : "rgba(255,255,255,0.3)", fontSize: 11, padding: "4px 6px", width: "100%" }}>
+                        <option value="">selecionar</option>
+                        {disponiveis.map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    )
+                  }
+                  return (
+                    <div key={gi} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>Rodada {gi}</div>
+                      {gruposMap[gi].map((j) => (
+                        <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 9, color: "#e74c3c", marginBottom: 3, fontWeight: 700 }}>TIME A</div>
+                            <SlotSelect jogoId={j.id} campo="dupla_a_1" valor={j.dupla_a_1} time="time_a" />
+                            <div style={{ marginTop: 3 }}><SlotSelect jogoId={j.id} campo="dupla_a_2" valor={j.dupla_a_2} time="time_a" /></div>
+                          </div>
+                          <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, fontWeight: 700, padding: "0 4px" }}>x</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 9, color: "#3498db", marginBottom: 3, fontWeight: 700 }}>TIME B</div>
+                            <SlotSelect jogoId={j.id} campo="dupla_b_1" valor={j.dupla_b_1} time="time_b" />
+                            <div style={{ marginTop: 3 }}><SlotSelect jogoId={j.id} campo="dupla_b_2" valor={j.dupla_b_2} time="time_b" /></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })
+              })()}
             </div>
 {rodadaSelecionada?.status === "ativa" && (
             <div style={{ marginBottom: 16 }}>
