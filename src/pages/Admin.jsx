@@ -158,7 +158,7 @@
       if (rodadaSelecionada.tipo !== "especial") {
         query = query.eq("chave", chaveAtiva);
       }
-      const { data } = await query.order("rodada_interna").order("created_at", { ascending: true });
+      const { data } = await query.order("rodada_interna").order("id", { ascending: true });
       setJogos(data || []);
       setLoading(false);
     }
