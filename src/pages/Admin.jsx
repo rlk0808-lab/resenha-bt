@@ -521,7 +521,7 @@
       if (error) { mostrarMensagem("Erro ao buscar jogos.", "erro"); setCalculando(false); return; }
       if (rodadaSelecionada?.tipo === "especial") {
         // Especial: todos os jogos juntos (time_a e time_b), sem separação ouro/prata
-        const todosJogosEspecial = todosJogos.filter(j => j.chave === "time_a" || j.chave === "time_b");
+        const todosJogosEspecial = todosJogos.filter(j => j.chave === "especial" || j.chave === "time_a" || j.chave === "time_b");
         const rankEspecial = calcularRankingLocal(todosJogosEspecial, "especial");
         setRankingPreview({ ouro: rankEspecial, prata: [] });
       } else {
