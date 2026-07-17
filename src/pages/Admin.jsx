@@ -695,62 +695,52 @@
     async function substituirJogador() {
       if (!substAusente || !substReserva || !rodadaSelecionada) return;
       setSubstProcessando(true);
-
       const jogadorAusente = jogadores.find(j => j.nome === substAusente);
       if (!jogadorAusente) { mostrarMensagem("Jogador ausente não encontrado.", "erro"); setSubstProcessando(false); return; }
-
       const { data: jogosRodada } = await supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
       if (!jogosRodada) { mostrarMensagem("Erro ao buscar jogos.", "erro"); setSubstProcessando(false); return; }
 
+      const { data: rodadaInfo } = await supabase.from("rodadas").select("updated_at").eq("id", rodadaSelecionada.id).limit(1);
+      const dataFechamento = rodadaInfo?.[0]?.updated_at;
+      const { data: confirmsDepois } = await supabase.from("confirmacoes")
+        .select("jogadores(nome)").eq("rodada_id", rodadaSelecionada.id)
+        .eq("status", "confirmado").gt("created_at", dataFechamento);
+      const nomesDepoisSorteio = new Set((confirmsDepois || []).map(c => c.jogadores?.nome).filter(Boolean));
+
+      const substituir = async (de, para, chave) => {
+        const updates = [];
+        for (const jogo of jogosRodada) {
+          if (chave && jogo.chave !== chave) continue;
+          const campos = {};
+          if (jogo.dupla_a_1 === de) campos.dupla_a_1 = para;
+          if (jogo.dupla_a_2 === de) campos.dupla_a_2 = para;
+          if (jogo.dupla_b_1 === de) campos.dupla_b_1 = para;
+          if (jogo.dupla_b_2 === de) campos.dupla_b_2 = para;
+          if (Object.keys(campos).length > 0) updates.push(supabase.from("jogos").update(campos).eq("id", jogo.id));
+        }
+        await Promise.all(updates);
+      };
+
       if (jogadorAusente.chave === "ouro") {
-        // Busca ranking anterior da prata para pegar o 1º
-        const { data: rodAntData } = await supabase.from("rodadas").select("id").eq("status","finalizada").order("numero",{ascending:false}).limit(1);
-        const rodAntId = rodAntData?.[0]?.id;
-        const { data: rankAnt } = await supabase.from("ranking_rodada")
-          .select("*, jogadores(nome)")
-          .eq("rodada_id", rodAntId)
-          .eq("chave", "prata")
+        const { data: rodAntData } = await supabase.from("rodadas").select("id,tipo").eq("status","finalizada").order("numero",{ascending:false});
+        const rodAntNormal = rodAntData?.find(r => r.tipo !== "especial");
+        if (!rodAntNormal) { mostrarMensagem("Rodada anterior não encontrada.", "erro"); setSubstProcessando(false); return; }
+        const { data: rankPrata } = await supabase.from("ranking_rodada")
+          .select("posicao, jogadores(nome)").eq("rodada_id", rodAntNormal.id).eq("chave", "prata")
           .order("posicao", {ascending: true});
-
-        const nomesNosJogos = new Set(jogosRodada.flatMap(j => [j.dupla_a_1, j.dupla_a_2, j.dupla_b_1, j.dupla_b_2].filter(Boolean)));
-        const primeiroPrata = rankAnt?.find(r => nomesNosJogos.has(r.jogadores?.nome))?.jogadores?.nome;
-
-        if (!primeiroPrata) { mostrarMensagem("Não foi possível identificar o 1º da Prata.", "erro"); setSubstProcessando(false); return; }
-
-        const updates = [];
-        for (const jogo of jogosRodada) {
-          const campos = {};
-          if (jogo.chave === "ouro") {
-            if (jogo.dupla_a_1 === substAusente) campos.dupla_a_1 = primeiroPrata;
-            if (jogo.dupla_a_2 === substAusente) campos.dupla_a_2 = primeiroPrata;
-            if (jogo.dupla_b_1 === substAusente) campos.dupla_b_1 = primeiroPrata;
-            if (jogo.dupla_b_2 === substAusente) campos.dupla_b_2 = primeiroPrata;
-          }
-          if (jogo.chave === "prata") {
-            if (jogo.dupla_a_1 === primeiroPrata) campos.dupla_a_1 = substReserva;
-            if (jogo.dupla_a_2 === primeiroPrata) campos.dupla_a_2 = substReserva;
-            if (jogo.dupla_b_1 === primeiroPrata) campos.dupla_b_1 = substReserva;
-            if (jogo.dupla_b_2 === primeiroPrata) campos.dupla_b_2 = substReserva;
-          }
-          if (Object.keys(campos).length > 0) updates.push(supabase.from("jogos").update(campos).eq("id", jogo.id));
-        }
-        await Promise.all(updates);
-        mostrarMensagem(`✅ ${substAusente} → ${primeiroPrata} (Ouro) | ${primeiroPrata} → ${substReserva} (Prata)`);
+        const nomesNaPrata = new Set(jogosRodada.filter(j => j.chave === "prata").flatMap(j => [j.dupla_a_1,j.dupla_a_2,j.dupla_b_1,j.dupla_b_2].filter(Boolean)));
+        const proximoQueSubiria = rankPrata?.find(r => {
+          const nome = r.jogadores?.nome;
+          return nomesNaPrata.has(nome) && !nomesDepoisSorteio.has(nome);
+        })?.jogadores?.nome;
+        if (!proximoQueSubiria) { mostrarMensagem("Não foi possível identificar quem sobe da Prata.", "erro"); setSubstProcessando(false); return; }
+        await substituir(substAusente, proximoQueSubiria, "ouro");
+        await substituir(proximoQueSubiria, substReserva, "prata");
+        mostrarMensagem(`✅ ${substAusente} saiu | ${proximoQueSubiria} subiu para Ouro | ${substReserva} entrou na Prata`);
       } else {
-        // Prata: substitui direto
-        const updates = [];
-        for (const jogo of jogosRodada) {
-          const campos = {};
-          if (jogo.dupla_a_1 === substAusente) campos.dupla_a_1 = substReserva;
-          if (jogo.dupla_a_2 === substAusente) campos.dupla_a_2 = substReserva;
-          if (jogo.dupla_b_1 === substAusente) campos.dupla_b_1 = substReserva;
-          if (jogo.dupla_b_2 === substAusente) campos.dupla_b_2 = substReserva;
-          if (Object.keys(campos).length > 0) updates.push(supabase.from("jogos").update(campos).eq("id", jogo.id));
-        }
-        await Promise.all(updates);
+        await substituir(substAusente, substReserva, "prata");
         mostrarMensagem(`✅ ${substAusente} substituído por ${substReserva} na Prata.`);
       }
-
       setModalSubst(false);
       setSubstAusente("");
       setSubstReserva("");
