@@ -1557,10 +1557,7 @@
                 <label style={{ fontSize: 12, color: "#7fb89a", display: "block", marginBottom: 4 }}>Reserva (quem entra):</label>
                 <select value={substReserva} onChange={e => setSubstReserva(e.target.value)} style={styles.select}>
                   <option value="">selecionar</option>
-                  {listaEsperaAdmin.map(c => (
-                    <option key={c.id} value={c.jogadores?.nome}>{c.jogadores?.nome} (espera)</option>
-                  ))}
-                  {jogadores.filter(j => j.chave !== "ouro" && j.chave !== "prata").map(j => (
+                  {jogadores.map(j => (
                     <option key={j.id} value={j.nome}>{j.nome}</option>
                   ))}
                 </select>
