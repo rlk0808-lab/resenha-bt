@@ -43,10 +43,10 @@ export default function Confirmacao({ session }) {
     const { data: anteriores } = await supabase.from("rodadas").select("*")
       .eq("status", "finalizada").order("numero", { ascending: false });
     
-    // Rodada de referência = última rodada NORMAL finalizada (não especial)
+    // Rodada de referência = última rodada finalizada (qualquer tipo)
+    const ultimaRodada = anteriores?.[0] || null;
+    // Última rodada normal finalizada (para prévia de chaves)
     const rodAnt = anteriores?.find(r => r.tipo !== "especial") || anteriores?.[0] || null;
-    // Última rodada especial finalizada (para verificar os extras)
-    const rodEspecial = anteriores?.find(r => r.tipo === "especial") || null;
 
     if (rodAnt) {
       const { data: rank } = await supabase.from("ranking_rodada")
@@ -58,26 +58,27 @@ export default function Confirmacao({ session }) {
           prata: rank.filter(r => r.chave === "prata"),
         });
       }
+    }
 
-      // Verifica se jogador jogou a última rodada NORMAL
-      if (jog) {
-        const { data: rankJog } = await supabase.from("ranking_rodada").select("id")
-          .eq("rodada_id", rodAnt.id).eq("jogador_id", jog.id).limit(1);
-        const jogouNormal = !!(rankJog && rankJog.length > 0);
-
-        if (!jogouNormal && rodEspecial) {
-          // Verifica se jogou a rodada especial (extras com prioridade)
-          const { data: rankEsp } = await supabase.from("ranking_rodada").select("id")
-            .eq("rodada_id", rodEspecial.id).eq("jogador_id", jog.id).limit(1);
-          const jogouEspecial = !!(rankEsp && rankEsp.length > 0);
-          // Jogou especial mas não normal → espera com prioridade (tratamos como false mas marcamos)
-          setJogouUltimaRodada(jogouEspecial ? "especial" : false);
+    // Verifica se jogador jogou a ÚLTIMA rodada (normal ou especial)
+    if (jog && ultimaRodada) {
+      const { data: rankJog } = await supabase.from("ranking_rodada").select("id")
+        .eq("rodada_id", ultimaRodada.id).eq("jogador_id", jog.id).limit(1);
+      const jogouUltima = !!(rankJog && rankJog.length > 0);
+      if (!jogouUltima && ultimaRodada.tipo === "especial") {
+        // Não jogou a especial — verifica se jogou a normal anterior
+        const rodAntNormal = anteriores?.find(r => r.tipo !== "especial") || null;
+        if (rodAntNormal) {
+          const { data: rankNormal } = await supabase.from("ranking_rodada").select("id")
+            .eq("rodada_id", rodAntNormal.id).eq("jogador_id", jog.id).limit(1);
+          const jogouNormal = !!(rankNormal && rankNormal.length > 0);
+          setJogouUltimaRodada(jogouNormal ? "especial" : false);
         } else {
-          setJogouUltimaRodada(jogouNormal);
+          setJogouUltimaRodada(false);
         }
+      } else {
+        setJogouUltimaRodada(jogouUltima);
       }
-    } else {
-      setJogouUltimaRodada(true); // Primeira rodada: todos podem confirmar
     }
 
     await carregarConfirmacoes(rodada.id, jog);
