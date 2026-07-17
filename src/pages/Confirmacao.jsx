@@ -227,7 +227,7 @@ export default function Confirmacao({ session }) {
 
   async function confirmarPresenca() {
     if (!jogador || !rodadaAtual) return;
-    if (listaFechada()) { mostrarMensagem("Lista encerrada. O sorteio já foi publicado.", "info"); return; }
+    // Lista fechada: ainda permite entrar na espera
     setProcessando(true);
 
     const { data: existentes } = await supabase.from("confirmacoes").select("*")
@@ -241,10 +241,12 @@ export default function Confirmacao({ session }) {
     // REGRA: quem não jogou a última rodada NORMAL → sempre espera
     // Quem jogou apenas a especial (extras) → espera com prioridade
     let status;
-    if (!jogouUltimaRodada) {
+    if (listaFechada()) {
+      status = "espera"; // Sorteio já feito — entra apenas na espera
+    } else if (!jogouUltimaRodada) {
       status = "espera";
     } else if (jogouUltimaRodada === "especial") {
-      status = "espera"; // entra na espera mas confirmou antes dos que nunca jogaram
+      status = "espera";
     } else if (listaConfirmados.length < LIMITE_PRINCIPAL && dentroPrazo) {
       status = "confirmado";
     } else {
