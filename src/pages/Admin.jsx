@@ -324,10 +324,10 @@
         const ouroEfetivos = rankOuro.filter(r => !ouroDescem.has(r.jogadores?.nome));
         const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
         // Sobe pos 4, 5, 6 da Prata por falta na Ouro
+        const totalVagasExtras = qtdFaltasEfetivas + vagasFixasNaoPreenchidas;
         const prataSobemExtras = prataTodos.filter(r => r.posicao >= 4 && r.posicao <= 6)
-          .slice(0, qtdFaltasEfetivas).map(r => r.jogadores?.nome);
-        // Vagas ainda restantes → mantém 10º, 11º, 12º da Ouro
-        const vagasRestantes = qtdFaltasEfetivas - prataSobemExtras.length + vagasFixasNaoPreenchidas;
+          .slice(0, totalVagasExtras).map(r => r.jogadores?.nome);
+        const vagasRestantes = totalVagasExtras - prataSobemExtras.length;
         const ouroMantem = [];
         if (vagasRestantes > 0) {
           let vagasPreenchidas = 0;

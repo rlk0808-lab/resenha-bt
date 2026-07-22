@@ -152,11 +152,12 @@ export default function Confirmacao({ session }) {
     // Passo 4: sobem fixos (pos 1-3 da Prata que confirmaram)
     const prataSobemFixos = prataTodos.filter(r => r.posicao <= 3).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
     const vagasFixasNaoPreenchidas = 3 - prataSobemFixos.length;
-    // Passo 5: sobem extras (pos 4-6 por falta na Ouro)
+    // Passo 5: sobem extras (pos 4-6 por falta na Ouro + vagas dos fixos não confirmados)
+    const totalVagasExtras = qtdFaltasEfetivas + vagasFixasNaoPreenchidas;
     const prataSobemExtras = prataTodos.filter(r => r.posicao >= 4 && r.posicao <= 6)
-      .slice(0, qtdFaltasEfetivas).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
+      .slice(0, totalVagasExtras).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
     // Passo 6: vagas restantes → mantém 10-12 da Ouro
-    const vagasRestantes = qtdFaltasEfetivas - prataSobemExtras.length + vagasFixasNaoPreenchidas;
+    const vagasRestantes = totalVagasExtras - prataSobemExtras.length;
     const ouroMantem = [];
     if (vagasRestantes > 0) {
       let vagasPreenchidas = 0;
