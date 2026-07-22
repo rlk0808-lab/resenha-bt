@@ -13,6 +13,8 @@ export default function Confirmacao({ session }) {
   const [loading, setLoading] = useState(true);
   const [processando, setProcessando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
+  const [confirmandoPendente, setConfirmandoPendente] = useState(false);
+  const [confirmacaoSucesso, setConfirmacaoSucesso] = useState(false);
 
   const LIMITE_PRINCIPAL = 24;
 
@@ -264,10 +266,18 @@ export default function Confirmacao({ session }) {
     if (error) {
       mostrarMensagem("Erro ao confirmar: " + error.message, "erro");
     } else {
-      if (status === "confirmado") mostrarMensagem("✅ Presença confirmada na lista principal!");
-      else if (!jogouUltimaRodada) mostrarMensagem("⏳ Você não jogou a última rodada. Entrou na lista de espera.", "info");
-      else mostrarMensagem("⏳ Prazo encerrado. Você entrou na lista de espera.");
+      if (status === "confirmado") {
+        mostrarMensagem("✅ Presença confirmada na lista principal!", "sucesso", true);
+        setConfirmacaoSucesso(true);
+      } else if (!jogouUltimaRodada) {
+        mostrarMensagem("⏳ Você não jogou a última rodada. Entrou na lista de espera.", "info", true);
+        setConfirmacaoSucesso(true);
+      } else {
+        mostrarMensagem("⏳ Prazo encerrado. Você entrou na lista de espera.", "info", true);
+        setConfirmacaoSucesso(true);
+      }
       await carregarConfirmacoes(rodadaAtual.id, jogador);
+      setTimeout(() => { document.getElementById('lista-confirmados')?.scrollIntoView({ behavior: 'smooth' }); }, 300);
     }
     setProcessando(false);
   }
@@ -293,9 +303,9 @@ export default function Confirmacao({ session }) {
     setProcessando(false);
   }
 
-  function mostrarMensagem(texto, tipo = "sucesso") {
+  function mostrarMensagem(texto, tipo = "sucesso", persistente = false) {
     setMensagem({ texto, tipo });
-    setTimeout(() => setMensagem(null), 5000);
+    if (!persistente) setTimeout(() => setMensagem(null), 5000);
   }
 
   function formatarDataHora(iso) {
@@ -519,6 +529,55 @@ export default function Confirmacao({ session }) {
         </>
       ) : (
         <div style={styles.card}><p style={styles.emptyText}>Nenhuma rodada agendada no momento.</p></div>
+      )}
+
+      {/* Modal de confirmação em 2 etapas */}
+      {confirmandoPendente && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#162f20", border: "1px solid #2a5a3a", borderRadius: 16, padding: 28, width: "100%", maxWidth: 380, textAlign: "center" }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🎾</div>
+            <h3 style={{ color: "#e8f5e9", fontSize: 18, marginBottom: 8 }}>Confirmar Presença</h3>
+            <p style={{ color: "#7fb89a", fontSize: 14, marginBottom: 4 }}>
+              <strong style={{ color: "#c9a227" }}>{jogador?.nome}</strong>
+            </p>
+            <p style={{ color: "#7fb89a", fontSize: 14, marginBottom: 20 }}>
+              Rodada {rodadaAtual?.numero} — {rodadaAtual ? new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }) : ""}
+            </p>
+            {(!jogouUltimaRodada || !dentroPrazo) && (
+              <div style={{ background: "#1a2a3a", border: "1px solid #2980b9", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#4a9ad4" }}>
+                ℹ️ Você entrará na lista de espera
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setConfirmandoPendente(false)} style={{ flex: 1, padding: "12px", background: "transparent", border: "1px solid #2a5a3a", borderRadius: 10, color: "#7fb89a", cursor: "pointer", fontSize: 14 }}>
+                Cancelar
+              </button>
+              <button onClick={async () => { setConfirmandoPendente(false); await confirmarPresenca(); }} disabled={processando} style={{ flex: 1, padding: "12px", background: "#c9a227", border: "none", borderRadius: 10, color: "#0f2d1e", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                {processando ? "..." : "✅ Sim, confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tela de sucesso */}
+      {confirmacaoSucesso && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#162f20", border: "2px solid #2ecc71", borderRadius: 16, padding: 28, width: "100%", maxWidth: 380, textAlign: "center" }}>
+            <div style={{ fontSize: 64, marginBottom: 12 }}>✅</div>
+            <h3 style={{ color: "#2ecc71", fontSize: 20, marginBottom: 8 }}>Confirmado!</h3>
+            <p style={{ color: "#e8f5e9", fontSize: 15, marginBottom: 4 }}>
+              <strong>{jogador?.nome}</strong>
+            </p>
+            <p style={{ color: "#7fb89a", fontSize: 13, marginBottom: 20 }}>
+              {mensagem?.texto}
+            </p>
+            <button onClick={() => { setConfirmacaoSucesso(false); setMensagem(null); document.getElementById('lista-confirmados')?.scrollIntoView({ behavior: 'smooth' }); }}
+              style={{ width: "100%", padding: "12px", background: "#2ecc71", border: "none", borderRadius: 10, color: "#0f2d1e", fontWeight: 700, cursor: "pointer", fontSize: 15 }}>
+              Ver meu nome na lista 👇
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
