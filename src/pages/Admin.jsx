@@ -330,10 +330,13 @@
         const vagasRestantes = qtdFaltasEfetivas - prataSobemExtras.length + vagasFixasNaoPreenchidas;
         const ouroMantem = [];
         if (vagasRestantes > 0) {
-          [10, 11, 12].slice(0, vagasRestantes).forEach(pos => {
+          let vagasPreenchidas = 0;
+          [10, 11, 12].forEach(pos => {
+            if (vagasPreenchidas >= vagasRestantes) return;
             const jogPos = rankOuro.find(r => r.posicao === pos);
             if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
               ouroMantem.push(jogPos.jogadores?.nome);
+              vagasPreenchidas++;
             }
           });
         }
