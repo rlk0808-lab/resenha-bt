@@ -417,7 +417,14 @@ export default function Confirmacao({ session }) {
                 <div style={{ fontSize: 13, color: "#7fb89a", textAlign: "center" }}>O sorteio foi publicado. Veja os jogos na aba Rodada.</div>
                 {status?.tipo === "confirmado" && <div style={{ marginTop: 12, background: "#1a3a20", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#2ecc71", fontWeight: 700 }}>✅ Você está confirmado — #{status.pos} na lista</div>}
                 {status?.tipo === "espera" && <div style={{ marginTop: 12, background: "#3a2000", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#c9a227" }}>⏳ Você está na lista de espera — #{status.pos}º</div>}
-                {!status && <div style={{ marginTop: 12, background: "#1e3d2a", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#5a8a6a" }}>Você não confirmou presença para esta rodada.</div>}
+                {!status && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ background: "#1e3d2a", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#5a8a6a", marginBottom: 10 }}>Você não confirmou presença para esta rodada.</div>
+                    <button onClick={() => setConfirmandoPendente(true)} style={{ ...styles.btnConfirmar, background: "#2980b9" }}>
+                      ⏳ Entrar na Lista de Espera
+                    </button>
+                  </div>
+                )}
               </div>
             ) : !status ? (
               <div style={styles.semConfirmacao}>
