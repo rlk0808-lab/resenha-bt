@@ -19,7 +19,6 @@ export default function Home() {
   const [ultimaRodada, setUltimaRodada] = useState(null)
   const [feedJogos, setFeedJogos] = useState([])
   const [feedRanking, setFeedRanking] = useState({ ouro: [], prata: [] })
-  const [jogadorSemana, setJogadorSemana] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -86,16 +85,6 @@ export default function Home() {
           .select('tipo, jogadores(nome)')
           .eq('rodada_id', ultima.id)
         setFeedJogos(bads || []) // reaproveitando estado para badges
-      }
-
-      // Jogador da semana — maior pontuação na última rodada
-      if (ultima) {
-        const { data: pontsRodada } = await supabase
-          .from('pontuacao').select('pontos, vitorias, jogadores(nome, foto_url, chave)')
-          .eq('rodada_id', ultima.id)
-          .order('pontos', { ascending: false })
-          .limit(1)
-        if (pontsRodada && pontsRodada[0]) setJogadorSemana(pontsRodada[0])
       }
 
       // Total jogadores ativos
@@ -360,7 +349,7 @@ export default function Home() {
               negativosPorJog[nome].push(b)
             }
 
-            const BadgeJogador = ({ nome, badges, destaque }) => (
+            const BadgeJogador = ({ nome, badges }) => (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, marginBottom: 6 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#e8f5e9', minWidth: 60 }}>{nome}</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>

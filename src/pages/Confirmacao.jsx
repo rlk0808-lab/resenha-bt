@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Confirmacao({ session }) {
@@ -8,7 +8,6 @@ export default function Confirmacao({ session }) {
   const [listaConfirmados, setListaConfirmados] = useState([]);
   const [listaEspera, setListaEspera] = useState([]);
   const [rankingAnterior, setRankingAnterior] = useState({ ouro: [], prata: [] });
-  const [previaChaves, setPreviaChaves] = useState({ ouro: [], prata: [] });
   const [jogouUltimaRodada, setJogouUltimaRodada] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processando, setProcessando] = useState(false);
@@ -18,6 +17,7 @@ export default function Confirmacao({ session }) {
 
   const LIMITE_PRINCIPAL = 24;
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (session?.user) carregarDados(); }, [session]);
 
   async function carregarDados() {
@@ -212,10 +212,11 @@ export default function Confirmacao({ session }) {
     return { ouro: ouroFinal, prata: prataFinal };
   }
 
-  useEffect(() => {
+  const previaChaves = useMemo(() => {
     if (listaConfirmados.length > 0 || rankingAnterior.ouro.length > 0) {
-      setPreviaChaves(calcularPrevia(listaConfirmados, rankingAnterior));
+      return calcularPrevia(listaConfirmados, rankingAnterior);
     }
+    return { ouro: [], prata: [] };
   }, [listaConfirmados, rankingAnterior]);
 
   function statusConfirmacao() {
@@ -415,8 +416,18 @@ export default function Confirmacao({ session }) {
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
                 <div style={{ fontSize: 15, color: "#c8e6c9", fontWeight: 700, marginBottom: 4 }}>Lista encerrada</div>
                 <div style={{ fontSize: 13, color: "#7fb89a", textAlign: "center" }}>O sorteio foi publicado. Veja os jogos na aba Rodada.</div>
-                {status?.tipo === "confirmado" && <div style={{ marginTop: 12, background: "#1a3a20", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#2ecc71", fontWeight: 700 }}>✅ Você está confirmado — #{status.pos} na lista</div>}
-                {status?.tipo === "espera" && <div style={{ marginTop: 12, background: "#3a2000", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#c9a227" }}>⏳ Você está na lista de espera — #{status.pos}º</div>}
+                {status?.tipo === "confirmado" && (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                    <div style={{ background: "#1a3a20", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#2ecc71", fontWeight: 700 }}>✅ Você está confirmado — #{status.pos} na lista</div>
+                    <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelar}>{processando ? "..." : "Cancelar confirmação"}</button>
+                  </div>
+                )}
+                {status?.tipo === "espera" && (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                    <div style={{ background: "#3a2000", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#c9a227" }}>⏳ Você está na lista de espera — #{status.pos}º</div>
+                    <button onClick={cancelarPresenca} disabled={processando} style={styles.btnCancelarEspera}>{processando ? "..." : "Sair da lista de espera"}</button>
+                  </div>
+                )}
                 {!status && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ background: "#1e3d2a", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#5a8a6a", marginBottom: 10 }}>Você não confirmou presença para esta rodada.</div>

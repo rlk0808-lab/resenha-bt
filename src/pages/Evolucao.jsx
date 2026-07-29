@@ -24,8 +24,6 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
   const [tooltip, setTooltip] = useState(null)
   const [modo, setModo] = useState('pontos')
 
-  useEffect(() => { carregar() }, [])
-
   async function carregar() {
     setLoading(true)
 
@@ -120,6 +118,9 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
     setLoading(false)
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { carregar() }, [])
+
   function toggleJogador(id) {
     setSelecionados(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 6 ? [...prev, id] : prev
@@ -131,7 +132,6 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
 
   const valores = selecionados.flatMap(id => rodadas.map(r => dadosAtivos[id]?.[r.numero] || 0))
   const maxVal = Math.max(1, ...valores)
-  const minVal = inverter ? Math.max(1, Math.min(...valores.filter(v => v > 0))) : 0
 
   const w = 320
   const h = 200
@@ -269,7 +269,7 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
               Atletas ({selecionados.length}/6 selecionados)
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {jogadores.filter(j => Object.keys(dadosPontos).includes(j.id) || Object.keys(dadosDescarte).includes(j.id)).map((jog, ci) => {
+              {jogadores.filter(j => Object.keys(dadosPontos).includes(j.id) || Object.keys(dadosDescarte).includes(j.id)).map((jog) => {
                 const sel = selecionados.includes(jog.id)
                 const idx = selecionados.indexOf(jog.id)
                 const cor = sel ? CORES[idx % CORES.length] : null

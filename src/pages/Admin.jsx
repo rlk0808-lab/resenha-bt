@@ -107,15 +107,14 @@
             .eq("rodada_id", rodadaSelecionada.id)
             .eq("status", "confirmado")
             .then(({ data }) => {
-              setConfirmacoes(data || []);
               // Carrega times já salvos no banco
               const ta = (data || []).filter(c => c.time === "time_a").map(c => c.jogadores?.nome).filter(Boolean);
               const tb = (data || []).filter(c => c.time === "time_b").map(c => c.jogadores?.nome).filter(Boolean);
-              console.log('Times:', ta, tb);
               setTimesEspecial({ time_a: ta, time_b: tb });
             });
         }
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rodadaSelecionada, chaveAtiva]);
     useEffect(() => { if (abaAtiva === "convites") carregarConvites(); }, [abaAtiva]);
     useEffect(() => { if (abaAtiva === "aprovacoes") carregarPendentes(); }, [abaAtiva]);
@@ -138,7 +137,6 @@
       }
     }
 
-    const [confirmacoes, setConfirmacoes] = useState([]);
 
     async function carregarJogadores() {
       const { data } = await supabase.from("jogadores").select("*").order("nome", { ascending: true });
@@ -207,16 +205,6 @@
     await supabase.from("jogos").update(updateData).eq("id", jogoId);
       await carregarJogos();
       setPlacaresInline(prev => { const n = {...prev}; delete n[jogoId]; return n; });
-    }
-
-    function editarJogo(jogo) {
-      setEditandoId(jogo.id);
-      setNovoJogo({
-        dupla_a_1: jogo.dupla_a_1 || "", dupla_a_2: jogo.dupla_a_2 || "",
-        dupla_b_1: jogo.dupla_b_1 || "", dupla_b_2: jogo.dupla_b_2 || "",
-        placar_a: jogo.placar_a ?? "", placar_b: jogo.placar_b ?? "", tie_a: jogo.tie_a ?? "", tie_b: jogo.tie_b ?? "",
-      });
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     function resetForm() {
@@ -289,7 +277,7 @@
       const rodAntNormal = rodadasFinalizadas?.find(r => r.tipo !== "especial") || rodadasFinalizadas?.[0];
 
       const nomeConfirmados = new Set(confirmacoes.map(c => c.jogadores?.nome));
-      let jogadoresOuro = [];
+      let jogadoresOuro;
       let jogadoresPrata = [];
 
       if (!rodAntNormal) {
@@ -346,8 +334,6 @@
           ? prataTodos.filter(r => r.posicao >= 7).slice(0, vagasAindaRestantes).map(r => r.jogadores?.nome)
           : [];
         const prataSobem = [...prataSobemFixos, ...prataSobemExtras, ...prataSobemUltimos];
-        jogadoresOuro = [...ouroFicam, ...ouroMantem, ...prataSobem];
-
         jogadoresOuro = [...ouroFicam, ...ouroMantem, ...prataSobem];
         const nomesOuro = new Set(jogadoresOuro);
 
@@ -796,12 +782,10 @@
 
       if (vinc.tipo === "novo") {
         if (!vinc.apelido?.trim()) { mostrarMensagem("Informe o apelido do novo jogador.", "erro"); setAprovando(null); return; }
-        const { data: novoJog, error: erroNovo } = await supabase
+        const { error: erroNovo } = await supabase
           .from("jogadores")
-          .insert({ nome: vinc.apelido.trim(), apelido: pendente.nome, chave: "prata", ativo: true, user_id: pendente.user_id })
-          .select().single();
+          .insert({ nome: vinc.apelido.trim(), apelido: pendente.nome, chave: "prata", ativo: true, user_id: pendente.user_id });
         if (erroNovo) { mostrarMensagem("Erro ao criar jogador: " + erroNovo.message, "erro"); setAprovando(null); return; }
-        jogadorId = novoJog.id;
       } else {
         const { error: erroVinculo } = await supabase
           .from("jogadores")
@@ -921,7 +905,7 @@
     }
 
     // Na especial: dupla A = Time A, dupla B = Time B (fixo, independente da aba)
-    const SelectJogador = ({ value, onChange, placeholder, dupla }) => {
+    function renderSelectJogador({ value, onChange, placeholder, dupla }) {
       let lista;
       if (rodadaSelecionada?.tipo === "especial") {
         // dupla "a" mostra Time A, dupla "b" mostra Time B
@@ -936,7 +920,7 @@
           {lista.map(j => <option key={j.key} value={dupla ? j.label.split(" (")[0] : j.label}>{j.label}</option>)}
         </select>
       );
-    };
+    }
 
     const rodadaProxima = rodadas.find(r => r.status === "proxima");
 
@@ -1249,8 +1233,8 @@
               </div>            <div style={styles.duplaSection}>
                 <div style={styles.duplaLabel}>{rodadaSelecionada?.tipo === "especial" ? "🔴 Time A" : "🎾 Dupla A"}</div>
                 <div style={styles.duplaInputs}>
-                  <SelectJogador value={novoJogo.dupla_a_1} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_a_1: v })} placeholder="Jogador 1" dupla="a" />
-                  <SelectJogador value={novoJogo.dupla_a_2} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_a_2: v })} placeholder="Jogador 2" dupla="a" />
+                  {renderSelectJogador({ value: novoJogo.dupla_a_1, onChange: (v) => setNovoJogo({ ...novoJogo, dupla_a_1: v }), placeholder: "Jogador 1", dupla: "a" })}
+                  {renderSelectJogador({ value: novoJogo.dupla_a_2, onChange: (v) => setNovoJogo({ ...novoJogo, dupla_a_2: v }), placeholder: "Jogador 2", dupla: "a" })}
                 </div>
               </div>
               <div style={styles.placarSection}>
@@ -1269,8 +1253,8 @@
               <div style={styles.duplaSection}>
                 <div style={styles.duplaLabel}>{rodadaSelecionada?.tipo === "especial" ? "🔵 Time B" : "🎾 Dupla B"}</div>
                 <div style={styles.duplaInputs}>
-                  <SelectJogador value={novoJogo.dupla_b_1} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_b_1: v })} placeholder="Jogador 1" dupla="b" />
-                  <SelectJogador value={novoJogo.dupla_b_2} onChange={(v) => setNovoJogo({ ...novoJogo, dupla_b_2: v })} placeholder="Jogador 2" dupla="b" />
+                  {renderSelectJogador({ value: novoJogo.dupla_b_1, onChange: (v) => setNovoJogo({ ...novoJogo, dupla_b_1: v }), placeholder: "Jogador 1", dupla: "b" })}
+                  {renderSelectJogador({ value: novoJogo.dupla_b_2, onChange: (v) => setNovoJogo({ ...novoJogo, dupla_b_2: v }), placeholder: "Jogador 2", dupla: "b" })}
                 </div>
               </div>
               <div style={styles.botoesForm}>
@@ -1376,7 +1360,6 @@
                       const desce = chave === "ouro" && idx >= total - 3 && rodadaSelecionada?.tipo !== "especial";
                       const sobe = chave === "prata" && idx < 3 && rodadaSelecionada?.tipo !== "especial";
                       const isVencedor = rodadaSelecionada?.tipo === "especial" && j.timeVencedor;
-                      const isPerdedor = rodadaSelecionada?.tipo === "especial" && !j.timeVencedor;
                       return (
                         <div key={j.nome} style={{ ...styles.rankingRow, ...(desce ? { borderLeft: "3px solid #e74c3c" } : sobe ? { borderLeft: "3px solid #2ecc71" } : {}) }}>
                           <span style={styles.rankPos}>{idx + 1}º</span>

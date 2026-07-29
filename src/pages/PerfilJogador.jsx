@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const ouro = '#c9a227'
-const prata = '#8e9eab'
 const borda = '#2a5a3a'
 
 export default function PerfilJogador() {
@@ -20,8 +19,6 @@ export default function PerfilJogador() {
   const [parceiroAberto, setParceiroAberto] = useState(null)
   const [jogadoresMap, setJogadoresMap] = useState({})
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => { carregarPerfil() }, [id])
 
   async function carregarPerfil() {
     setLoading(true)
@@ -99,6 +96,9 @@ export default function PerfilJogador() {
 
     setLoading(false)
   }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { carregarPerfil() }, [id])
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="spinner" /></div>
   if (!jogador) return <div><button onClick={() => navigate(-1)} style={btnVoltar}>← Voltar</button><p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Jogador não encontrado.</p></div>

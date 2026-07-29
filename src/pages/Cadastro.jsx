@@ -7,9 +7,8 @@ export default function Cadastro() {
   const navigate = useNavigate();
   const token = searchParams.get("token");
 
-  const [etapa, setEtapa] = useState("validando");
-  const [convite, setConvite] = useState(null);
-  const [mensagemErro, setMensagemErro] = useState("");
+  const [etapa, setEtapa] = useState(() => token ? "validando" : "erro");
+  const [mensagemErro, setMensagemErro] = useState(() => token ? "" : "Link de convite inválido. Solicite um novo convite ao organizador.");
   const [salvando, setSalvando] = useState(false);
 
   const [form, setForm] = useState({
@@ -19,15 +18,6 @@ export default function Cadastro() {
     senha: "",
     confirmarSenha: "",
   });
-
-  useEffect(() => {
-    if (!token) {
-      setMensagemErro("Link de convite inválido. Solicite um novo convite ao organizador.");
-      setEtapa("erro");
-      return;
-    }
-    validarToken();
-  }, [token]);
 
   async function validarToken() {
     const { data, error } = await supabase
@@ -56,9 +46,14 @@ export default function Cadastro() {
       return;
     }
 
-    setConvite(conviteData);
     setEtapa("formulario");
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (token) validarToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   async function handleSubmit() {
     if (!form.nome.trim()) {

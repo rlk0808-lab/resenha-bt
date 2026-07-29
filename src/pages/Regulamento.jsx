@@ -1,7 +1,6 @@
 import { useState } from 'react'
 
 const ouro = '#c9a227'
-const prata = '#8e9eab'
 const borda = '#2a5a3a'
 const cardBg = '#162f20'
 

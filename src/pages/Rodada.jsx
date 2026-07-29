@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
-const bg = '#0f2d1e'
 const borda = '#2a5a3a'
 const cardBg = '#162f20'
 
@@ -242,7 +241,7 @@ export default function Rodada() {
     setRankingVivo({ ouro, prata })
   }
 
-  function renderJogo(jogo, i, corBorda) {
+  function renderJogo(jogo, i) {
     const listaReacoes = reacoes[jogo.id] || []
     const grupoReacoes = {}
     for (const r of listaReacoes) {
@@ -319,7 +318,7 @@ export default function Rodada() {
           <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
             🔴 Time A  ×  🔵 Time B — {jogos.length} jogos
           </div>
-          {jogos.map((jogo, i) => renderJogo(jogo, i, '#c9a227'))}
+          {jogos.map((jogo, i) => renderJogo(jogo, i))}
         </div>
       )
     }
@@ -346,7 +345,7 @@ export default function Rodada() {
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
           Rodada {idx + 1}
         </div>
-        {grupo.map((jogo, i) => renderJogo(jogo, i, corChave))}
+        {grupo.map((jogo, i) => renderJogo(jogo, i))}
       </div>
     ))
   }
@@ -520,7 +519,7 @@ export default function Rodada() {
     }
   }
 
-  function ToggleChave({ isEspecial }) {
+  function renderToggleChave(isEspecial) {
     const opcoes = isEspecial
       ? [{ key: 'ouro', label: '🏆 Time B (Vencedor)' }, { key: 'prata', label: '🔴 Time A' }]
       : [{ key: 'ouro', label: '🥇 Chave Ouro' }, { key: 'prata', label: '🥈 Chave Prata' }]
@@ -546,7 +545,7 @@ export default function Rodada() {
   )
 
   // Card de compartilhamento (oculto, só renderizado na hora de gerar imagem)
-  const CardCompartilhamento = () => {
+  function renderCardCompartilhamento() {
     const data = rodadaDetalhe ? new Date(rodadaDetalhe.data + 'T12:00:00').toLocaleDateString('pt-BR', {
       weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo'
     }) : ''
@@ -597,7 +596,7 @@ export default function Rodada() {
             {isEspecial ? (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#c9a227', marginBottom: 10 }}>🔴 Time A × 🔵 Time B</div>
-                {detalheJogos.map((j, i) => (
+                {detalheJogos.map((j) => (
                   <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                     <div style={{ flex: 1, textAlign: 'right', fontSize: 12 }}>
                       <div style={{ fontWeight: 600 }}>{j.dupla_a_1}</div>
@@ -675,7 +674,7 @@ export default function Rodada() {
   if (view === 'detalhe' && rodadaDetalhe) {
     return (
       <div>
-        <CardCompartilhamento />
+        {renderCardCompartilhamento()}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
           <button onClick={() => setView('historico')} style={{
             background: 'transparent', border: "1px solid " + borda, color: '#7fb89a',
@@ -726,7 +725,7 @@ export default function Rodada() {
             </p>
           ) : (
             <div style={{ marginBottom: 16 }}>
-              {comentarios.map((c, i) => (
+              {comentarios.map((c) => (
                 <div key={c.id} style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
                   <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #1a4d2e, #2d7a45)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '1px solid rgba(201,162,39,0.2)' }}>
                     {c.jogadores?.foto_url
@@ -785,7 +784,7 @@ export default function Rodada() {
           const isEspecial = detalheJogos.some(j => ['time_a','time_b','especial'].includes(j.chave))
           return (
             <>
-              {!isEspecial && <ToggleChave isEspecial={false} />}
+              {!isEspecial && renderToggleChave(false)}
               {detalheView === 'jogos'
                 ? renderJogos(detalheJogos, chaveVis)
                 : isEspecial
@@ -890,7 +889,7 @@ export default function Rodada() {
             </div>
           ) : (
             <>
-              <ToggleChave />
+              {renderToggleChave()}
               {aoVivo && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: 8, marginBottom: 12 }}>
