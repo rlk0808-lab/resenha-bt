@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { acessivelClique } from '../lib/a11y'
+import { calcularStatsDeJogos, DADOS_H2H_VAZIOS } from '../lib/h2h'
+import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
+import { BADGE_INFO } from '../lib/badges'
 
 const ouro = '#c9a227'
 const borda = '#2a5a3a'
@@ -11,10 +14,12 @@ export default function PerfilJogador() {
   const navigate = useNavigate()
   const [jogador, setJogador] = useState(null)
   const [jogadorAtual, setJogadorAtual] = useState(null)
-  const [pontos, setPontos] = useState(0)
-  const [parceiros, setParceiros] = useState([])
-  const [adversarios, setAdversarios] = useState([])
-  const [jogosDetalhados, setJogosDetalhados] = useState([])
+  const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
+  const [ligaAtualNome, setLigaAtualNome] = useState(null)
+  const [pontosTotal, setPontosTotal] = useState(0)
+  const [pontosAtual, setPontosAtual] = useState(0)
+  const [dadosTotal, setDadosTotal] = useState(DADOS_H2H_VAZIOS)
+  const [dadosAtual, setDadosAtual] = useState(DADOS_H2H_VAZIOS)
   const [badges, setBadges] = useState([])
   const [h2hAberto, setH2hAberto] = useState(null)
   const [parceiroAberto, setParceiroAberto] = useState(null)
@@ -33,8 +38,15 @@ export default function PerfilJogador() {
     if (!jogadorData) { setLoading(false); return }
     setJogador(jogadorData)
 
-    const { data: pts } = await supabase.from('pontuacao').select('pontos').eq('jogador_id', id)
-    setPontos(pts?.reduce((s, p) => s + (p.pontos || 0), 0) || 0)
+    const [{ data: pts }, liga, rodadaIdsAtual, statsAtualJog] = await Promise.all([
+      supabase.from('pontuacao').select('pontos').eq('jogador_id', id),
+      buscarLigaAtual(),
+      buscarRodadaIdsLigaAtual(),
+      buscarStatsJogadorTemporadaAtual(id),
+    ])
+    setPontosTotal(pts?.reduce((s, p) => s + (p.pontos || 0), 0) || 0)
+    setLigaAtualNome(liga)
+    setPontosAtual(statsAtualJog.pontos_total)
 
     const { data: bads } = await supabase.from('badges')
       .select('tipo, rodadas(numero)').eq('jogador_id', id).order('created_at', { ascending: false })
@@ -48,52 +60,10 @@ export default function PerfilJogador() {
     const { data: jogos } = await supabase.from('jogos').select('*')
       .or(`dupla_a_1.eq.${jogadorData.nome},dupla_a_2.eq.${jogadorData.nome},dupla_b_1.eq.${jogadorData.nome},dupla_b_2.eq.${jogadorData.nome}`)
 
-    if (!jogos || jogos.length === 0) { setLoading(false); return }
-
-    const jogosComPlacar = jogos.filter(j => j.placar_a !== null && j.placar_b !== null)
-    setJogosDetalhados(jogosComPlacar)
-
-    const statsParc = {}
-    const statsAdv = {}
-
-    for (const jogo of jogosComPlacar) {
-      const nomeJog = jogadorData.nome
-      const estouNoA = jogo.dupla_a_1 === nomeJog || jogo.dupla_a_2 === nomeJog
-      const euVenci = estouNoA ? jogo.placar_a > jogo.placar_b : jogo.placar_b > jogo.placar_a
-      const parceiro = estouNoA
-        ? (jogo.dupla_a_1 === nomeJog ? jogo.dupla_a_2 : jogo.dupla_a_1)
-        : (jogo.dupla_b_1 === nomeJog ? jogo.dupla_b_2 : jogo.dupla_b_1)
-
-      if (parceiro) {
-        if (!statsParc[parceiro]) statsParc[parceiro] = { jogos: 0, vitorias: 0 }
-        statsParc[parceiro].jogos++
-        if (euVenci) statsParc[parceiro].vitorias++
-      }
-
-      // Conta o jogo uma vez para cada adversário (mas o jogo é 1 só)
-      const advs = estouNoA
-        ? [jogo.dupla_b_1, jogo.dupla_b_2].filter(Boolean)
-        : [jogo.dupla_a_1, jogo.dupla_a_2].filter(Boolean)
-
-      // Usa um Set para evitar duplicar o jogo
-      const jogoKey = jogo.id
-      for (const adv of advs) {
-        if (!statsAdv[adv]) statsAdv[adv] = { jogos: 0, vitorias: 0, jogoIds: new Set() }
-        if (!statsAdv[adv].jogoIds.has(jogoKey)) {
-          statsAdv[adv].jogoIds.add(jogoKey)
-          statsAdv[adv].jogos++
-          if (euVenci) statsAdv[adv].vitorias++
-        }
-      }
-    }
-
-    setParceiros(Object.entries(statsParc)
-      .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
-      .sort((a, b) => b.jogos - a.jogos))
-
-    setAdversarios(Object.entries(statsAdv)
-      .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
-      .sort((a, b) => b.jogos - a.jogos))
+    const jogosComPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
+    setDadosTotal(calcularStatsDeJogos(jogosComPlacar, jogadorData.nome))
+    const jogosLigaAtual = jogosComPlacar.filter(j => rodadaIdsAtual.has(j.rodada_id))
+    setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, jogadorData.nome))
 
     setLoading(false)
   }
@@ -103,6 +73,10 @@ export default function PerfilJogador() {
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="spinner" /></div>
   if (!jogador) return <div><button onClick={() => navigate(-1)} style={btnVoltar}>← Voltar</button><p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Jogador não encontrado.</p></div>
+
+  const dados = periodo === 'atual' ? dadosAtual : dadosTotal
+  const { jogos: jogosDetalhados, parceiros, adversarios } = dados
+  const pontos = periodo === 'atual' ? pontosAtual : pontosTotal
 
   // H2H com jogador atual
   const nomeAtual = jogadorAtual?.nome
@@ -150,21 +124,6 @@ export default function PerfilJogador() {
     if (venci) juntosStats.vitorias++; else juntosStats.derrotas++
   }
 
-  const BADGE_INFO = {
-    campeao_ouro:  { emoji: '🥇', label: 'Campeão Ouro',  cor: '#c9a227' },
-    campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
-    dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
-    hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
-  artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12' },
-  relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f' },
-  ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c' },
-  dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72' },
-  congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff' },
-  pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8' },
-  dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3' },
-  queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031' },
-  }
-
   function Barra({ pct }) {
     return (
       <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
@@ -196,6 +155,22 @@ export default function PerfilJogador() {
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 1 }}>pontos</div>
           </div>
         </div>
+      </div>
+
+      {/* Tabs Temporada Atual / Total */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
+        {[
+          { key: 'atual', label: ligaAtualNome ? `📅 ${ligaAtualNome}` : '📅 Temporada Atual' },
+          { key: 'total', label: '🏆 Carreira Total' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => setPeriodo(key)} style={{
+            flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
+            background: periodo === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
+            color: periodo === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
+            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
+            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s'
+          }}>{label}</button>
+        ))}
       </div>
 
       {/* Stats */}

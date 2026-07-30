@@ -3,24 +3,34 @@ import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import Evolucao from './Evolucao'
 import { acessivelClique } from '../lib/a11y'
+import { buscarClassificacaoTemporadaAtual } from '../lib/temporada'
 
 export default function Classificacao() {
   const [modoDescarte, setModoDescarte] = useState(false)
+  const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
   const [verEvolucao, setVerEvolucao] = useState(false)
   const [jogadorAtualId, setJogadorAtualId] = useState(null)
-  const [jogadores, setJogadores] = useState([])
-  const [jogadoresDescarte, setJogadoresDescarte] = useState([])
+  const [ligaAtual, setLigaAtual] = useState(null)
+  const [totalSemDescarte, setTotalSemDescarte] = useState([])
+  const [totalComDescarte, setTotalComDescarte] = useState([])
+  const [atualSemDescarte, setAtualSemDescarte] = useState([])
+  const [atualComDescarte, setAtualComDescarte] = useState([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
     async function load() {
-      const [{ data: sem }, { data: com }] = await Promise.all([
+      const [{ data: sem }, { data: com }, atualSem, atualCom] = await Promise.all([
         supabase.from('classificacao').select('*').order('posicao', { ascending: true }),
         supabase.from('classificacao_com_descarte').select('*').order('posicao', { ascending: true }),
+        buscarClassificacaoTemporadaAtual({ comDescarte: false }),
+        buscarClassificacaoTemporadaAtual({ comDescarte: true }),
       ])
-      setJogadores(sem || [])
-      setJogadoresDescarte(com || [])
+      setTotalSemDescarte(sem || [])
+      setTotalComDescarte(com || [])
+      setLigaAtual(atualSem.liga)
+      setAtualSemDescarte(atualSem.lista)
+      setAtualComDescarte(atualCom.lista)
       // Busca jogador atual para pré-selecionar no gráfico
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
@@ -32,7 +42,9 @@ export default function Classificacao() {
     load()
   }, [])
 
-  const lista = modoDescarte ? jogadoresDescarte : jogadores
+  const lista = periodo === 'atual'
+    ? (modoDescarte ? atualComDescarte : atualSemDescarte)
+    : (modoDescarte ? totalComDescarte : totalSemDescarte)
 
   function corPos(pos) {
     if (pos === 1) return 'var(--ouro)'
@@ -61,6 +73,22 @@ export default function Classificacao() {
         <button onClick={() => setVerEvolucao(true)} style={{ background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 8, padding: '6px 12px', color: '#c9a227', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
           📈 Evolução
         </button>
+      </div>
+
+      {/* Tabs Temporada Atual / Histórico Total */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
+        {[
+          { key: 'atual', label: ligaAtual ? `📅 ${ligaAtual}` : '📅 Temporada Atual' },
+          { key: 'total', label: '🏆 Histórico Total' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => setPeriodo(key)} style={{
+            flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
+            background: periodo === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
+            color: periodo === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
+            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
+            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s'
+          }}>{label}</button>
+        ))}
       </div>
 
       {/* Toggle Descarte */}

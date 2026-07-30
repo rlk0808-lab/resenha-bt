@@ -4,21 +4,23 @@ import { supabase } from '../lib/supabase'
 import { registrarNotificacoes, verificarNotificacoes } from '../lib/useNotificacoes'
 import { BADGE_INFO } from '../lib/badges'
 import { acessivelClique } from '../lib/a11y'
+import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
+import { calcularStatsDeJogos, DADOS_H2H_VAZIOS } from '../lib/h2h'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
 
 export default function Perfil() {
   const [perfil, setPerfil] = useState(null)
-  const [stats, setStats] = useState(null)
+  const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
+  const [ligaAtualNome, setLigaAtualNome] = useState(null)
+  const [statsTotal, setStatsTotal] = useState(null)
+  const [statsAtual, setStatsAtual] = useState(null)
+  const [dadosTotal, setDadosTotal] = useState(DADOS_H2H_VAZIOS)
+  const [dadosAtual, setDadosAtual] = useState(DADOS_H2H_VAZIOS)
   const [temporadas, setTemporadas] = useState([])
-  const [parceiros, setParceiros] = useState([])
-  const [adversarios, setAdversarios] = useState([])
   const [badges, setBadges] = useState([])
-  const [jogosDetalhados, setJogosDetalhados] = useState([])
   const [h2hAberto, setH2hAberto] = useState(null)
-  const [sequencia, setSequencia] = useState(null)
-  const [melhorDupla, setMelhorDupla] = useState(null)
   const [loading, setLoading] = useState(true)
   const [titulos, setTitulos] = useState({ ouro: 0, prata: 0 })
   const [uploadando, setUploadando] = useState(false)
@@ -40,7 +42,15 @@ export default function Perfil() {
       if (p) {
         const { data: s } = await supabase
           .from('stats_jogador').select('*').eq('jogador_id', p.id).limit(1)
-        setStats(s?.[0] || null)
+        setStatsTotal(s?.[0] || null)
+
+        const [liga, rodadaIdsAtual, statsAtualJog] = await Promise.all([
+          buscarLigaAtual(),
+          buscarRodadaIdsLigaAtual(),
+          buscarStatsJogadorTemporadaAtual(p.id),
+        ])
+        setLigaAtualNome(liga)
+        setStatsAtual(statsAtualJog)
 
         const { data: temps } = await supabase
           .from('temporadas').select('*').eq('jogador_id', p.id).order('ano', { ascending: false })
@@ -64,62 +74,10 @@ export default function Perfil() {
         const { data: jogos } = await supabase.from('jogos').select('*')
           .or(`dupla_a_1.eq.${p.nome},dupla_a_2.eq.${p.nome},dupla_b_1.eq.${p.nome},dupla_b_2.eq.${p.nome}`)
 
-        if (jogos && jogos.length > 0) {
-          const statsParc = {}
-          const statsAdv = {}
-          for (const jogo of jogos) {
-            if (jogo.placar_a === null || jogo.placar_b === null) continue
-            const estouNoA = jogo.dupla_a_1 === p.nome || jogo.dupla_a_2 === p.nome
-            const euVenci = estouNoA ? jogo.placar_a > jogo.placar_b : jogo.placar_b > jogo.placar_a
-            const parceiro = estouNoA
-              ? (jogo.dupla_a_1 === p.nome ? jogo.dupla_a_2 : jogo.dupla_a_1)
-              : (jogo.dupla_b_1 === p.nome ? jogo.dupla_b_2 : jogo.dupla_b_1)
-            if (parceiro) {
-              if (!statsParc[parceiro]) statsParc[parceiro] = { jogos: 0, vitorias: 0 }
-              statsParc[parceiro].jogos++
-              if (euVenci) statsParc[parceiro].vitorias++
-            }
-            const advs = estouNoA
-              ? [jogo.dupla_b_1, jogo.dupla_b_2].filter(Boolean)
-              : [jogo.dupla_a_1, jogo.dupla_a_2].filter(Boolean)
-            for (const adv of advs) {
-              if (!statsAdv[adv]) statsAdv[adv] = { jogos: 0, vitorias: 0, jogoIds: new Set() }
-              if (!statsAdv[adv].jogoIds.has(jogo.id)) {
-                statsAdv[adv].jogoIds.add(jogo.id)
-                statsAdv[adv].jogos++
-                if (euVenci) statsAdv[adv].vitorias++
-              }
-            }
-          }
-          const parceirosList = Object.entries(statsParc)
-            .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
-            .sort((a, b) => b.jogos - a.jogos)
-          setParceiros(parceirosList)
-          setAdversarios(Object.entries(statsAdv)
-            .map(([nome, s]) => ({ nome, ...s, derrotas: s.jogos - s.vitorias, pct: Math.round(s.vitorias / s.jogos * 100) }))
-            .sort((a, b) => b.jogos - a.jogos))
-          setJogosDetalhados(jogos.filter(j => j.placar_a !== null && j.placar_b !== null))
-          const melhor = parceirosList.filter(p => p.jogos >= 2).sort((a, b) => b.pct - a.pct)[0] || null
-          setMelhorDupla(melhor)
-          const jogosOrdenados = jogos
-            .filter(j => j.placar_a !== null && j.placar_b !== null)
-            .sort((a, b) => {
-              // Ordena por rodada DESC, depois rodada_interna DESC
-              if (b.numero_rodada !== a.numero_rodada) return (b.numero_rodada || 0) - (a.numero_rodada || 0)
-              if (b.rodada_interna !== a.rodada_interna) return (b.rodada_interna || 0) - (a.rodada_interna || 0)
-              return new Date(b.created_at) - new Date(a.created_at)
-            })
-          let seq = 0; let tipo = null
-          for (const jogo of jogosOrdenados) {
-            const estouNoA = jogo.dupla_a_1 === p.nome || jogo.dupla_a_2 === p.nome
-            const venci = estouNoA ? jogo.placar_a > jogo.placar_b : jogo.placar_b > jogo.placar_a
-            const t = venci ? 'V' : 'D'
-            if (tipo === null) { tipo = t; seq = 1 }
-            else if (t === tipo) seq++
-            else break
-          }
-          setSequencia(tipo ? { tipo, seq } : null)
-        }
+        const jogosComPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
+        setDadosTotal(calcularStatsDeJogos(jogosComPlacar, p.nome))
+        const jogosLigaAtual = jogosComPlacar.filter(j => rodadaIdsAtual.has(j.rodada_id))
+        setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, p.nome))
       }
 
       const notifOk = await verificarNotificacoes()
@@ -186,23 +144,26 @@ export default function Perfil() {
     </div>
   )
 
-  // Calcula total de jogos, vitórias e derrotas dos jogos individuais
-  const nomeAtualPerfil = stats?.nome || ''
+  const dados = periodo === 'atual' ? dadosAtual : dadosTotal
+  const { jogos: jogosDetalhados, parceiros, adversarios, melhorDupla, sequencia } = dados
+  const statsAtivos = periodo === 'atual' ? statsAtual : statsTotal
+
+  // Vitórias/derrotas/aproveitamento sempre recalculados dos jogos do período ativo
   const totalJogosReal = jogosDetalhados?.length || 0
-  const totalVitoriasReal = nomeAtualPerfil ? (jogosDetalhados || []).filter(j => {
-    const estouNoA = j.dupla_a_1 === nomeAtualPerfil || j.dupla_a_2 === nomeAtualPerfil
+  const totalVitoriasReal = perfil?.nome ? jogosDetalhados.filter(j => {
+    const estouNoA = j.dupla_a_1 === perfil.nome || j.dupla_a_2 === perfil.nome
     return estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
   }).length : 0
   const totalDerrotasReal = totalJogosReal - totalVitoriasReal
   const pctReal = totalJogosReal > 0 ? Math.round(totalVitoriasReal / totalJogosReal * 100) : 0
 
   const statCards = [
-    { label: 'Pontos', valor: stats?.pontos_total || 0, cor: '#f5c518' },
+    { label: 'Pontos', valor: statsAtivos?.pontos_total || 0, cor: '#f5c518' },
     { label: 'Vitorias', valor: totalVitoriasReal, cor: '#2d7a45' },
     { label: 'Derrotas', valor: totalDerrotasReal, cor: '#c0392b' },
     { label: 'Aproveit.', valor: `${pctReal}%`, cor: '#1abc9c' },
-    { label: 'Rodadas', valor: stats?.rodadas_jogadas || 0, cor: '#4d8ab5' },
-    { label: 'Posicao', valor: stats?.posicao ? `${stats.posicao}º` : '-', cor: '#e8621a' },
+    { label: 'Rodadas', valor: statsAtivos?.rodadas_jogadas || 0, cor: '#4d8ab5' },
+    { label: 'Posicao', valor: statsAtivos?.posicao ? `${statsAtivos.posicao}º` : '-', cor: '#e8621a' },
   ]
 
   return (
@@ -276,6 +237,22 @@ export default function Perfil() {
         </div>
       )}
 
+      {/* Tabs Temporada Atual / Total */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
+        {[
+          { key: 'atual', label: ligaAtualNome ? `📅 ${ligaAtualNome}` : '📅 Temporada Atual' },
+          { key: 'total', label: '🏆 Carreira Total' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => setPeriodo(key)} style={{
+            flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
+            background: periodo === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
+            color: periodo === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
+            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
+            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s'
+          }}>{label}</button>
+        ))}
+      </div>
+
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
         {statCards.map(({ label, valor, cor }) => (
@@ -291,22 +268,24 @@ export default function Perfil() {
         <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '16px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: '16px' }}>
           Historico de Temporadas
         </h3>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(201,162,39,0.06)', borderRadius: '8px', border: '1px solid rgba(201,162,39,0.2)', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: ouro }}>Torneio de Inverno 2026</div>
-            <div style={{ fontSize: '12px', color: '#2ecc71', marginTop: '2px' }}>Em andamento</div>
+        {ligaAtualNome && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(201,162,39,0.06)', borderRadius: '8px', border: '1px solid rgba(201,162,39,0.2)', marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: ouro }}>{ligaAtualNome}</div>
+              <div style={{ fontSize: '12px', color: '#2ecc71', marginTop: '2px' }}>Em andamento</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', color: '#f5c518' }}>{statsAtual?.pontos_total || '-'}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{statsAtual?.posicao ? `${statsAtual.posicao}º lugar` : '-'}</div>
+            </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '22px', color: '#f5c518' }}>{stats?.pontos_total || '-'}</div>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{stats?.posicao ? `${stats.posicao}º lugar` : '-'}</div>
-          </div>
-        </div>
+        )}
         {temporadas.length > 0 ? temporadas.map((t, i) => {
           const corChave = t.chave === 'ouro' ? ouro : prata
           return (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--borda)', marginBottom: 8 }}>
               <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.nome_torneio.replace('Verao', 'Verao')}</div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.nome_torneio}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: '4px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 700, color: corChave, textTransform: 'uppercase' }}>{t.chave === 'ouro' ? 'Chave Ouro' : 'Chave Prata'}</span>
                   <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>·</span>
@@ -350,7 +329,7 @@ export default function Perfil() {
         const ultimaRodada = badges[0]?.rodadas?.numero
         const ativos = badges.filter(b => b.rodadas?.numero === ultimaRodada)
         const historico = badges.filter(b => b.rodadas?.numero !== ultimaRodada)
-        const BadgeCard = ({ b, destaque }) => {
+        function renderBadgeCard(b, destaque) {
           const info = BADGE_INFO[b.tipo] || { emoji: '🏅', label: b.tipo, cor: '#7fb89a' }
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: destaque ? '8px 14px' : '5px 10px', background: info.cor + (destaque ? '22' : '10'), border: '1px solid ' + info.cor + (destaque ? '66' : '33'), borderRadius: 20 }}>
@@ -379,7 +358,7 @@ export default function Perfil() {
                   Conquistas da Rodada {ultimaRodada}
                 </h3>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {ativos.map((b, i) => <BadgeCard key={i} b={b} destaque={true} />)}
+                  {ativos.map((b, i) => <div key={i}>{renderBadgeCard(b, true)}</div>)}
                 </div>
               </div>
             )}
@@ -389,7 +368,7 @@ export default function Perfil() {
                   Historico de Conquistas
                 </h3>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {historico.map((b, i) => <BadgeCard key={i} b={b} destaque={false} />)}
+                  {historico.map((b, i) => <div key={i}>{renderBadgeCard(b, false)}</div>)}
                 </div>
               </div>
             )}

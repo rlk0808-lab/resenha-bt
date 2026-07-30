@@ -117,8 +117,10 @@ export default function Rodada() {
       calcularRankingVivo(j || [])
     }
 
+    // created_at, não numero — assim rodadas de ligas diferentes não se
+    // misturam na ordenação quando o numero reinicia numa liga nova
     const { data: finalizadas } = await supabase.from('rodadas').select('*')
-      .eq('status', 'finalizada').order('numero', { ascending: false })
+      .eq('status', 'finalizada').order('created_at', { ascending: false })
     setRodadasFinalizadas(finalizadas || [])
     setLoading(false)
 
@@ -162,6 +164,7 @@ export default function Rodada() {
 
       const { data: rodadaAnt } = await supabase.from('rodadas').select('*')
         .eq('status', 'finalizada')
+        .eq('liga', rodada.liga)
         .lt('numero', rodada.numero)
         .order('numero', { ascending: false }).limit(1)
 
@@ -931,22 +934,29 @@ export default function Rodada() {
             <p style={{ color: 'rgba(255,255,255,0.4)' }}>Nenhuma rodada finalizada ainda.</p>
           </div>
         ) : (
-          rodadasFinalizadas.map(r => (
-            <div key={r.id} {...acessivelClique(() => abrirDetalhe(r))} style={{
-              background: cardBg, border: "1px solid " + borda, borderRadius: '12px',
-              padding: '16px', marginBottom: '10px', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-            }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '16px', color: '#e8f5e9' }}>
-                  Rodada {r.numero}
-                  {r.tipo === 'especial' && <span style={{ fontSize: '12px', color: ouro, marginLeft: 8 }}>Especial</span>}
+          rodadasFinalizadas.map((r, i) => (
+            <div key={r.id}>
+              {(i === 0 || rodadasFinalizadas[i - 1].liga !== r.liga) && (
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 1, margin: i === 0 ? '0 0 8px' : '20px 0 8px' }}>
+                  {r.liga}
                 </div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                  {new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
+              )}
+              <div {...acessivelClique(() => abrirDetalhe(r))} style={{
+                background: cardBg, border: "1px solid " + borda, borderRadius: '12px',
+                padding: '16px', marginBottom: '10px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '16px', color: '#e8f5e9' }}>
+                    Rodada {r.numero}
+                    {r.tipo === 'especial' && <span style={{ fontSize: '12px', color: ouro, marginLeft: 8 }}>Especial</span>}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                    {new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
+                  </div>
                 </div>
+                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '20px' }}>›</div>
               </div>
-              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '20px' }}>›</div>
             </div>
           ))
         )}

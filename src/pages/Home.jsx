@@ -39,7 +39,9 @@ export default function Home() {
       if (todasRodadas) {
 
         // Rodada atual = última finalizada ou ativa
+        // (ordena por created_at, não numero — numero reinicia a cada liga nova)
         const finalizada = todasRodadas.filter(r => r.status === 'finalizada')
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
         const ativa = todasRodadas.find(r => r.status === 'ativa')
         const atual = ativa || finalizada[finalizada.length - 1] || null
         setRodadaAtual(atual)
@@ -81,8 +83,9 @@ export default function Home() {
       }
 
       // Busca última rodada finalizada e seus resultados
+      // (created_at, não numero — numero reinicia a cada liga nova)
       const { data: rodsFin } = await supabase.from('rodadas').select('*')
-        .eq('status', 'finalizada').order('numero', { ascending: false }).limit(1)
+        .eq('status', 'finalizada').order('created_at', { ascending: false }).limit(1)
       const ultima = rodsFin?.[0]
       if (ultima) {
         setUltimaRodada(ultima)

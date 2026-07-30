@@ -1,6 +1,8 @@
   import { useState, useEffect } from "react";
   import { supabase } from "../lib/supabase";
   import { VAGAS_LISTA_PRINCIPAL } from "../lib/constants";
+  import { buscarClassificacaoTemporadaAtual } from "../lib/temporada";
+  import { acessivelClique } from "../lib/a11y";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
 
@@ -96,6 +98,11 @@
     const [listaEsperaAdmin, setListaEsperaAdmin] = useState([]);
     const [promovendo, setPromovendo] = useState(false);
     const [mensagem, setMensagem] = useState(null);
+    const [verEncerrarTemporada, setVerEncerrarTemporada] = useState(false);
+    const [novaLigaNome, setNovaLigaNome] = useState("");
+    const [resetarChaveNovaLiga, setResetarChaveNovaLiga] = useState(true);
+    const [encerrandoTemporada, setEncerrandoTemporada] = useState(false);
+    const [confirmandoEncerramento, setConfirmandoEncerramento] = useState(false);
 
     useEffect(() => { carregarRodadas(); carregarJogadores(); }, []);
     useEffect(() => {
@@ -272,9 +279,10 @@
 
       if (!confirmacoes || confirmacoes.length < 8) { mostrarMensagem("Confirmados insuficientes (mínimo 8).", "erro"); return; }
 
-      // Busca ranking da última rodada finalizada para calcular subida/descida
+      // Busca ranking da última rodada finalizada DA MESMA LIGA para calcular subida/descida
+      // (sem esse filtro, a 1a rodada de uma liga nova herdaria a Ouro/Prata da liga anterior)
       const { data: rodadasFinalizadas } = await supabase.from("rodadas").select("*")
-        .eq("status", "finalizada").order("numero", { ascending: false });
+        .eq("status", "finalizada").eq("liga", rodadaAlvo.liga).order("numero", { ascending: false });
       const rodAntNormal = rodadasFinalizadas?.find(r => r.tipo !== "especial") || rodadasFinalizadas?.[0];
 
       const nomeConfirmados = new Set(confirmacoes.map(c => c.jogadores?.nome));
@@ -718,7 +726,7 @@
       };
 
       if (jogadorAusente.chave === "ouro") {
-        const { data: rodAntData } = await supabase.from("rodadas").select("id,tipo").eq("status","finalizada").order("numero",{ascending:false});
+        const { data: rodAntData } = await supabase.from("rodadas").select("id,tipo").eq("status","finalizada").eq("liga", rodadaSelecionada.liga).order("numero",{ascending:false});
         const rodAntNormal = rodAntData?.find(r => r.tipo !== "especial");
         if (!rodAntNormal) { mostrarMensagem("Rodada anterior não encontrada.", "erro"); setSubstProcessando(false); return; }
         const { data: rankPrata } = await supabase.from("ranking_rodada")
@@ -846,6 +854,50 @@
         .eq("status", "espera")
         .order("created_at", { ascending: true });
       setListaEsperaAdmin(data || []);
+    }
+
+    // ─── ENCERRAR TEMPORADA ──────────────────────────────────────────────────
+    // Arquiva a classificação final da liga atual em `temporadas` e cria a
+    // rodada 1 de uma liga nova. NÃO apaga nada de rodadas/jogos/pontuacao —
+    // isso fica guardado como histórico total, acessível depois.
+    async function encerrarTemporada() {
+      if (!novaLigaNome.trim()) { mostrarMensagem("Digite o nome da nova liga.", "erro"); return; }
+      setEncerrandoTemporada(true);
+
+      const { liga: ligaAtual, lista: classificacaoFinal } = await buscarClassificacaoTemporadaAtual({ comDescarte: false });
+      if (!ligaAtual) { mostrarMensagem("Nenhuma liga em andamento encontrada.", "erro"); setEncerrandoTemporada(false); return; }
+      if (classificacaoFinal.length === 0) { mostrarMensagem("A liga atual ainda não tem pontuação registrada.", "erro"); setEncerrandoTemporada(false); return; }
+
+      const ano = new Date().getFullYear();
+      const registros = classificacaoFinal.map(j => ({
+        jogador_id: j.id, nome_torneio: ligaAtual, ano,
+        pontos: j.pontos, posicao: j.posicao, chave: j.chave, status: "finalizado",
+      }));
+      const { error: erroArquivo } = await supabase.from("temporadas").insert(registros);
+      if (erroArquivo) { mostrarMensagem("Erro ao arquivar temporada: " + erroArquivo.message, "erro"); setEncerrandoTemporada(false); return; }
+
+      if (resetarChaveNovaLiga) {
+        const { error: erroReset } = await supabase.from("jogadores").update({ chave: "prata" }).neq("id", "");
+        if (erroReset) { mostrarMensagem("Temporada arquivada, mas houve erro ao resetar chaves: " + erroReset.message, "erro"); setEncerrandoTemporada(false); return; }
+      }
+
+      const hoje = new Date();
+      const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
+      const proximoSabado = new Date(hoje);
+      proximoSabado.setDate(hoje.getDate() + diasParaSabado);
+      const { error: erroNovaRodada } = await supabase.from("rodadas").insert({
+        numero: 1, data: proximoSabado.toISOString().split("T")[0], status: "proxima",
+        liga: novaLigaNome.trim(), tipo: "normal",
+      });
+      if (erroNovaRodada) { mostrarMensagem("Temporada arquivada, mas houve erro ao criar a nova liga: " + erroNovaRodada.message, "erro"); setEncerrandoTemporada(false); return; }
+
+      mostrarMensagem(`✅ "${ligaAtual}" arquivada! "${novaLigaNome.trim()}" começou — Rodada 1 criada.`);
+      setConfirmandoEncerramento(false);
+      setVerEncerrarTemporada(false);
+      setNovaLigaNome("");
+      await carregarRodadas();
+      await carregarJogadores();
+      setEncerrandoTemporada(false);
     }
 
     async function imprimirRodada(chave) {
@@ -1085,6 +1137,48 @@
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* ── ENCERRAR TEMPORADA ── */}
+            <div style={{ ...styles.card, borderColor: "rgba(231,76,60,0.3)" }}>
+              <div {...acessivelClique(() => setVerEncerrarTemporada(v => !v))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#e74c3c" }}>🏁 Encerrar Temporada e Iniciar Nova Liga</span>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{verEncerrarTemporada ? "▾ ocultar" : "▸ abrir"}</span>
+              </div>
+              {verEncerrarTemporada && (
+                <div style={{ marginTop: 14 }}>
+                  <p style={styles.infoText}>
+                    Arquiva a classificação atual em "Histórico de Temporadas" (visível no Perfil de cada jogador) e cria a Rodada 1
+                    de uma liga nova. Nada é apagado — rodadas, jogos e resultados da liga atual continuam acessíveis no histórico total.
+                  </p>
+                  <label style={styles.label}>Nome da nova liga</label>
+                  <input value={novaLigaNome} onChange={e => setNovaLigaNome(e.target.value)}
+                    placeholder='Ex: "Torneio de Verão 2027"' style={{ ...styles.select, width: "100%", boxSizing: "border-box" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                    <input type="checkbox" id="resetarChave" checked={resetarChaveNovaLiga} onChange={e => setResetarChaveNovaLiga(e.target.checked)} />
+                    <label htmlFor="resetarChave" style={{ fontSize: 13, color: "#e8f5e9", cursor: "pointer" }}>
+                      Resetar todos os jogadores para a chave Prata na liga nova
+                    </label>
+                  </div>
+                  {!confirmandoEncerramento ? (
+                    <button onClick={() => setConfirmandoEncerramento(true)} disabled={!novaLigaNome.trim()} style={{ ...styles.btnSalvar, background: "#e74c3c", marginTop: 14, opacity: !novaLigaNome.trim() ? 0.5 : 1 }}>
+                      Encerrar Temporada
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: 14, background: "rgba(231,76,60,0.1)", border: "1px solid rgba(231,76,60,0.4)", borderRadius: 10, padding: 14 }}>
+                      <p style={{ fontSize: 13, color: "#e8f5e9", marginBottom: 12 }}>
+                        Confirma encerrar a liga atual e começar "{novaLigaNome.trim()}"? Essa ação não pode ser desfeita pelo app.
+                      </p>
+                      <div style={styles.botoesForm}>
+                        <button onClick={encerrarTemporada} disabled={encerrandoTemporada} style={{ ...styles.btnSalvar, background: "#e74c3c" }}>
+                          {encerrandoTemporada ? "Processando..." : "✅ Sim, encerrar"}
+                        </button>
+                        <button onClick={() => setConfirmandoEncerramento(false)} disabled={encerrandoTemporada} style={styles.btnCancelar}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={styles.chaveRow}>

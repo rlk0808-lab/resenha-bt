@@ -45,10 +45,11 @@ export default function Confirmacao({ session }) {
     if (!rodada) return;
     setRodadaAtual(rodada);
 
-    // Busca todas as rodadas finalizadas ordenadas
+    // Busca rodadas finalizadas DA MESMA LIGA (senão a 1a rodada de uma liga
+    // nova herdaria referências da liga anterior, ou travaria todo mundo na espera)
     const { data: anteriores } = await supabase.from("rodadas").select("*")
-      .eq("status", "finalizada").order("numero", { ascending: false });
-    
+      .eq("status", "finalizada").eq("liga", rodada.liga).order("numero", { ascending: false });
+
     // Rodada de referência = última rodada finalizada (qualquer tipo)
     const ultimaRodada = anteriores?.[0] || null;
     // Última rodada normal finalizada (para prévia de chaves)
@@ -85,6 +86,10 @@ export default function Confirmacao({ session }) {
       } else {
         setJogouUltimaRodada(jogouUltima);
       }
+    } else if (jog && !ultimaRodada) {
+      // Nenhuma rodada finalizada nesta liga ainda (1a rodada de uma liga nova
+      // ou da liga inteira) — não faz sentido exigir "jogou a última", libera geral.
+      setJogouUltimaRodada(true);
     }
 
     await carregarConfirmacoes(rodada.id, jog);
