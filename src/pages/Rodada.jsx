@@ -420,6 +420,27 @@ export default function Rodada() {
   }
 
   function renderJogos(jogos, chave, permitirLancar) {
+    const isQualify = jogos.some(j => j.chave === 'qualify')
+    if (isQualify) {
+      // Qualify: chave única, mas ainda com 4 sub-rodadas — agrupa igual ao normal
+      if (jogos.length === 0) return (
+        <div className="card" style={{ textAlign: 'center', padding: '30px' }}>
+          <p style={{ color: 'rgba(255,255,255,0.4)' }}>Nenhum jogo cadastrado</p>
+        </div>
+      )
+      const gruposMap = {}
+      jogos.forEach(j => { const r = j.rodada_interna || 1; if (!gruposMap[r]) gruposMap[r] = []; gruposMap[r].push(j) })
+      const subRodadas = Object.keys(gruposMap).map(Number).sort((a, b) => a - b).map(k => gruposMap[k])
+      return subRodadas.map((grupo, idx) => (
+        <div key={idx} className="card" style={{ marginBottom: '12px', borderLeft: '3px solid #c9a227', padding: '16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
+            🎲 Qualify — Rodada {idx + 1}
+          </div>
+          {grupo.map((jogo, i) => renderJogo(jogo, i, permitirLancar))}
+        </div>
+      ))
+    }
+
     const chavesEspecial = ["time_a", "time_b", "especial"]
     const isEspecial = jogos.some(j => chavesEspecial.includes(j.chave))
 
@@ -976,7 +997,7 @@ export default function Rodada() {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h1 className="section-title" style={{ margin: 0 }}>
-          {proximaRodada ? "Rodada " + proximaRodada.numero : 'Rodada'}
+          {proximaRodada ? (proximaRodada.tipo === 'qualify' ? 'Qualify' : "Rodada " + proximaRodada.numero) : 'Rodada'}
         </h1>
         {rodadasFinalizadas.length > 0 && (
           <button onClick={() => setView('historico')} style={{

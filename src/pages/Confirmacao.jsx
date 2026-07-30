@@ -371,7 +371,7 @@ export default function Confirmacao({ session }) {
             <div style={styles.rodadaInfo}>
               <div>
                 <div style={styles.rodadaLabel}>Próxima Rodada</div>
-                <div style={styles.rodadaNumero}>Rodada {rodadaAtual.numero}</div>
+                <div style={styles.rodadaNumero}>{rodadaAtual.tipo === "qualify" ? "Qualify" : `Rodada ${rodadaAtual.numero}`}</div>
                 <div style={styles.rodadaData}>
                   📅 {new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", {
                     weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo"

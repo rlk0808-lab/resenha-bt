@@ -1,8 +1,9 @@
   import { useState, useEffect } from "react";
   import { supabase } from "../lib/supabase";
   import { VAGAS_LISTA_PRINCIPAL } from "../lib/constants";
-  import { buscarClassificacaoTemporadaAtual } from "../lib/temporada";
+  import { buscarClassificacaoTemporadaAtual, buscarLigaAtual } from "../lib/temporada";
   import { acessivelClique } from "../lib/a11y";
+  import { gerarSorteioQualify } from "../lib/sorteioQualify";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
 
@@ -81,6 +82,7 @@
     const [salvandoSorteio, setSalvandoSorteio] = useState(false);
     const [fechandoLista, setFechandoLista] = useState(false);
     const [previewFechamento, setPreviewFechamento] = useState(null);
+    const [previewFechamentoQualify, setPreviewFechamentoQualify] = useState(null);
     const [novoJogo, setNovoJogo] = useState({
       dupla_a_1: "", dupla_a_2: "", dupla_b_1: "", dupla_b_2: "", placar_a: "", placar_b: "",
     });
@@ -134,7 +136,12 @@
     }
 
     async function carregarRodadas() {
-      const { data } = await supabase.from("rodadas").select("*").order("numero", { ascending: true });
+      // Só a liga atual — sem isso, depois de uma virada de temporada o seletor
+      // misturaria rodadas de ligas diferentes (numero reinicia a cada liga nova)
+      const liga = await buscarLigaAtual();
+      let query = supabase.from("rodadas").select("*").order("numero", { ascending: true });
+      if (liga) query = query.eq("liga", liga);
+      const { data } = await query;
       setRodadas(data || []);
       if (data && data.length > 0) {
         // Seleciona a rodada ativa, ou proxima, ou a última
@@ -160,8 +167,8 @@
       setLoading(true);
       setRankingPreview(null);
       let query = supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
-      // Rodada especial: carrega todos os jogos (especial, time_a, time_b)
-      if (rodadaSelecionada.tipo !== "especial") {
+      // Rodada especial ou qualify: carrega todos os jogos (chave única, sem selecionar Ouro/Prata)
+      if (rodadaSelecionada.tipo !== "especial" && rodadaSelecionada.tipo !== "qualify") {
         query = query.eq("chave", chaveAtiva);
       }
       const { data } = await query.order("rodada_interna").order("id", { ascending: true });
@@ -858,8 +865,11 @@
 
     // ─── ENCERRAR TEMPORADA ──────────────────────────────────────────────────
     // Arquiva a classificação final da liga atual em `temporadas` e cria a
-    // rodada 1 de uma liga nova. NÃO apaga nada de rodadas/jogos/pontuacao —
-    // isso fica guardado como histórico total, acessível depois.
+    // rodada de Qualify da liga nova (não a Rodada 1 direto — como ninguém
+    // tem chave definida ainda, primeiro roda-se um qualify de chave única
+    // pra decidir quem vai pra Ouro/Prata; ver processarQualify()).
+    // NÃO apaga nada de rodadas/jogos/pontuacao — fica guardado como
+    // histórico total, acessível depois.
     async function encerrarTemporada() {
       if (!novaLigaNome.trim()) { mostrarMensagem("Digite o nome da nova liga.", "erro"); return; }
       setEncerrandoTemporada(true);
@@ -877,6 +887,8 @@
       if (erroArquivo) { mostrarMensagem("Erro ao arquivar temporada: " + erroArquivo.message, "erro"); setEncerrandoTemporada(false); return; }
 
       if (resetarChaveNovaLiga) {
+        // Chave antiga não tem mais sentido até o qualify decidir a nova —
+        // reseta pra prata só pra não exibir badge desatualizado por aí.
         const { error: erroReset } = await supabase.from("jogadores").update({ chave: "prata" }).neq("id", "");
         if (erroReset) { mostrarMensagem("Temporada arquivada, mas houve erro ao resetar chaves: " + erroReset.message, "erro"); setEncerrandoTemporada(false); return; }
       }
@@ -886,18 +898,147 @@
       const proximoSabado = new Date(hoje);
       proximoSabado.setDate(hoje.getDate() + diasParaSabado);
       const { error: erroNovaRodada } = await supabase.from("rodadas").insert({
-        numero: 1, data: proximoSabado.toISOString().split("T")[0], status: "proxima",
-        liga: novaLigaNome.trim(), tipo: "normal",
+        numero: 0, data: proximoSabado.toISOString().split("T")[0], status: "proxima",
+        liga: novaLigaNome.trim(), tipo: "qualify",
       });
-      if (erroNovaRodada) { mostrarMensagem("Temporada arquivada, mas houve erro ao criar a nova liga: " + erroNovaRodada.message, "erro"); setEncerrandoTemporada(false); return; }
+      if (erroNovaRodada) { mostrarMensagem("Temporada arquivada, mas houve erro ao criar o qualify: " + erroNovaRodada.message, "erro"); setEncerrandoTemporada(false); return; }
 
-      mostrarMensagem(`✅ "${ligaAtual}" arquivada! "${novaLigaNome.trim()}" começou — Rodada 1 criada.`);
+      mostrarMensagem(`✅ "${ligaAtual}" arquivada! "${novaLigaNome.trim()}" começou — rodada de Qualify criada (define Ouro/Prata).`);
       setConfirmandoEncerramento(false);
       setVerEncerrarTemporada(false);
       setNovaLigaNome("");
       await carregarRodadas();
       await carregarJogadores();
       setEncerrandoTemporada(false);
+    }
+
+    // Tamanho da chave Ouro conforme o total de confirmados no qualify
+    // (24 -> 12, 28 -> 12, 32 -> 16 — igual aos formatos do fechamento normal)
+    function alvoOuroPorTotal(total) {
+      return total >= 32 ? 16 : 12;
+    }
+
+    // Ranking do qualify: chave única, sem times — soma vitórias + saldo de
+    // games (mesmo critério das rodadas especiais), só pra ordenar.
+    function calcularRankingQualify(jogosQualify) {
+      const stats = {};
+      const addJogador = (nome) => { if (nome && !stats[nome]) stats[nome] = { nome, vitorias: 0, saldo: 0 }; };
+      for (const jogo of jogosQualify) {
+        if (jogo.placar_a === null || jogo.placar_b === null) continue;
+        const { dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2, placar_a, placar_b } = jogo;
+        [dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2].forEach(addJogador);
+        const venceuA = placar_a > placar_b;
+        const saldo = Math.abs(placar_a - placar_b);
+        const vencedores = venceuA ? [dupla_a_1, dupla_a_2] : [dupla_b_1, dupla_b_2];
+        const perdedores = venceuA ? [dupla_b_1, dupla_b_2] : [dupla_a_1, dupla_a_2];
+        vencedores.filter(Boolean).forEach(n => { stats[n].vitorias += 1; stats[n].saldo += saldo; });
+        perdedores.filter(Boolean).forEach(n => { stats[n].saldo -= saldo; });
+      }
+      return Object.values(stats).sort((a, b) => b.vitorias !== a.vitorias ? b.vitorias - a.vitorias : b.saldo - a.saldo);
+    }
+
+    // Processa o resultado do qualify: define chave Ouro/Prata de cada
+    // jogador pelo ranking (vitórias+saldo) e cria a Rodada 1 de verdade.
+    // Não grava nada em pontuacao/ranking_rodada/badges — o qualify não
+    // conta pra pontuação da temporada, só decide a chave inicial.
+    async function processarQualify() {
+      if (!rodadaSelecionada || rodadaSelecionada.tipo !== "qualify") return;
+      setFechandoLista(true);
+
+      const { data: jogosQualify } = await supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
+      if (!jogosQualify || jogosQualify.length === 0) { mostrarMensagem("Nenhum jogo do qualify encontrado.", "erro"); setFechandoLista(false); return; }
+      const semPlacar = jogosQualify.filter(j => j.placar_a === null || j.placar_b === null);
+      if (semPlacar.length > 0) { mostrarMensagem(`Ainda faltam ${semPlacar.length} jogo(s) do qualify sem placar.`, "erro"); setFechandoLista(false); return; }
+
+      const ranking = calcularRankingQualify(jogosQualify);
+      const ouroAlvo = alvoOuroPorTotal(ranking.length);
+      const nomesOuro = new Set(ranking.slice(0, ouroAlvo).map(j => j.nome));
+
+      const erros = [];
+      for (const j of ranking) {
+        const jog = jogadores.find(jg => jg.nome === j.nome);
+        if (!jog) continue;
+        const { error } = await supabase.from("jogadores").update({ chave: nomesOuro.has(j.nome) ? "ouro" : "prata" }).eq("id", jog.id);
+        if (error) erros.push(`${j.nome}: ${error.message}`);
+      }
+      if (erros.length > 0) { mostrarMensagem("Erros ao definir chave: " + erros.join(", "), "erro"); setFechandoLista(false); return; }
+
+      await supabase.from("rodadas").update({ status: "finalizada" }).eq("id", rodadaSelecionada.id);
+
+      const hoje = new Date();
+      const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
+      const proximoSabado = new Date(hoje);
+      proximoSabado.setDate(hoje.getDate() + diasParaSabado);
+      const { error: erroRodada1 } = await supabase.from("rodadas").insert({
+        numero: 1, data: proximoSabado.toISOString().split("T")[0], status: "proxima",
+        liga: rodadaSelecionada.liga, tipo: "normal",
+      });
+      if (erroRodada1) { mostrarMensagem("Chaves definidas, mas houve erro ao criar a Rodada 1: " + erroRodada1.message, "erro"); setFechandoLista(false); return; }
+
+      mostrarMensagem(`✅ Qualify processado! ${nomesOuro.size} na Ouro, ${ranking.length - nomesOuro.size} na Prata. Rodada 1 criada.`);
+      await carregarRodadas();
+      await carregarJogadores();
+      setFechandoLista(false);
+    }
+
+    // ─── FECHAR LISTA DO QUALIFY (chave única, sem Ouro/Prata) ──────────────
+    async function prepararFechamentoQualify() {
+      const agora = new Date();
+      const foraDoPrazo = agora.getDay() !== 5 || agora.getHours() < 14;
+
+      const { data: proximasRodadas } = await supabase.from("rodadas").select("*")
+        .eq("status", "proxima").eq("tipo", "qualify").limit(1);
+      const rodadaAlvo = proximasRodadas?.[0];
+      if (!rodadaAlvo) { mostrarMensagem("Nenhum qualify pendente encontrado.", "erro"); return; }
+
+      const { data: confirmadosAtuais } = await supabase.from("confirmacoes").select("id")
+        .eq("rodada_id", rodadaAlvo.id).eq("status", "confirmado");
+      const totalConfirmados = confirmadosAtuais?.length || 0;
+      const vagas = formatoRodada.total - totalConfirmados;
+      if (vagas > 0) {
+        const { data: listaEspera } = await supabase.from("confirmacoes").select("id")
+          .eq("rodada_id", rodadaAlvo.id).eq("status", "espera")
+          .order("created_at", { ascending: true }).limit(vagas);
+        if (listaEspera && listaEspera.length > 0) {
+          for (const c of listaEspera) await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", c.id);
+          mostrarMensagem(`✅ ${listaEspera.length} jogador(es) promovido(s) da lista de espera.`);
+        }
+      }
+
+      const { data: confirmacoes } = await supabase.from("confirmacoes").select("*, jogadores(id, nome)")
+        .eq("rodada_id", rodadaAlvo.id).eq("status", "confirmado").order("created_at", { ascending: true });
+      const nomes = (confirmacoes || []).map(c => c.jogadores?.nome).filter(Boolean);
+
+      if (nomes.length < 12 || nomes.length % 4 !== 0) {
+        mostrarMensagem(`Qualify precisa de um total múltiplo de 4 (mínimo 12). Hoje tem ${nomes.length} confirmado(s).`, "erro");
+        return;
+      }
+
+      setPreviewFechamentoQualify({ rodada: rodadaAlvo, jogadores: nomes, foraDoPrazo });
+    }
+
+    async function confirmarFechamentoQualify() {
+      if (!previewFechamentoQualify) return;
+      setFechandoLista(true);
+      const { rodada, jogadores: nomes } = previewFechamentoQualify;
+
+      const sorteio = gerarSorteioQualify(nomes);
+      if (!sorteio) { mostrarMensagem("Erro ao gerar sorteio do qualify.", "erro"); setFechandoLista(false); return; }
+
+      const inserts = sorteio.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({
+        rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
+        placar_a: null, placar_b: null, chave: "qualify", rodada_interna: ri + 1,
+      })));
+
+      await supabase.from("jogos").delete().eq("rodada_id", rodada.id).is("placar_a", null);
+      const { error: erroInsert } = await supabase.from("jogos").insert(inserts);
+      if (erroInsert) { mostrarMensagem("Erro ao salvar jogos do qualify: " + erroInsert.message, "erro"); setFechandoLista(false); return; }
+
+      await supabase.from("rodadas").update({ status: "ativa" }).eq("id", rodada.id);
+      await carregarRodadas();
+      setPreviewFechamentoQualify(null);
+      setFechandoLista(false);
+      mostrarMensagem(`✅ Qualify publicado com ${nomes.length} jogadores!`);
     }
 
     async function imprimirRodada(chave) {
@@ -1069,7 +1210,42 @@
           </div>
         </div>
 
-        {rodadaProxima && !previewFechamento && (
+        {rodadaProxima && rodadaProxima.tipo === "qualify" && !previewFechamentoQualify && (
+          <div style={styles.cardDestaque}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 24 }}>🎲</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: ouro }}>Fechar Lista do Qualify</div>
+                <div style={{ fontSize: 12, color: "#7fb89a" }}>Sorteia numa chave única — decide quem vai pra Ouro/Prata depois</div>
+              </div>
+            </div>
+            <p style={styles.infoText}>Fecha as confirmações e publica o sorteio do qualify (chave única, sem Ouro/Prata ainda).</p>
+            <button onClick={prepararFechamentoQualify} style={styles.btnFechar}>🎲 Fechar Lista e Gerar Sorteio do Qualify</button>
+          </div>
+        )}
+
+        {previewFechamentoQualify && (
+          <div style={styles.cardDestaque}>
+            <h2 style={{ ...styles.cardTitulo, color: ouro }}>🎲 Confirmar Qualify</h2>
+            {previewFechamentoQualify.foraDoPrazo && (
+              <div style={{ background: "#3a2000", border: "1px solid #c9a227", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#c9a227" }}>
+                ⚠️ Hoje não é sexta-feira após 14h. Pode continuar mesmo assim.
+              </div>
+            )}
+            <div style={{ fontSize: 13, color: "#7fb89a", marginBottom: 12 }}>
+              <strong style={{ color: "#c8e6c9" }}>{previewFechamentoQualify.jogadores.length}</strong> jogadores confirmados (chave única)
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              {previewFechamentoQualify.jogadores.map((nome, i) => <div key={i} style={{ fontSize: 12, color: "#e8f5e9", padding: "3px 0", borderBottom: "1px solid #1e3d2a" }}>{i + 1}. {nome}</div>)}
+            </div>
+            <div style={styles.botoesForm}>
+              <button onClick={confirmarFechamentoQualify} disabled={fechandoLista} style={styles.btnSalvar}>{fechandoLista ? "Processando..." : "✅ Confirmar e Publicar Qualify"}</button>
+              <button onClick={() => setPreviewFechamentoQualify(null)} disabled={fechandoLista} style={styles.btnCancelar}>✕ Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {rodadaProxima && rodadaProxima.tipo !== "qualify" && !previewFechamento && (
           <div style={styles.cardDestaque}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
               <span style={{ fontSize: 24 }}>🔒</span>
@@ -1130,8 +1306,8 @@
                 {rodadas.map((r) => (
                   <button key={r.id} onClick={() => setRodadaSelecionada(r)}
                     style={{ ...styles.btnRodada, ...(rodadaSelecionada?.id === r.id ? styles.btnRodadaAtivo : {}) }}>
-                    R{r.numero}
-                    <span style={styles.rodadaTipo}>{r.tipo === "especial" ? "⭐" : ""}</span>
+                    {r.tipo === "qualify" ? "Qualify" : `R${r.numero}`}
+                    <span style={styles.rodadaTipo}>{r.tipo === "especial" ? "⭐" : r.tipo === "qualify" ? "🎲" : ""}</span>
                     <span style={styles.rodadaData}>{new Date(r.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>
                     <span style={{ fontSize: 9, color: r.status === "finalizada" ? "#5a8a6a" : r.status === "ativa" ? "#c9a227" : "#7fb89a" }}>{r.status}</span>
                   </button>
@@ -1181,15 +1357,21 @@
               )}
             </div>
 
-            <div style={styles.chaveRow}>
-              {rodadaSelecionada?.tipo === "especial" ? (<>
-                <button onClick={() => setChaveAtiva("time_a")} style={{ ...styles.btnChave, ...(chaveAtiva === "time_a" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🔴 Time A</button>
-                <button onClick={() => setChaveAtiva("time_b")} style={{ ...styles.btnChave, ...(chaveAtiva === "time_b" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🔵 Time B</button>
-              </>) : (<>
-                <button onClick={() => setChaveAtiva("ouro")} style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🥇 Chave Ouro</button>
-                <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🥈 Chave Prata</button>
-              </>)}
-            </div>
+            {rodadaSelecionada?.tipo === "qualify" ? (
+              <div style={{ ...styles.card, textAlign: "center", padding: "10px 14px" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: ouro }}>🎲 Qualify — chave única ({jogos.length} jogos)</span>
+              </div>
+            ) : (
+              <div style={styles.chaveRow}>
+                {rodadaSelecionada?.tipo === "especial" ? (<>
+                  <button onClick={() => setChaveAtiva("time_a")} style={{ ...styles.btnChave, ...(chaveAtiva === "time_a" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🔴 Time A</button>
+                  <button onClick={() => setChaveAtiva("time_b")} style={{ ...styles.btnChave, ...(chaveAtiva === "time_b" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🔵 Time B</button>
+                </>) : (<>
+                  <button onClick={() => setChaveAtiva("ouro")} style={{ ...styles.btnChave, ...(chaveAtiva === "ouro" ? styles.btnOuroAtivo : styles.btnChaveInativo) }}>🥇 Chave Ouro</button>
+                  <button onClick={() => setChaveAtiva("prata")} style={{ ...styles.btnChave, ...(chaveAtiva === "prata" ? styles.btnPrataAtivo : styles.btnChaveInativo) }}>🥈 Chave Prata</button>
+                </>)}
+              </div>
+            )}
 
             {rodadaSelecionada?.tipo === "especial" && (
               <div style={styles.card}>
@@ -1439,16 +1621,29 @@
               }
             </div>
 
-            <div style={styles.card}>
-              <h2 style={styles.cardTitulo}>🏆 Pontuação da Liga</h2>
-              <p style={styles.infoText}>Calcule após inserir todos os placares das duas chaves.</p>
-              {rodadaSelecionada?.tipo === "especial" && (
-                <div style={{ background: "#1a3a20", border: "1px solid #c9a227", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 13, color: "#c9a227" }}>
-                  ⭐ Rodada Especial — formato de times. Time vencedor: 40pts + 3/vitória | Perdedor: 10pts + 3/vitória
-                </div>
-              )}
-              <button onClick={calcularPontuacao} disabled={calculando} style={styles.btnCalcular}>{calculando ? "Calculando..." : "📊 Calcular Pontuação"}</button>
-            </div>
+            {rodadaSelecionada?.tipo === "qualify" ? (
+              <div style={styles.card}>
+                <h2 style={styles.cardTitulo}>🎲 Definir Ouro/Prata pelo Qualify</h2>
+                <p style={styles.infoText}>
+                  Processe depois de lançar todos os placares do qualify. Ordena por vitórias + saldo de games,
+                  manda os melhores pra Ouro (12 até 28 atletas, 16 com 32) e cria a Rodada 1 de verdade.
+                </p>
+                <button onClick={processarQualify} disabled={fechandoLista} style={styles.btnCalcular}>
+                  {fechandoLista ? "Processando..." : "🎲 Processar Qualify e Criar Rodada 1"}
+                </button>
+              </div>
+            ) : (
+              <div style={styles.card}>
+                <h2 style={styles.cardTitulo}>🏆 Pontuação da Liga</h2>
+                <p style={styles.infoText}>Calcule após inserir todos os placares das duas chaves.</p>
+                {rodadaSelecionada?.tipo === "especial" && (
+                  <div style={{ background: "#1a3a20", border: "1px solid #c9a227", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 13, color: "#c9a227" }}>
+                    ⭐ Rodada Especial — formato de times. Time vencedor: 40pts + 3/vitória | Perdedor: 10pts + 3/vitória
+                  </div>
+                )}
+                <button onClick={calcularPontuacao} disabled={calculando} style={styles.btnCalcular}>{calculando ? "Calculando..." : "📊 Calcular Pontuação"}</button>
+              </div>
+            )}
 
             {rankingPreview && (
               <div style={styles.card}>
