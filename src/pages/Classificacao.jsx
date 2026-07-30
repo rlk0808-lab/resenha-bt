@@ -5,7 +5,6 @@ import Evolucao from './Evolucao'
 import { acessivelClique } from '../lib/a11y'
 
 export default function Classificacao() {
-  const [aba, setAba] = useState('geral')
   const [modoDescarte, setModoDescarte] = useState(false)
   const [verEvolucao, setVerEvolucao] = useState(false)
   const [jogadorAtualId, setJogadorAtualId] = useState(null)
@@ -33,14 +32,7 @@ export default function Classificacao() {
     load()
   }, [])
 
-  const dados = modoDescarte ? jogadoresDescarte : jogadores
-  const ouro = dados.filter(j => j.chave === 'ouro')
-  const prata = dados.filter(j => j.chave === 'prata')
-  const lista = aba === 'geral' ? dados : aba === 'ouro' ? ouro : prata
-
-  // Zona de subida (top 3 da Prata) e descida (últimos 3 da Ouro) na próxima rodada
-  const idsZonaDescida = new Set(ouro.length >= 4 ? ouro.slice(-3).map(j => j.id) : [])
-  const idsZonaSubida = new Set(prata.length >= 4 ? prata.slice(0, 3).map(j => j.id) : [])
+  const lista = modoDescarte ? jogadoresDescarte : jogadores
 
   function corPos(pos) {
     if (pos === 1) return 'var(--ouro)'
@@ -98,23 +90,6 @@ export default function Classificacao() {
         </div>
       </div>
 
-      {/* Tabs Geral / Ouro / Prata */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
-        {[
-          { key: 'geral', label: 'Geral' },
-          { key: 'ouro', label: '🥇 Ouro' },
-          { key: 'prata', label: '🥈 Prata' },
-        ].map(({ key, label }) => (
-          <button key={key} onClick={() => setAba(key)} style={{
-            flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
-            background: aba === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
-            color: aba === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '14px', fontWeight: 700,
-            letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s'
-          }}>{label}</button>
-        ))}
-      </div>
-
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="tabela">
           <thead>
@@ -126,16 +101,8 @@ export default function Classificacao() {
             </tr>
           </thead>
           <tbody>
-            {lista.map((j) => {
-              // Zona de subida/descida e a chave (Ouro/Prata) são conceitos da rodada,
-              // não fazem sentido na classificação Geral (que é o histórico da liga toda)
-              const desce = aba !== 'geral' && idsZonaDescida.has(j.id)
-              const sobe = aba !== 'geral' && idsZonaSubida.has(j.id)
-              return (
-              <tr key={j.id} {...acessivelClique(() => navigate(`/jogador/${j.id}`))} style={{
-                cursor: 'pointer',
-                boxShadow: desce ? 'inset 3px 0 0 0 #e74c3c' : sobe ? 'inset 3px 0 0 0 #2ecc71' : 'none',
-              }}>
+            {lista.map((j) => (
+              <tr key={j.id} {...acessivelClique(() => navigate(`/jogador/${j.id}`))} style={{ cursor: 'pointer' }}>
                 <td style={{ textAlign: 'center' }}>
                   <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', color: corPos(j.posicao) }}>
                     {j.posicao}
@@ -145,7 +112,7 @@ export default function Classificacao() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{
                       width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                      border: `1px solid ${j.chave === 'ouro' ? 'rgba(255,215,0,0.3)' : 'rgba(192,192,192,0.3)'}`,
+                      border: '1px solid rgba(255,255,255,0.15)',
                       background: 'linear-gradient(135deg, #1a4d2e, #0d2b1a)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>
@@ -154,18 +121,7 @@ export default function Classificacao() {
                         : <span style={{ fontSize: '14px', fontWeight: 700 }}>{j.nome?.charAt(0)?.toUpperCase()}</span>
                       }
                     </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{j.nome}</div>
-                      {aba !== 'geral' && (
-                        <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {j.chave === 'ouro'
-                            ? <span className="badge-ouro">Ouro</span>
-                            : <span className="badge-prata">Prata</span>}
-                          {desce && <span style={{ fontSize: 10, fontWeight: 700, color: '#e74c3c' }}>↓ zona de descida</span>}
-                          {sobe && <span style={{ fontSize: 10, fontWeight: 700, color: '#2ecc71' }}>↑ zona de subida</span>}
-                        </div>
-                      )}
-                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{j.nome}</div>
                   </div>
                 </td>
                 <td style={{ textAlign: 'right', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>
@@ -177,8 +133,7 @@ export default function Classificacao() {
                   </span>
                 </td>
               </tr>
-              )
-            })}
+            ))}
           </tbody>
         </table>
         {lista.length === 0 && (
