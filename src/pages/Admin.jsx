@@ -278,6 +278,9 @@
       const rodAntNormal = rodadasFinalizadas?.find(r => r.tipo !== "especial") || rodadasFinalizadas?.[0];
 
       const nomeConfirmados = new Set(confirmacoes.map(c => c.jogadores?.nome));
+      // Formato 24/28 -> Ouro sempre com 12; formato 32 -> Ouro expande para 16.
+      const ouroAlvo = formatoRodada.ouro || 12;
+      const prataAlvo = formatoRodada.prata || 12;
       let jogadoresOuro;
       let jogadoresPrata = [];
 
@@ -312,8 +315,11 @@
         // Faltas na Ouro (pos 1-9)
         const ouroEfetivos = rankOuro.filter(r => !ouroDescem.has(r.jogadores?.nome));
         const qtdFaltasEfetivas = ouroEfetivos.filter(r => !nomeConfirmados.has(r.jogadores?.nome)).length;
-        // Sobe pos 4, 5, 6 da Prata por falta na Ouro
-        const totalVagasExtras = qtdFaltasEfetivas + vagasFixasNaoPreenchidas;
+        // Formato expandido (32 atletas): Ouro precisa de mais gente além do padrão de 12,
+        // então essas vagas extras entram no mesmo fluxo de subida (4-6, depois mantém 10-12, depois 7+)
+        const expansaoFormato = Math.max(0, ouroAlvo - 12);
+        // Sobe pos 4, 5, 6 da Prata por falta na Ouro (ou por expansão de formato)
+        const totalVagasExtras = qtdFaltasEfetivas + vagasFixasNaoPreenchidas + expansaoFormato;
         const prataSobemExtras = prataTodos.filter(r => r.posicao >= 4 && r.posicao <= 6)
           .slice(0, totalVagasExtras).map(r => r.jogadores?.nome);
         const vagasRestantes = totalVagasExtras - prataSobemExtras.length;
@@ -365,18 +371,18 @@
         }
       }
 
-      // Ajusta para garantir exatamente 12 em cada chave quando possível
-      // Se sobrar jogadores (ex: prata com 13), move para prata
-      // Se faltar (ex: ouro com 11), avisa mas permite continuar
-      console.log("Ouro:", jogadoresOuro.length, jogadoresOuro);
-      console.log("Prata:", jogadoresPrata.length, jogadoresPrata);
-
       if (jogadoresOuro.length < 4) { mostrarMensagem(`Ouro com ${jogadoresOuro.length} confirmados. Mínimo 4.`, "erro"); return; }
       if (jogadoresPrata.length < 4) { mostrarMensagem(`Prata com ${jogadoresPrata.length} confirmados. Mínimo 4.`, "erro"); return; }
-      
-      // Garante múltiplo de 4 em cada chave para o sorteio funcionar
-      while (jogadoresOuro.length % 4 !== 0 && jogadoresPrata.length > 4) {
-        jogadoresPrata.unshift(jogadoresOuro.pop());
+
+      // Confere se bateu exatamente no alvo do formato selecionado (12/12, 12/16 ou 16/16).
+      // O sorteio só sabe montar chaves com exatamente 12 ou 16 jogadores — se não bateu,
+      // é melhor avisar aqui do que travar mais adiante com "Erro ao gerar sorteio".
+      if (rodAntNormal && (jogadoresOuro.length !== ouroAlvo || jogadoresPrata.length !== prataAlvo)) {
+        mostrarMensagem(
+          `Formato ${formatoRodada.label} atletas esperava ${ouroAlvo} na Ouro e ${prataAlvo} na Prata, mas ficou ${jogadoresOuro.length}/${jogadoresPrata.length}. Ajuste as confirmações ou promova/substitua manualmente antes de fechar.`,
+          "erro"
+        );
+        return;
       }
 
       setPreviewFechamento({ rodada: rodadaAlvo, ouro: jogadoresOuro, prata: jogadoresPrata, total: confirmacoes.length, foraDoPrazo });
