@@ -3,8 +3,6 @@ import { supabase } from '../lib/supabase'
 import { BADGE_INFO } from '../lib/badges'
 import { acessivelClique } from '../lib/a11y'
 
-const EMOJIS = ['🔥', '👏', '😤', '💪', '🎾', '😂']
-
 export default function Feed() {
   const [posts, setPosts] = useState([])
   const [jogadorAtual, setJogadorAtual] = useState(null)
@@ -15,7 +13,14 @@ export default function Feed() {
   const [mencaoAtiva, setMencaoAtiva] = useState(false)
   const [filtroBusca, setFiltroBusca] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
+  const [fotoArquivo, setFotoArquivo] = useState(null)
+  const [fotoPreview, setFotoPreview] = useState(null)
+  const [curtidasAbertas, setCurtidasAbertas] = useState(null)
+  const [comentariosAbertos, setComentariosAbertos] = useState(new Set())
+  const [rascunhoComentario, setRascunhoComentario] = useState({})
+  const [enviandoComentario, setEnviandoComentario] = useState(null)
   const textareaRef = useRef()
+  const fotoInputRef = useRef()
 
   useEffect(() => {
     async function load() {
@@ -33,6 +38,7 @@ export default function Feed() {
     const channel = supabase.channel('feed')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'feed_posts' }, () => carregarPosts())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'feed_reacoes' }, () => carregarPosts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'feed_comentarios' }, () => carregarPosts())
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [])
@@ -40,19 +46,48 @@ export default function Feed() {
   async function carregarPosts() {
     const { data } = await supabase
       .from('feed_posts')
-      .select(`*, jogadores(nome, foto_url, chave), rodadas(numero), feed_reacoes(emoji, jogador_id)`)
+      .select(`*, jogadores(nome, foto_url, chave), rodadas(numero), feed_reacoes(jogador_id, jogadores(nome)), feed_comentarios(id, texto, created_at, jogador_id, jogadores(nome, foto_url))`)
       .order('created_at', { ascending: false })
       .limit(50)
     setPosts(data || [])
   }
 
+  function selecionarFoto(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFotoArquivo(file)
+    setFotoPreview(URL.createObjectURL(file))
+  }
+
+  function cancelarFoto() {
+    setFotoArquivo(null)
+    setFotoPreview(null)
+    if (fotoInputRef.current) fotoInputRef.current.value = ''
+  }
+
   async function publicarPost() {
-    if (!texto.trim() || !jogadorAtual) return
+    if ((!texto.trim() && !fotoArquivo) || !jogadorAtual) return
     setEnviando(true)
     const textoFinal = texto.trim()
+
+    let foto_url = null
+    if (fotoArquivo) {
+      const ext = fotoArquivo.name.split('.').pop()
+      const path = `feed/${jogadorAtual.id}/${Date.now()}.${ext}`
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, fotoArquivo)
+      if (uploadError) {
+        alert('Erro ao enviar a foto: ' + uploadError.message)
+        setEnviando(false)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+      foto_url = urlData.publicUrl
+    }
+
     await supabase.from('feed_posts').insert({
       jogador_id: jogadorAtual.id,
       texto: textoFinal,
+      foto_url,
     })
     // Notifica mencionados
     const mencoes = textoFinal.match(/@[\w.]+/g)
@@ -78,18 +113,18 @@ export default function Feed() {
       }
     }
     setTexto('')
+    cancelarFoto()
     setEnviando(false)
   }
 
-  async function reagir(postId, emoji) {
+  async function curtir(postId) {
     if (!jogadorAtual) return
     const post = posts.find(p => p.id === postId)
-    const jaReagiu = post?.feed_reacoes?.some(r => r.jogador_id === jogadorAtual.id && r.emoji === emoji)
-    if (jaReagiu) {
-      await supabase.from('feed_reacoes').delete()
-        .eq('post_id', postId).eq('jogador_id', jogadorAtual.id).eq('emoji', emoji)
+    const jaCurti = post?.feed_reacoes?.some(r => r.jogador_id === jogadorAtual.id)
+    if (jaCurti) {
+      await supabase.from('feed_reacoes').delete().eq('post_id', postId).eq('jogador_id', jogadorAtual.id)
     } else {
-      await supabase.from('feed_reacoes').insert({ post_id: postId, jogador_id: jogadorAtual.id, emoji })
+      await supabase.from('feed_reacoes').insert({ post_id: postId, jogador_id: jogadorAtual.id, emoji: '❤️' })
     }
     await carregarPosts()
   }
@@ -97,6 +132,34 @@ export default function Feed() {
   async function deletarPost(postId) {
     if (!confirm('Excluir este post?')) return
     await supabase.from('feed_posts').delete().eq('id', postId)
+  }
+
+  function toggleComentarios(postId) {
+    setComentariosAbertos(prev => {
+      const novo = new Set(prev)
+      if (novo.has(postId)) novo.delete(postId)
+      else novo.add(postId)
+      return novo
+    })
+  }
+
+  async function enviarComentario(postId) {
+    const texto = (rascunhoComentario[postId] || '').trim()
+    if (!texto || !jogadorAtual) return
+    setEnviandoComentario(postId)
+    const { error } = await supabase.from('feed_comentarios').insert({
+      post_id: postId, jogador_id: jogadorAtual.id, texto,
+    })
+    if (!error) {
+      setRascunhoComentario(prev => ({ ...prev, [postId]: '' }))
+      await carregarPosts()
+    }
+    setEnviandoComentario(null)
+  }
+
+  async function deletarComentario(comentarioId) {
+    await supabase.from('feed_comentarios').delete().eq('id', comentarioId)
+    await carregarPosts()
   }
 
   function handleTextoChange(e) {
@@ -132,15 +195,6 @@ export default function Feed() {
         ? <span key={i} style={{ color: '#c9a227', fontWeight: 700 }}>{part}</span>
         : <span key={i}>{part}</span>
     )
-  }
-
-  function agruparReacoes(reacoes) {
-    const grupos = {}
-    for (const r of (reacoes || [])) {
-      if (!grupos[r.emoji]) grupos[r.emoji] = []
-      grupos[r.emoji].push(r.jogador_id)
-    }
-    return grupos
   }
 
   function tempoRelativo(dateStr) {
@@ -191,8 +245,20 @@ export default function Feed() {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-          <button onClick={publicarPost} disabled={enviando || !texto.trim()} style={{ background: '#c9a227', color: '#0d2b1a', border: 'none', borderRadius: 20, padding: '8px 20px', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: !texto.trim() ? 0.5 : 1 }}>
+
+        {fotoPreview && (
+          <div style={{ position: 'relative', marginTop: 10, borderRadius: 10, overflow: 'hidden' }}>
+            <img src={fotoPreview} alt="" style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block' }} />
+            <button onClick={cancelarFoto} style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', fontSize: 14 }}>✕</button>
+          </div>
+        )}
+
+        <input ref={fotoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={selecionarFoto} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+          <button onClick={() => fotoInputRef.current?.click()} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', borderRadius: 20, padding: '6px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            📷 Foto
+          </button>
+          <button onClick={publicarPost} disabled={enviando || (!texto.trim() && !fotoArquivo)} style={{ background: '#c9a227', color: '#0d2b1a', border: 'none', borderRadius: 20, padding: '8px 20px', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: (!texto.trim() && !fotoArquivo) ? 0.5 : 1 }}>
             {enviando ? '...' : 'Publicar'}
           </button>
         </div>
@@ -206,9 +272,13 @@ export default function Feed() {
           <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13, marginTop: 4 }}>Seja o primeiro a postar!</p>
         </div>
       ) : posts.map(post => {
-        const reacoes = agruparReacoes(post.feed_reacoes)
         const isMeu = post.jogador_id === jogadorAtual?.id
         const chave = post.jogadores?.chave
+        const curtidas = post.feed_reacoes || []
+        const euCurti = curtidas.some(r => r.jogador_id === jogadorAtual?.id)
+        const comentarios = [...(post.feed_comentarios || [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        const comentariosAberto = comentariosAbertos.has(post.id)
+        const curtidasAberto = curtidasAbertas === post.id
 
         return (
           <div key={post.id} className="card" style={{ marginBottom: 12, padding: 14 }}>
@@ -251,24 +321,72 @@ export default function Feed() {
               </p>
             )}
 
-            {/* Reações */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-              {EMOJIS.map(emoji => {
-                const count = reacoes[emoji]?.length || 0
-                const euReagi = reacoes[emoji]?.includes(jogadorAtual?.id)
-                return (
-                  <button key={emoji} onClick={() => reagir(post.id, emoji)} style={{
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    background: euReagi ? 'rgba(201,162,39,0.2)' : 'rgba(255,255,255,0.05)',
-                    border: euReagi ? '1px solid rgba(201,162,39,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 20, padding: '4px 10px', cursor: 'pointer', fontSize: 14
-                  }}>
-                    <span>{emoji}</span>
-                    {count > 0 && <span style={{ fontSize: 12, color: euReagi ? '#c9a227' : 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{count}</span>}
-                  </button>
-                )
-              })}
+            {/* Foto */}
+            {post.foto_url && (
+              <img src={post.foto_url} alt="" style={{ width: '100%', maxHeight: 400, objectFit: 'cover', borderRadius: 10, marginBottom: 12, display: 'block' }} />
+            )}
+
+            {/* Curtir + Comentar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <button onClick={() => curtir(post.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none',
+                cursor: 'pointer', fontSize: 14, color: euCurti ? '#e74c3c' : 'rgba(255,255,255,0.5)', fontWeight: euCurti ? 700 : 400
+              }}>
+                {euCurti ? '❤️' : '🤍'} Curtir
+              </button>
+              {curtidas.length > 0 && (
+                <div {...acessivelClique(() => setCurtidasAbertas(curtidasAberto ? null : post.id))} style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
+                  {curtidas.length} curtida{curtidas.length !== 1 ? 's' : ''}
+                </div>
+              )}
+              <div {...acessivelClique(() => toggleComentarios(post.id))} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>
+                💬 {comentarios.length > 0 ? `${comentarios.length} coment.` : 'Comentar'}
+              </div>
             </div>
+
+            {curtidasAberto && (
+              <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px', fontSize: 12, color: '#c8e6c9' }}>
+                Curtido por {curtidas.map(c => c.jogadores?.nome).filter(Boolean).join(', ')}
+              </div>
+            )}
+
+            {comentariosAberto && (
+              <div style={{ marginTop: 10 }}>
+                {comentarios.map(c => (
+                  <div key={c.id} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #1a4d2e, #2d7a45)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 11 }}>
+                      {c.jogadores?.foto_url
+                        ? <img src={c.jogadores.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : c.jogadores?.nome?.charAt(0) || '?'}
+                    </div>
+                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '6px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#c9a227' }}>{c.jogadores?.nome}</span>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{tempoRelativo(c.created_at)}</span>
+                        {c.jogador_id === jogadorAtual?.id && (
+                          <button onClick={() => deletarComentario(c.id)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: 11 }}>🗑️</button>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#e8f5e9', marginTop: 2 }}>{renderTexto(c.texto)}</div>
+                    </div>
+                  </div>
+                ))}
+                {jogadorAtual && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <input
+                      value={rascunhoComentario[post.id] || ''}
+                      onChange={e => setRascunhoComentario(prev => ({ ...prev, [post.id]: e.target.value }))}
+                      onKeyDown={e => e.key === 'Enter' && enviarComentario(post.id)}
+                      placeholder="Escreva um comentário..."
+                      style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '8px 14px', color: '#e8f5e9', fontSize: 13 }}
+                    />
+                    <button onClick={() => enviarComentario(post.id)} disabled={enviandoComentario === post.id || !(rascunhoComentario[post.id] || '').trim()} style={{ background: '#c9a227', border: 'none', borderRadius: 20, padding: '8px 16px', color: '#0d2b1a', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+                      {enviandoComentario === post.id ? '...' : '➤'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )
       })}
