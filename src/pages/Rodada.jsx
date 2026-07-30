@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { baixarIcs } from '../lib/calendario'
+import { acessivelClique } from '../lib/a11y'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -20,8 +22,12 @@ export default function Rodada() {
   const [detalheView, setDetalheView] = useState('jogos')
   const [loading, setLoading] = useState(true)
   const [gerandoImagem, setGerandoImagem] = useState(false)
-  const [aoVivo, setAoVivo] = useState(false)
+  const [aoVivo, setAoVivo] = useState(true)
   const [rankingVivo, setRankingVivo] = useState({ ouro: [], prata: [] })
+  const [editandoPlacarId, setEditandoPlacarId] = useState(null)
+  const [placarForm, setPlacarForm] = useState({ a: '', b: '', ta: '', tb: '' })
+  const [salvandoPlacar, setSalvandoPlacar] = useState(false)
+  const [mensagemPlacar, setMensagemPlacar] = useState(null)
   const [reacoes, setReacoes] = useState({})
   const [compartilhandoModo, setCompartilhandoModo] = useState('classificacao')
   const cardRef = useRef(null)
@@ -32,6 +38,7 @@ export default function Rodada() {
   const [jogadoresList, setJogadoresList] = useState([])
   const [mencaoAtiva, setMencaoAtiva] = useState(null)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { carregarDados() }, [])
 
   async function carregarReacoes(jogoIds) {
@@ -107,6 +114,7 @@ export default function Rodada() {
         .order('chave', { ascending: true })
         .order('created_at', { ascending: true })
       setProximaJogos(j || [])
+      calcularRankingVivo(j || [])
     }
 
     const { data: finalizadas } = await supabase.from('rodadas').select('*')
@@ -241,7 +249,51 @@ export default function Rodada() {
     setRankingVivo({ ouro, prata })
   }
 
-  function renderJogo(jogo, i) {
+  // ─── LANÇAMENTO DE PLACAR PELO PRÓPRIO JOGADOR ───────────────────────────
+  function souDoJogo(jogo) {
+    if (!jogadorAtual) return false
+    return [jogo.dupla_a_1, jogo.dupla_a_2, jogo.dupla_b_1, jogo.dupla_b_2].includes(jogadorAtual.nome)
+  }
+
+  function abrirEdicaoPlacar(jogo) {
+    setMensagemPlacar(null)
+    setEditandoPlacarId(jogo.id)
+    setPlacarForm({
+      a: jogo.placar_a ?? '', b: jogo.placar_b ?? '',
+      ta: jogo.tie_a ?? '', tb: jogo.tie_b ?? '',
+    })
+  }
+
+  function cancelarEdicaoPlacar() {
+    setEditandoPlacarId(null)
+    setMensagemPlacar(null)
+  }
+
+  async function salvarPlacarJogador(jogoId) {
+    const pa = parseInt(placarForm.a)
+    const pb = parseInt(placarForm.b)
+    if (isNaN(pa) || isNaN(pb)) { setMensagemPlacar('Preencha os dois placares.'); return }
+    setSalvandoPlacar(true)
+    setMensagemPlacar(null)
+    const updateData = { placar_a: pa, placar_b: pb }
+    const ta = parseInt(placarForm.ta)
+    const tb = parseInt(placarForm.tb)
+    if (!isNaN(ta) && !isNaN(tb)) { updateData.tie_a = ta; updateData.tie_b = tb }
+    const { error } = await supabase.from('jogos').update(updateData).eq('id', jogoId)
+    if (error) {
+      setMensagemPlacar('Não foi possível salvar. Peça para o admin lançar esse placar.')
+    } else {
+      setProximaJogos(prev => {
+        const novo = prev.map(j => j.id === jogoId ? { ...j, ...updateData } : j)
+        calcularRankingVivo(novo)
+        return novo
+      })
+      setEditandoPlacarId(null)
+    }
+    setSalvandoPlacar(false)
+  }
+
+  function renderJogo(jogo, i, permitirLancar) {
     const listaReacoes = reacoes[jogo.id] || []
     const grupoReacoes = {}
     for (const r of listaReacoes) {
@@ -249,8 +301,17 @@ export default function Rodada() {
       grupoReacoes[r.emoji].push(r.jogador_id)
     }
     const temPlacar = jogo.placar_a !== null && jogo.placar_b !== null
+    const meuJogo = permitirLancar && souDoJogo(jogo)
+    const editando = editandoPlacarId === jogo.id
+    const precisaTiebreak = (placarForm.a === '6' && placarForm.b === '5') || (placarForm.a === '5' && placarForm.b === '6')
     return (
-      <div key={jogo.id} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+      <div key={jogo.id} style={{
+        padding: '10px 8px', marginTop: i > 0 ? 0 : undefined,
+        borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+        background: meuJogo ? 'rgba(201,162,39,0.06)' : 'transparent',
+        borderLeft: meuJogo ? '2px solid rgba(201,162,39,0.5)' : '2px solid transparent',
+        borderRadius: meuJogo ? 8 : 0,
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ flex: 1, textAlign: 'right' }}>
             <div style={{ fontSize: '13px', fontWeight: 600 }}>{jogo.dupla_a_1}</div>
@@ -279,6 +340,59 @@ export default function Rodada() {
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{jogo.dupla_b_2}</div>
           </div>
         </div>
+
+        {meuJogo && !editando && (
+          <div style={{ textAlign: 'center', marginTop: 6 }}>
+            <button onClick={() => abrirEdicaoPlacar(jogo)} style={{
+              background: 'transparent', border: '1px solid rgba(201,162,39,0.4)', color: '#c9a227',
+              borderRadius: 20, padding: '4px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 700
+            }}>
+              {temPlacar ? '✏️ Corrigir placar' : '📝 Lançar placar'}
+            </button>
+          </div>
+        )}
+
+        {editando && (
+          <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 10, padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <input type="number" min="0" max="7" value={placarForm.a}
+                onChange={e => setPlacarForm({ ...placarForm, a: e.target.value })}
+                placeholder="0"
+                style={{ width: 48, textAlign: 'center', background: '#0f2d1e', border: '1px solid #2a5a3a', borderRadius: 8, padding: '6px 0', color: '#e8f5e9', fontSize: 18, fontFamily: "'Bebas Neue', sans-serif" }} />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>×</span>
+              <input type="number" min="0" max="7" value={placarForm.b}
+                onChange={e => setPlacarForm({ ...placarForm, b: e.target.value })}
+                placeholder="0"
+                style={{ width: 48, textAlign: 'center', background: '#0f2d1e', border: '1px solid #2a5a3a', borderRadius: 8, padding: '6px 0', color: '#e8f5e9', fontSize: 18, fontFamily: "'Bebas Neue', sans-serif" }} />
+            </div>
+            {precisaTiebreak && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>tie-break</span>
+                <input type="number" min="0" max="15" value={placarForm.ta}
+                  onChange={e => setPlacarForm({ ...placarForm, ta: e.target.value })}
+                  placeholder="0"
+                  style={{ width: 36, textAlign: 'center', background: '#0f2d1e', border: '1px solid #2a5a3a', borderRadius: 6, padding: '4px 0', color: '#c9a227', fontSize: 13 }} />
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>×</span>
+                <input type="number" min="0" max="15" value={placarForm.tb}
+                  onChange={e => setPlacarForm({ ...placarForm, tb: e.target.value })}
+                  placeholder="0"
+                  style={{ width: 36, textAlign: 'center', background: '#0f2d1e', border: '1px solid #2a5a3a', borderRadius: 6, padding: '4px 0', color: '#c9a227', fontSize: 13 }} />
+              </div>
+            )}
+            {mensagemPlacar && (
+              <div style={{ fontSize: 12, color: '#e74c3c', textAlign: 'center', marginTop: 8 }}>{mensagemPlacar}</div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button onClick={cancelarEdicaoPlacar} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: '8px 0', cursor: 'pointer', fontSize: 13 }}>
+                Cancelar
+              </button>
+              <button onClick={() => salvarPlacarJogador(jogo.id)} disabled={salvandoPlacar} style={{ flex: 1, background: '#c9a227', border: 'none', color: '#0d2b1a', fontWeight: 700, borderRadius: 8, padding: '8px 0', cursor: 'pointer', fontSize: 13 }}>
+                {salvandoPlacar ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {temPlacar && (
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             {['👏', '🔥', '😮', '😂', '💪'].map(emoji => {
@@ -302,7 +416,7 @@ export default function Rodada() {
     )
   }
 
-  function renderJogos(jogos, chave) {
+  function renderJogos(jogos, chave, permitirLancar) {
     const chavesEspecial = ["time_a", "time_b", "especial"]
     const isEspecial = jogos.some(j => chavesEspecial.includes(j.chave))
 
@@ -318,7 +432,7 @@ export default function Rodada() {
           <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
             🔴 Time A  ×  🔵 Time B — {jogos.length} jogos
           </div>
-          {jogos.map((jogo, i) => renderJogo(jogo, i))}
+          {jogos.map((jogo, i) => renderJogo(jogo, i, permitirLancar))}
         </div>
       )
     }
@@ -345,7 +459,7 @@ export default function Rodada() {
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
           Rodada {idx + 1}
         </div>
-        {grupo.map((jogo, i) => renderJogo(jogo, i))}
+        {grupo.map((jogo, i) => renderJogo(jogo, i, permitirLancar))}
       </div>
     ))
   }
@@ -756,7 +870,7 @@ export default function Rodada() {
               {mencaoAtiva && (
                 <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#162f20', border: '1px solid #2a5a3a', borderRadius: 8, marginBottom: 4, zIndex: 10, overflow: 'hidden' }}>
                   {mencaoAtiva.map(j => (
-                    <div key={j.id} onClick={() => inserirMencao(j.nome)} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#e8f5e9', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div key={j.id} {...acessivelClique(() => inserirMencao(j.nome))} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#e8f5e9', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       @{j.nome}
                     </div>
                   ))}
@@ -818,7 +932,7 @@ export default function Rodada() {
           </div>
         ) : (
           rodadasFinalizadas.map(r => (
-            <div key={r.id} onClick={() => abrirDetalhe(r)} style={{
+            <div key={r.id} {...acessivelClique(() => abrirDetalhe(r))} style={{
               background: cardBg, border: "1px solid " + borda, borderRadius: '12px',
               padding: '16px', marginBottom: '10px', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between'
@@ -843,7 +957,7 @@ export default function Rodada() {
   // VIEW: PROXIMA RODADA
   return (
     <div>
-      <div onClick={() => navigate('/confirmacao')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
+      <div {...acessivelClique(() => navigate('/confirmacao'))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 18 }}>📋</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#c9a227' }}>Confirmar Presença</span>
@@ -868,6 +982,12 @@ export default function Rodada() {
             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
               {new Date(proximaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo' })}
               {proximaRodada.tipo === 'especial' && <span style={{ color: ouro, marginLeft: 8 }}>Rodada Especial</span>}
+              <button onClick={() => baixarIcs(proximaRodada)} style={{
+                marginLeft: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)',
+                borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontSize: 11
+              }}>
+                📅 agenda
+              </button>
             </div>
             {proximaJogos.length > 0 && (
               <button onClick={() => setAoVivo(!aoVivo)} style={{
@@ -878,7 +998,7 @@ export default function Rodada() {
                 color: aoVivo ? '#e74c3c' : 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: aoVivo ? '#e74c3c' : 'rgba(255,255,255,0.2)', display: 'inline-block', animation: aoVivo ? 'pulse 1s infinite' : 'none' }} />
-                {aoVivo ? 'AO VIVO' : 'Ao Vivo'}
+                {aoVivo ? 'AO VIVO' : 'Ver classificação do dia'}
               </button>
             )}
           </div>
@@ -932,7 +1052,7 @@ export default function Rodada() {
                   )}
                 </>
               )}
-              {renderJogos(proximaJogos, chaveVis)}
+              {renderJogos(proximaJogos, chaveVis, proximaRodada?.status === 'ativa')}
             </>
           )}
         </>

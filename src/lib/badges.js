@@ -1,0 +1,29 @@
+export const BADGE_INFO = {
+  campeao_ouro:  { emoji: '🥇', label: 'Campeao Ouro',  cor: '#c9a227', positivo: true },
+  campeao_prata: { emoji: '🥈', label: 'Campeao Prata', cor: '#8e9eab', positivo: true },
+  dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71', positivo: true },
+  hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c', positivo: true },
+  artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12', positivo: true },
+  relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f', positivo: true },
+  ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c', positivo: true },
+  dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72', positivo: false },
+  congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff', positivo: false },
+  pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8', positivo: false },
+  dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3', positivo: false },
+  queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031', positivo: false },
+}
+
+export const BADGE_LEGENDA = [
+  { emoji: '🥇', label: 'Campeao Ouro', desc: '1o lugar na Chave Ouro', cor: '#c9a227' },
+  { emoji: '🥈', label: 'Campeao Prata', desc: '1o lugar na Chave Prata', cor: '#8e9eab' },
+  { emoji: '💪', label: 'Dia Perfeito', desc: 'Venceu os 4 jogos do dia', cor: '#2ecc71' },
+  { emoji: '🔥', label: 'Hat-trick', desc: '3 vitorias no mesmo dia', cor: '#e74c3c' },
+  { emoji: '🎯', label: 'Artilheiro', desc: 'Maior saldo de games do dia', cor: '#f39c12' },
+  { emoji: '⚡', label: 'Relampago', desc: 'Venceu todos por 6x0 ou 6x1', cor: '#f1c40f' },
+  { emoji: '📈', label: 'Ascensao', desc: 'Subiu da Prata para Ouro', cor: '#1abc9c' },
+  { emoji: '💀', label: 'Dia Negro', desc: 'Perdeu os 4 jogos do dia', cor: '#636e72' },
+  { emoji: '🥶', label: 'Congelado', desc: 'Ultimo lugar na chave', cor: '#74b9ff' },
+  { emoji: '🍩', label: 'Pneu', desc: 'Tomou um 6x0', cor: '#fd79a8' },
+  { emoji: '😴', label: 'Dormindo', desc: 'Perdeu todos por 3+ de diferenca', cor: '#b2bec3' },
+  { emoji: '📉', label: 'Queda Livre', desc: 'Desceu da Ouro para Prata', cor: '#d63031' },
+]

@@ -26,5 +26,19 @@
       "type": "image/png",
       "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Confirmar Presença",
+      "short_name": "Confirmar",
+      "url": "/confirmacao",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Rodada",
+      "short_name": "Rodada",
+      "url": "/rodada",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

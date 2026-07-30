@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { registrarNotificacoes, verificarNotificacoes } from '../lib/useNotificacoes'
+import { BADGE_INFO } from '../lib/badges'
+import { acessivelClique } from '../lib/a11y'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -345,20 +347,6 @@ export default function Perfil() {
 
       {/* Badges */}
       {badges.length > 0 && (() => {
-        const BADGE_INFO = {
-          campeao_ouro:  { emoji: '🥇', label: 'Campeao Ouro',  cor: '#c9a227' },
-          campeao_prata: { emoji: '🥈', label: 'Campeao Prata', cor: '#8e9eab' },
-          dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
-          hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
-          artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12' },
-          relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f' },
-          ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c' },
-          dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72' },
-          congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff' },
-          pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8' },
-          dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3' },
-          queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031' },
-        }
         const ultimaRodada = badges[0]?.rodadas?.numero
         const ativos = badges.filter(b => b.rodadas?.numero === ultimaRodada)
         const historico = badges.filter(b => b.rodadas?.numero !== ultimaRodada)
@@ -426,7 +414,7 @@ export default function Perfil() {
             })
             return (
               <div key={p.nome} style={{ borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
-                <div onClick={() => setH2hAberto(aberto ? null : ('parc_' + p.nome))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                <div {...acessivelClique(() => setH2hAberto(aberto ? null : ('parc_' + p.nome)))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: aberto ? '#c9a227' : 'rgba(255,255,255,0.2)', fontSize: 12 }}>{aberto ? '▾' : '▸'}</span>
                     <div style={{ fontSize: 13, fontWeight: 600, color: aberto ? '#c9a227' : '#e8f5e9' }}>{p.nome}</div>
@@ -480,7 +468,7 @@ export default function Perfil() {
             })
             return (
               <div key={a.nome} style={{ borderTop: i > 0 ? '1px solid #2a5a3a' : 'none' }}>
-                <div onClick={() => setH2hAberto(aberto ? null : a.nome)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                <div {...acessivelClique(() => setH2hAberto(aberto ? null : a.nome))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: aberto ? '#c9a227' : 'rgba(255,255,255,0.2)', fontSize: 12 }}>{aberto ? '▾' : '▸'}</span>
                     <div onClick={(e) => { e.stopPropagation(); jogadoresMap[a.nome] && navigate('/jogador/' + jogadoresMap[a.nome]) }} style={{ fontSize: 13, fontWeight: 600, color: '#c9a227', cursor: jogadoresMap[a.nome] ? 'pointer' : 'default' }}>{a.nome}</div>

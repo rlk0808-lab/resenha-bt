@@ -3,6 +3,11 @@ import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import Regulamento from './Regulamento'
 import { Calendar, Trophy, Users, CheckCircle } from 'lucide-react'
+import { VAGAS_LISTA_PRINCIPAL } from '../lib/constants'
+import { BADGE_INFO, BADGE_LEGENDA } from '../lib/badges'
+import { calcularPrazoConfirmacao } from '../lib/prazo'
+import { useCountdown, formatarRestante } from '../lib/useCountdown'
+import { acessivelClique } from '../lib/a11y'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -12,8 +17,11 @@ export default function Home() {
   const [confirmado, setConfirmado] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [confirmacaoId, setConfirmacaoId] = useState(null)
+  const [emEspera, setEmEspera] = useState(false)
+  const [posicaoEspera, setPosicaoEspera] = useState(null)
   const [loading, setLoading] = useState(true)
   const [verRegulamento, setVerRegulamento] = useState(false)
+  const [verLegendaBadges, setVerLegendaBadges] = useState(false)
   const [totalConfirmados, setTotalConfirmados] = useState(0)
   const [totalJogadores, setTotalJogadores] = useState(0)
   const [ultimaRodada, setUltimaRodada] = useState(null)
@@ -49,9 +57,19 @@ export default function Home() {
             const { data: confs } = await supabase
               .from('confirmacoes').select('id, status')
               .eq('rodada_id', proxima.id).eq('jogador_id', jogador.id).limit(1)
-            if (confs && confs.length > 0 && confs[0].status === 'confirmado') {
-              setConfirmado(true)
-              setConfirmacaoId(confs[0].id)
+            if (confs && confs.length > 0) {
+              if (confs[0].status === 'confirmado') {
+                setConfirmado(true)
+                setConfirmacaoId(confs[0].id)
+              } else if (confs[0].status === 'espera') {
+                setEmEspera(true)
+                const { data: esperaLista } = await supabase
+                  .from('confirmacoes').select('id')
+                  .eq('rodada_id', proxima.id).eq('status', 'espera')
+                  .order('created_at', { ascending: true })
+                const pos = esperaLista?.findIndex(c => c.id === confs[0].id)
+                setPosicaoEspera(pos !== undefined && pos >= 0 ? pos + 1 : null)
+              }
             }
           }
 
@@ -111,6 +129,7 @@ export default function Home() {
 
   const rodadasFinalizadas = rodadaAtual?.numero || 0
   const progresso = (rodadasFinalizadas / TOTAL_RODADAS) * 100
+  const restantePrazo = useCountdown(calcularPrazoConfirmacao(proximaRodada))
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
@@ -184,7 +203,7 @@ export default function Home() {
                   <div>
                     <div style={{ fontWeight: 700, color: '#2d7a45' }}>Presença confirmada!</div>
                     <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
-                      {totalConfirmados} confirmado{totalConfirmados !== 1 ? 's' : ''} de 24
+                      {totalConfirmados} confirmado{totalConfirmados !== 1 ? 's' : ''} de {VAGAS_LISTA_PRINCIPAL}
                     </div>
                   </div>
                 </div>
@@ -197,10 +216,27 @@ export default function Home() {
                   {cancelando ? 'Cancelando...' : '✕ Cancelar confirmação'}
                 </button>
               </div>
+            ) : emEspera ? (
+              <div>
+                <div {...acessivelClique(() => navigate('/confirmacao'))} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+                  background: 'rgba(201,162,39,0.12)', border: '1px solid rgba(201,162,39,0.4)',
+                  borderRadius: '10px', padding: '14px 16px'
+                }}>
+                  <span style={{ fontSize: 20 }}>⏳</span>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#c9a227' }}>Você está na lista de espera</div>
+                    <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+                      {posicaoEspera ? `#${posicaoEspera}º da fila · ` : ''}toque para ver detalhes
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div>
                 <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginBottom: '12px' }}>
                   ⚠️ Confirme sua presença até quarta às 10h
+                  {restantePrazo && <strong style={{ color: '#c9a227' }}> · faltam {formatarRestante(restantePrazo)}</strong>}
                 </p>
                 <button onClick={() => navigate('/confirmacao')} style={{
                   width: '100%', background: 'linear-gradient(135deg, #2d7a45, #1a5c30)',
@@ -308,21 +344,6 @@ export default function Home() {
 
           {/* Badges da rodada */}
           {feedJogos.length > 0 && (() => {
-            const BADGE_INFO = {
-              campeao_ouro:  { emoji: '🥇', label: 'Campeao Ouro',  cor: '#c9a227', positivo: true },
-              campeao_prata: { emoji: '🥈', label: 'Campeao Prata', cor: '#8e9eab', positivo: true },
-              dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71', positivo: true },
-              hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c', positivo: true },
-              artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12', positivo: true },
-              relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f', positivo: true },
-              ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c', positivo: true },
-              dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72', positivo: false },
-              congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff', positivo: false },
-              pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8', positivo: false },
-              dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3', positivo: false },
-              queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031', positivo: false },
-            }
-
             // Agrupa por jogador
             const porJogador = {}
             for (const b of feedJogos) {
@@ -349,77 +370,67 @@ export default function Home() {
               negativosPorJog[nome].push(b)
             }
 
-            const BadgeJogador = ({ nome, badges }) => (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, marginBottom: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#e8f5e9', minWidth: 60 }}>{nome}</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {badges.map((b, i) => {
-                    const info = BADGE_INFO[b.tipo] || { emoji: '🏅', cor: '#7fb89a' }
-                    return (
-                      <span key={i} style={{ fontSize: 14, padding: '2px 6px', background: info.cor + '20', border: '1px solid ' + info.cor + '40', borderRadius: 12 }} title={info.label}>
-                        {info.emoji}
-                      </span>
-                    )
-                  })}
+            function renderBadgeJogador(nome, badges) {
+              return (
+                <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#e8f5e9', minWidth: 60 }}>{nome}</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {badges.map((b, i) => {
+                      const info = BADGE_INFO[b.tipo] || { emoji: '🏅', cor: '#7fb89a' }
+                      return (
+                        <span key={i} style={{ fontSize: 14, padding: '2px 6px', background: info.cor + '20', border: '1px solid ' + info.cor + '40', borderRadius: 12 }} title={info.label}>
+                          {info.emoji}
+                        </span>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            )
+              )
+            }
 
             return (
             <div style={{ marginTop: 4, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
               {Object.keys(positivosPorJog).length > 0 && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 10, color: '#2ecc71', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>🏆 Destaques</div>
-                  {Object.entries(positivosPorJog).map(([nome, badges]) => (
-                    <BadgeJogador key={nome} nome={nome} badges={badges} />
-                  ))}
+                  {Object.entries(positivosPorJog).map(([nome, badges]) => renderBadgeJogador(nome, badges))}
                 </div>
               )}
               {Object.keys(negativosPorJog).length > 0 && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 10, color: '#e74c3c', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>😅 Micos</div>
-                  {Object.entries(negativosPorJog).map(([nome, badges]) => (
-                    <BadgeJogador key={nome} nome={nome} badges={badges} />
-                  ))}
+                  {Object.entries(negativosPorJog).map(([nome, badges]) => renderBadgeJogador(nome, badges))}
                 </div>
               )}
             </div>
             )
           })()}
 
-          {/* Legenda dos badges */}
+          {/* Legenda dos badges — recolhida por padrão */}
           {feedJogos.length > 0 && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>O que significam?</div>
-                {[
-                  { emoji: '🥇', label: 'Campeao Ouro', desc: '1o lugar na Chave Ouro', cor: '#c9a227' },
-                  { emoji: '🥈', label: 'Campeao Prata', desc: '1o lugar na Chave Prata', cor: '#8e9eab' },
-                  { emoji: '💪', label: 'Dia Perfeito', desc: 'Venceu os 4 jogos do dia', cor: '#2ecc71' },
-                  { emoji: '🔥', label: 'Hat-trick', desc: '3 vitorias no mesmo dia', cor: '#e74c3c' },
-                  { emoji: '🎯', label: 'Artilheiro', desc: 'Maior saldo de games do dia', cor: '#f39c12' },
-                  { emoji: '⚡', label: 'Relampago', desc: 'Venceu todos por 6x0 ou 6x1', cor: '#f1c40f' },
-                  { emoji: '📈', label: 'Ascensao', desc: 'Subiu da Prata para Ouro', cor: '#1abc9c' },
-                  { emoji: '💀', label: 'Dia Negro', desc: 'Perdeu os 4 jogos do dia', cor: '#636e72' },
-                  { emoji: '🥶', label: 'Congelado', desc: 'Ultimo lugar na chave', cor: '#74b9ff' },
-                  { emoji: '🍩', label: 'Pneu', desc: 'Tomou um 6x0', cor: '#fd79a8' },
-                  { emoji: '😴', label: 'Dormindo', desc: 'Perdeu todos por 3+ de diferenca', cor: '#b2bec3' },
-                  { emoji: '📉', label: 'Queda Livre', desc: 'Desceu da Ouro para Prata', cor: '#d63031' },
-                ].map(({ emoji, label, desc, cor }) => (
-                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 14, width: 20, textAlign: 'center' }}>{emoji}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: cor, minWidth: 110 }}>{label}</span>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{desc}</span>
-                  </div>
-                ))}
+              <div {...acessivelClique(() => setVerLegendaBadges(v => !v))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', padding: '6px 2px' }}>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1 }}>O que significam os emojis?</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>{verLegendaBadges ? '▾ ocultar' : '▸ ver'}</span>
               </div>
+              {verLegendaBadges && (
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 12px', marginTop: 4 }}>
+                  {BADGE_LEGENDA.map(({ emoji, label, desc, cor }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 14, width: 20, textAlign: 'center' }}>{emoji}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: cor, minWidth: 110 }}>{label}</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* Card Regulamento */}
-      <div onClick={() => setVerRegulamento(true)} style={{
+      <div {...acessivelClique(() => setVerRegulamento(true))} style={{
         background: 'linear-gradient(135deg, #112918, #0d2b1a)',
         border: '1px solid rgba(201,162,39,0.2)',
         borderRadius: 12, padding: '16px', marginTop: 16,

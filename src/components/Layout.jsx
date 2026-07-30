@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Home, Trophy, Calendar, User, LogOut, Settings, MessageCircle } from 'lucide-react'
+import { useOnlineStatus } from '../lib/useOnlineStatus'
 
 const ADMINS = [
   'a60b3e0f-5528-400c-8e0f-8fb3f9226070', // Robson
@@ -12,17 +13,16 @@ const ADMINS = [
 export default function Layout({ session }) {
   const navigate = useNavigate()
   const isAdmin = ADMINS.includes(session?.user?.id)
-  const [temaClaro, setTemaClaro] = useState(() => localStorage.getItem('tema') === 'light')
+  const online = useOnlineStatus()
 
+  // O tema claro só afetava os componentes genéricos (.card/.input/.tabela) —
+  // a maior parte das páginas usa cores fixas inline e ficava ilegível.
+  // Removido até existir uma reforma completa das cores; limpa resíduo de
+  // quem já tinha ativado o modo claro antes, pra não travar ninguém nele.
   useEffect(() => {
-    if (temaClaro) {
-      document.body.classList.add('light')
-      localStorage.setItem('tema', 'light')
-    } else {
-      document.body.classList.remove('light')
-      localStorage.setItem('tema', 'dark')
-    }
-  }, [temaClaro])
+    document.body.classList.remove('light')
+    localStorage.removeItem('tema')
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -82,21 +82,6 @@ export default function Layout({ session }) {
         </div>
 
         <button
-          onClick={() => setTemaClaro(!temaClaro)}
-          style={{
-            background: 'transparent',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '20px',
-            padding: '5px 10px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            color: 'rgba(255,255,255,0.7)',
-            marginRight: '6px',
-          }}
-        >
-          {temaClaro ? '🌙' : '☀️'}
-        </button>
-        <button
           onClick={handleLogout}
           style={{
             background: 'transparent',
@@ -124,6 +109,16 @@ export default function Layout({ session }) {
           Sair
         </button>
       </header>
+
+      {!online && (
+        <div style={{
+          background: '#3a2000', borderBottom: '1px solid rgba(201,162,39,0.3)',
+          color: '#c9a227', fontSize: 12, fontWeight: 600, textAlign: 'center',
+          padding: '6px 12px', position: 'sticky', top: 60, zIndex: 99
+        }}>
+          📡 Sem conexão — mostrando dados salvos. Algumas ações não vão funcionar até voltar o sinal.
+        </div>
+      )}
 
       <main style={{
         flex: 1,

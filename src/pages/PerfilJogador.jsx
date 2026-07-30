@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { acessivelClique } from '../lib/a11y'
 
 const ouro = '#c9a227'
 const borda = '#2a5a3a'
@@ -341,7 +342,7 @@ export default function PerfilJogador() {
             })
             return (
               <div key={p.nome} style={{ borderTop: i > 0 ? `1px solid ${borda}` : 'none' }}>
-                <div onClick={() => setParceiroAberto(aberto ? null : p.nome)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                <div {...acessivelClique(() => setParceiroAberto(aberto ? null : p.nome))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div onClick={e => { e.stopPropagation(); jogadoresMap[p.nome] && navigate('/jogador/' + jogadoresMap[p.nome]) }}
                       style={{ fontSize: 13, fontWeight: 600, color: jogadoresMap[p.nome] ? ouro : '#e8f5e9', cursor: jogadoresMap[p.nome] ? 'pointer' : 'default' }}>
@@ -397,7 +398,7 @@ export default function PerfilJogador() {
             })
             return (
               <div key={a.nome} style={{ borderTop: i > 0 ? `1px solid ${borda}` : 'none' }}>
-                <div onClick={() => setH2hAberto(aberto ? null : a.nome)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
+                <div {...acessivelClique(() => setH2hAberto(aberto ? null : a.nome))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: aberto ? ouro : 'rgba(255,255,255,0.2)', fontSize: 12 }}>{aberto ? '▾' : '▸'}</span>
                     <div onClick={(e) => { e.stopPropagation(); jogadoresMap[a.nome] && navigate('/jogador/' + jogadoresMap[a.nome]) }}

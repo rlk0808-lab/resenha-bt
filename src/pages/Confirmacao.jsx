@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
+import { VAGAS_LISTA_PRINCIPAL } from "../lib/constants";
+import { calcularPrazoConfirmacao } from "../lib/prazo";
+import { useCountdown, formatarRestante } from "../lib/useCountdown";
+import { baixarIcs } from "../lib/calendario";
 
 export default function Confirmacao({ session }) {
   const [rodadaAtual, setRodadaAtual] = useState(null);
@@ -15,7 +19,7 @@ export default function Confirmacao({ session }) {
   const [confirmandoPendente, setConfirmandoPendente] = useState(false);
   const [confirmacaoSucesso, setConfirmacaoSucesso] = useState(false);
 
-  const LIMITE_PRINCIPAL = 24;
+  const LIMITE_PRINCIPAL = VAGAS_LISTA_PRINCIPAL;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (session?.user) carregarDados(); }, [session]);
@@ -105,17 +109,8 @@ export default function Confirmacao({ session }) {
 
   function dentroDoPrazoListaPrincipal() {
     if (!rodadaAtual) return false;
-    const agora = new Date();
-    
-    // Calcula a quarta-feira antes da rodada às 10h (horário Brasília)
-    const dataRodada = new Date(rodadaAtual.data + "T12:00:00-03:00");
-    
-    // Encontra a quarta-feira anterior à rodada (sábado - 3 dias)
-    const quartaAntes = new Date(dataRodada);
-    quartaAntes.setDate(dataRodada.getDate() - 3); // sábado - 3 = quarta
-    quartaAntes.setHours(10, 0, 0, 0);
-    
-    return agora < quartaAntes;
+    const prazo = calcularPrazoConfirmacao(rodadaAtual);
+    return prazo ? new Date() < prazo : false;
   }
 
   // ─── CÁLCULO DE PRÉVIA ───────────────────────────────────────────────────
@@ -218,6 +213,8 @@ export default function Confirmacao({ session }) {
     }
     return { ouro: [], prata: [] };
   }, [listaConfirmados, rankingAnterior]);
+
+  const restantePrazo = useCountdown(calcularPrazoConfirmacao(rodadaAtual));
 
   function statusConfirmacao() {
     if (!confirmacao) return null;
@@ -375,6 +372,12 @@ export default function Confirmacao({ session }) {
                     weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo"
                   })}
                 </div>
+                <button onClick={() => baixarIcs(rodadaAtual)} style={{
+                  marginTop: 6, background: "transparent", border: "1px solid #2a5a3a", color: "#7fb89a",
+                  borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600
+                }}>
+                  📅 Adicionar à agenda
+                </button>
               </div>
               <div style={styles.contadorBox}>
                 <div style={styles.contadorNum}>{listaConfirmados.length}</div>
@@ -391,7 +394,10 @@ export default function Confirmacao({ session }) {
             ) : dentroPrazo ? (
               <div style={styles.prazoBox}>
                 <span style={styles.prazoIcon}>⏰</span>
-                <span style={styles.prazoTexto}>Prazo para lista principal: <strong>Quarta-feira às 10h</strong></span>
+                <span style={styles.prazoTexto}>
+                  Prazo para lista principal: <strong>Quarta-feira às 10h</strong>
+                  {restantePrazo && <> · <strong style={{ color: "#c9a227" }}>faltam {formatarRestante(restantePrazo)}</strong></>}
+                </span>
               </div>
             ) : (
               <div style={{ ...styles.prazoBox, background: "#3a2000", borderColor: "#c9a227" }}>

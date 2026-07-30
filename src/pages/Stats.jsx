@@ -1,21 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-
-const BADGE_INFO = {
-  campeao_ouro:  { emoji: '🥇', label: 'Campeao Ouro',  cor: '#c9a227', positivo: true },
-  campeao_prata: { emoji: '🥈', label: 'Campeao Prata', cor: '#8e9eab', positivo: true },
-  dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71', positivo: true },
-  hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c', positivo: true },
-  artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12', positivo: true },
-  relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f', positivo: true },
-  ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c', positivo: true },
-  dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72', positivo: false },
-  congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff', positivo: false },
-  pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8', positivo: false },
-  dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3', positivo: false },
-  queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031', positivo: false },
-}
+import { BADGE_INFO } from '../lib/badges'
 
 export default function Stats() {
   const navigate = useNavigate()

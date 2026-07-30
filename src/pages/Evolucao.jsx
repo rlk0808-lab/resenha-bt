@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { acessivelClique } from '../lib/a11y'
 
 const CORES = [
   '#f5c518', '#2ecc71', '#3498db', '#e74c3c', '#9b59b6',
@@ -253,7 +254,7 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
                 const cor = CORES[ci % CORES.length]
                 const ultimoVal = dadosAtivos[id]?.[rodadas[rodadas.length - 1]?.numero] || 0
                 return (
-                  <div key={id} onClick={() => toggleJogador(id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: cor + '22', borderRadius: 20, border: `1px solid ${cor}55`, cursor: 'pointer' }}>
+                  <div key={id} {...acessivelClique(() => toggleJogador(id))} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: cor + '22', borderRadius: 20, border: `1px solid ${cor}55`, cursor: 'pointer' }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: cor }} />
                     <span style={{ fontSize: 12, color: '#e8f5e9', fontWeight: 600 }}>{jog?.nome}</span>
                     <span style={{ fontSize: 11, color: cor, fontWeight: 700 }}>{inverter ? `${ultimoVal}º` : `${ultimoVal}pts`}</span>
@@ -275,7 +276,7 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
                 const cor = sel ? CORES[idx % CORES.length] : null
                 const ultimoVal = dadosAtivos[jog.id]?.[rodadas[rodadas.length - 1]?.numero] || 0
                 return (
-                  <div key={jog.id} onClick={() => toggleJogador(jog.id)} style={{
+                  <div key={jog.id} {...acessivelClique(() => toggleJogador(jog.id))} style={{
                     display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
                     background: sel ? (cor + '22') : 'rgba(255,255,255,0.03)',
                     border: `1px solid ${sel ? cor + '66' : '#2a5a3a'}`,

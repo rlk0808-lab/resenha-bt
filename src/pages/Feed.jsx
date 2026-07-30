@@ -1,22 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { BADGE_INFO } from '../lib/badges'
+import { acessivelClique } from '../lib/a11y'
 
 const EMOJIS = ['🔥', '👏', '😤', '💪', '🎾', '😂']
-
-const BADGE_INFO = {
-  campeao_ouro:  { emoji: '🥇', label: 'Campeão Ouro',  cor: '#c9a227' },
-  campeao_prata: { emoji: '🥈', label: 'Campeão Prata', cor: '#8e9eab' },
-  dia_perfeito:  { emoji: '💪', label: 'Dia Perfeito',  cor: '#2ecc71' },
-  hat_trick:     { emoji: '🔥', label: 'Hat-trick',     cor: '#e74c3c' },
-  artilheiro:    { emoji: '🎯', label: 'Artilheiro',    cor: '#f39c12' },
-  relampago:     { emoji: '⚡', label: 'Relampago',     cor: '#f1c40f' },
-  ascensao:      { emoji: '📈', label: 'Ascensao',      cor: '#1abc9c' },
-  dia_negro:     { emoji: '💀', label: 'Dia Negro',     cor: '#636e72' },
-  congelado:     { emoji: '🥶', label: 'Congelado',     cor: '#74b9ff' },
-  pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8' },
-  dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3' },
-  queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031' },
-}
 
 export default function Feed() {
   const [posts, setPosts] = useState([])
@@ -196,7 +183,7 @@ export default function Feed() {
             {mencaoAtiva && jogadoresFiltrados.length > 0 && (
               <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#162f20', border: '1px solid #2a5a3a', borderRadius: 8, zIndex: 100, overflow: 'hidden' }}>
                 {jogadoresFiltrados.map(j => (
-                  <div key={j.id} onClick={() => inserirMencao(j.nome)} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#c8e6c9', borderBottom: '1px solid #1e3d2a' }}>
+                  <div key={j.id} {...acessivelClique(() => inserirMencao(j.nome))} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#c8e6c9', borderBottom: '1px solid #1e3d2a' }}>
                     @{j.nome}
                   </div>
                 ))}

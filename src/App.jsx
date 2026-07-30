@@ -1,19 +1,28 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import RedefinirSenha from './pages/RedefinirSenha'
-import Stats from './pages/Stats'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense, lazy } from 'react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
-import Home from './pages/Home'
-import Classificacao from './pages/Classificacao'
-import Rodada from './pages/Rodada'
-import Perfil from './pages/Perfil'
-import PerfilJogador from './pages/PerfilJogador'
-import Feed from './pages/Feed'
-import Admin from './pages/Admin'
 import Layout from './components/Layout'
-import Confirmacao from './pages/Confirmacao'
-import Cadastro from './pages/Cadastro'
+
+const RedefinirSenha = lazy(() => import('./pages/RedefinirSenha'))
+const Stats = lazy(() => import('./pages/Stats'))
+const Home = lazy(() => import('./pages/Home'))
+const Classificacao = lazy(() => import('./pages/Classificacao'))
+const Rodada = lazy(() => import('./pages/Rodada'))
+const Perfil = lazy(() => import('./pages/Perfil'))
+const PerfilJogador = lazy(() => import('./pages/PerfilJogador'))
+const Feed = lazy(() => import('./pages/Feed'))
+const Admin = lazy(() => import('./pages/Admin'))
+const Confirmacao = lazy(() => import('./pages/Confirmacao'))
+const Cadastro = lazy(() => import('./pages/Cadastro'))
+
+function CarregandoPagina() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
+      <div className="spinner" />
+    </div>
+  )
+}
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -56,22 +65,24 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-        <Route path="/redefinir-senha" element={<RedefinirSenha />} />
-        <Route path="/cadastro" element={<Cadastro />} />
-        <Route path="/" element={session ? <Layout session={session} /> : <Navigate to="/login" />}>
-          <Route index element={<Home />} />
-          <Route path="classificacao" element={<Classificacao />} />
-          <Route path="rodada" element={<Rodada />} />
-          <Route path="admin" element={<Admin session={session} />} />
-          <Route path="perfil" element={<Perfil />} />
-          <Route path="feed" element={<Feed />} />
-          <Route path="jogador/:id" element={<PerfilJogador />} />
-          <Route path="confirmacao" element={<Confirmacao session={session} />} />
-          <Route path="stats" element={<Stats />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<CarregandoPagina />}>
+        <Routes>
+          <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
+          <Route path="/redefinir-senha" element={<RedefinirSenha />} />
+          <Route path="/cadastro" element={<Cadastro />} />
+          <Route path="/" element={session ? <Layout session={session} /> : <Navigate to="/login" />}>
+            <Route index element={<Home />} />
+            <Route path="classificacao" element={<Classificacao />} />
+            <Route path="rodada" element={<Rodada />} />
+            <Route path="admin" element={<Admin session={session} />} />
+            <Route path="perfil" element={<Perfil />} />
+            <Route path="feed" element={<Feed />} />
+            <Route path="jogador/:id" element={<PerfilJogador />} />
+            <Route path="confirmacao" element={<Confirmacao session={session} />} />
+            <Route path="stats" element={<Stats />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

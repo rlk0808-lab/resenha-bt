@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import Evolucao from './Evolucao'
+import { acessivelClique } from '../lib/a11y'
 
 export default function Classificacao() {
   const [aba, setAba] = useState('geral')
@@ -37,6 +38,10 @@ export default function Classificacao() {
   const prata = dados.filter(j => j.chave === 'prata')
   const lista = aba === 'geral' ? dados : aba === 'ouro' ? ouro : prata
 
+  // Zona de subida (top 3 da Prata) e descida (últimos 3 da Ouro) na próxima rodada
+  const idsZonaDescida = new Set(ouro.length >= 4 ? ouro.slice(-3).map(j => j.id) : [])
+  const idsZonaSubida = new Set(prata.length >= 4 ? prata.slice(0, 3).map(j => j.id) : [])
+
   function corPos(pos) {
     if (pos === 1) return 'var(--ouro)'
     if (pos === 2) return 'var(--prata)'
@@ -53,7 +58,7 @@ export default function Classificacao() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-      <div onClick={() => navigate('/stats')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
+      <div {...acessivelClique(() => navigate('/stats'))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 10, marginBottom: 12, cursor: 'pointer' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 18 }}>📊</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#c9a227' }}>Ver Estatísticas</span>
@@ -121,8 +126,14 @@ export default function Classificacao() {
             </tr>
           </thead>
           <tbody>
-            {lista.map((j) => (
-              <tr key={j.id} onClick={() => navigate(`/jogador/${j.id}`)} style={{ cursor: 'pointer' }}>
+            {lista.map((j) => {
+              const desce = idsZonaDescida.has(j.id)
+              const sobe = idsZonaSubida.has(j.id)
+              return (
+              <tr key={j.id} {...acessivelClique(() => navigate(`/jogador/${j.id}`))} style={{
+                cursor: 'pointer',
+                boxShadow: desce ? 'inset 3px 0 0 0 #e74c3c' : sobe ? 'inset 3px 0 0 0 #2ecc71' : 'none',
+              }}>
                 <td style={{ textAlign: 'center' }}>
                   <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', color: corPos(j.posicao) }}>
                     {j.posicao}
@@ -143,10 +154,12 @@ export default function Classificacao() {
                     </div>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: '14px' }}>{j.nome}</div>
-                      <div style={{ marginTop: '2px' }}>
+                      <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: 6 }}>
                         {j.chave === 'ouro'
                           ? <span className="badge-ouro">Ouro</span>
                           : <span className="badge-prata">Prata</span>}
+                        {desce && <span style={{ fontSize: 10, fontWeight: 700, color: '#e74c3c' }}>↓ zona de descida</span>}
+                        {sobe && <span style={{ fontSize: 10, fontWeight: 700, color: '#2ecc71' }}>↑ zona de subida</span>}
                       </div>
                     </div>
                   </div>
@@ -160,7 +173,8 @@ export default function Classificacao() {
                   </span>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
         {lista.length === 0 && (

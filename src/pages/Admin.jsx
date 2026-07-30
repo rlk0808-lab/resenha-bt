@@ -1,5 +1,6 @@
   import { useState, useEffect } from "react";
   import { supabase } from "../lib/supabase";
+  import { VAGAS_LISTA_PRINCIPAL } from "../lib/constants";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
 
@@ -52,8 +53,8 @@
   const [formatoRodada, setFormatoRodada] = useState(() => {
     try {
       const salvo = localStorage.getItem('resenha_formato_rodada')
-      return salvo ? JSON.parse(salvo) : { label: "24", ouro: 12, prata: 12, total: 24 }
-    } catch { return { label: "24", ouro: 12, prata: 12, total: 24 } }
+      return salvo ? JSON.parse(salvo) : { label: String(VAGAS_LISTA_PRINCIPAL), ouro: VAGAS_LISTA_PRINCIPAL / 2, prata: VAGAS_LISTA_PRINCIPAL / 2, total: VAGAS_LISTA_PRINCIPAL }
+    } catch { return { label: String(VAGAS_LISTA_PRINCIPAL), ouro: VAGAS_LISTA_PRINCIPAL / 2, prata: VAGAS_LISTA_PRINCIPAL / 2, total: VAGAS_LISTA_PRINCIPAL } }
   });
 
   function setFormatoRodadaPersistido(f) {
@@ -870,6 +871,14 @@
     async function promoverListaEspera() {
       const rodadaProx = rodadas.find(r => r.status === "proxima" || r.status === "ativa");
       if (!rodadaProx) { mostrarMensagem("Nenhuma rodada próxima encontrada.", "erro"); return; }
+
+      // Sorteio já publicado: promover aqui NÃO mexe nos jogos já sorteados,
+      // então o jogador entraria "confirmado" sem estar em nenhuma dupla.
+      // Use "Substituir jogador" ou refaça o sorteio nesse caso.
+      if (rodadaProx.status === "ativa") {
+        mostrarMensagem("O sorteio desta rodada já foi publicado. Promover agora não coloca o jogador em nenhum jogo — use \"Substituir jogador\" ou refaça o sorteio.", "erro");
+        return;
+      }
       setPromovendo(true);
 
       // Conta confirmados atuais
