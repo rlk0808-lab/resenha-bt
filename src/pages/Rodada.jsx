@@ -410,7 +410,7 @@ export default function Rodada() {
                 </div>
               )}
             </div>
-            {curtidasJogoAbertoAqui && (
+            {curtidasJogoAbertoAqui && curtidas.length > 0 && (
               <div style={{ marginTop: 6, fontSize: 11, color: '#c8e6c9' }}>
                 Curtido por {curtidas.map(c => c.jogadores?.nome).filter(Boolean).join(', ')}
               </div>

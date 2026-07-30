@@ -344,7 +344,7 @@ export default function Feed() {
               </div>
             </div>
 
-            {curtidasAberto && (
+            {curtidasAberto && curtidas.length > 0 && (
               <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px', fontSize: 12, color: '#c8e6c9' }}>
                 Curtido por {curtidas.map(c => c.jogadores?.nome).filter(Boolean).join(', ')}
               </div>
