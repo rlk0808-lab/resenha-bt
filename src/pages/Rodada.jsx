@@ -29,6 +29,7 @@ export default function Rodada() {
   const [salvandoPlacar, setSalvandoPlacar] = useState(false)
   const [mensagemPlacar, setMensagemPlacar] = useState(null)
   const [reacoes, setReacoes] = useState({})
+  const [curtidasJogoAberto, setCurtidasJogoAberto] = useState(null)
   const [compartilhandoModo, setCompartilhandoModo] = useState('classificacao')
   const cardRef = useRef(null)
   const [comentarios, setComentarios] = useState([])
@@ -45,7 +46,7 @@ export default function Rodada() {
     if (!jogoIds || jogoIds.length === 0) return
     const { data } = await supabase
       .from('jogo_reacoes')
-      .select('jogo_id, emoji, jogador_id')
+      .select('jogo_id, emoji, jogador_id, jogadores(nome)')
       .in('jogo_id', jogoIds)
     const mapa = {}
     for (const r of (data || [])) {
@@ -58,10 +59,11 @@ export default function Rodada() {
   async function reagirJogo(jogoId, emoji) {
     if (!jogadorAtual) return
     const lista = reacoes[jogoId] || []
-    const jaReagiu = lista.some(r => r.jogador_id === jogadorAtual.id && r.emoji === emoji)
+    // Ignora qual emoji era antes (curtida antiga com outro emoji conta como já curtido)
+    const jaReagiu = lista.some(r => r.jogador_id === jogadorAtual.id)
     if (jaReagiu) {
       await supabase.from('jogo_reacoes').delete()
-        .eq('jogo_id', jogoId).eq('jogador_id', jogadorAtual.id).eq('emoji', emoji)
+        .eq('jogo_id', jogoId).eq('jogador_id', jogadorAtual.id)
     } else {
       await supabase.from('jogo_reacoes').insert({ jogo_id: jogoId, jogador_id: jogadorAtual.id, emoji })
     }
@@ -297,12 +299,9 @@ export default function Rodada() {
   }
 
   function renderJogo(jogo, i, permitirLancar) {
-    const listaReacoes = reacoes[jogo.id] || []
-    const grupoReacoes = {}
-    for (const r of listaReacoes) {
-      if (!grupoReacoes[r.emoji]) grupoReacoes[r.emoji] = []
-      grupoReacoes[r.emoji].push(r.jogador_id)
-    }
+    const curtidas = reacoes[jogo.id] || []
+    const euCurtiJogo = curtidas.some(r => r.jogador_id === jogadorAtual?.id)
+    const curtidasJogoAbertoAqui = curtidasJogoAberto === jogo.id
     const temPlacar = jogo.placar_a !== null && jogo.placar_b !== null
     const meuJogo = permitirLancar && souDoJogo(jogo)
     const editando = editandoPlacarId === jogo.id
@@ -397,22 +396,25 @@ export default function Rodada() {
         )}
 
         {temPlacar && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            {['👏', '🔥', '😮', '😂', '💪'].map(emoji => {
-              const count = grupoReacoes[emoji]?.length || 0
-              const euReagi = grupoReacoes[emoji]?.includes(jogadorAtual?.id)
-              return (
-                <button key={emoji} onClick={() => reagirJogo(jogo.id, emoji)} style={{
-                  display: 'flex', alignItems: 'center', gap: 3,
-                  background: euReagi ? 'rgba(201,162,39,0.2)' : 'rgba(255,255,255,0.04)',
-                  border: euReagi ? '1px solid rgba(201,162,39,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 20, padding: '3px 8px', cursor: 'pointer', fontSize: 13
-                }}>
-                  <span>{emoji}</span>
-                  {count > 0 && <span style={{ fontSize: 11, color: euReagi ? '#c9a227' : 'rgba(255,255,255,0.4)', fontWeight: 600 }}>{count}</span>}
-                </button>
-              )
-            })}
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => reagirJogo(jogo.id, '❤️')} style={{
+                display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: 'none',
+                cursor: 'pointer', fontSize: 13, color: euCurtiJogo ? '#e74c3c' : 'rgba(255,255,255,0.5)', fontWeight: euCurtiJogo ? 700 : 400
+              }}>
+                {euCurtiJogo ? '❤️' : '🤍'} Curtir
+              </button>
+              {curtidas.length > 0 && (
+                <div {...acessivelClique(() => setCurtidasJogoAberto(curtidasJogoAbertoAqui ? null : jogo.id))} style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
+                  {curtidas.length} curtida{curtidas.length !== 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+            {curtidasJogoAbertoAqui && (
+              <div style={{ marginTop: 6, fontSize: 11, color: '#c8e6c9' }}>
+                Curtido por {curtidas.map(c => c.jogadores?.nome).filter(Boolean).join(', ')}
+              </div>
+            )}
           </div>
         )}
       </div>
