@@ -127,8 +127,10 @@ export default function Classificacao() {
           </thead>
           <tbody>
             {lista.map((j) => {
-              const desce = idsZonaDescida.has(j.id)
-              const sobe = idsZonaSubida.has(j.id)
+              // Zona de subida/descida e a chave (Ouro/Prata) são conceitos da rodada,
+              // não fazem sentido na classificação Geral (que é o histórico da liga toda)
+              const desce = aba !== 'geral' && idsZonaDescida.has(j.id)
+              const sobe = aba !== 'geral' && idsZonaSubida.has(j.id)
               return (
               <tr key={j.id} {...acessivelClique(() => navigate(`/jogador/${j.id}`))} style={{
                 cursor: 'pointer',
@@ -154,13 +156,15 @@ export default function Classificacao() {
                     </div>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: '14px' }}>{j.nome}</div>
-                      <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {j.chave === 'ouro'
-                          ? <span className="badge-ouro">Ouro</span>
-                          : <span className="badge-prata">Prata</span>}
-                        {desce && <span style={{ fontSize: 10, fontWeight: 700, color: '#e74c3c' }}>↓ zona de descida</span>}
-                        {sobe && <span style={{ fontSize: 10, fontWeight: 700, color: '#2ecc71' }}>↑ zona de subida</span>}
-                      </div>
+                      {aba !== 'geral' && (
+                        <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {j.chave === 'ouro'
+                            ? <span className="badge-ouro">Ouro</span>
+                            : <span className="badge-prata">Prata</span>}
+                          {desce && <span style={{ fontSize: 10, fontWeight: 700, color: '#e74c3c' }}>↓ zona de descida</span>}
+                          {sobe && <span style={{ fontSize: 10, fontWeight: 700, color: '#2ecc71' }}>↑ zona de subida</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </td>
