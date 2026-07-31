@@ -74,6 +74,7 @@
     const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
     const [localEdit, setLocalEdit] = useState("");
     const [salvandoLocal, setSalvandoLocal] = useState(false);
+    const [processandoRodada, setProcessandoRodada] = useState(false);
     const [jogadores, setJogadores] = useState([]);
     const [jogos, setJogos] = useState([]);
     const [chaveAtiva, setChaveAtiva] = useState("ouro");
@@ -182,6 +183,37 @@
       else mostrarMensagem("✅ Local da rodada atualizado.");
       await carregarRodadas();
       setSalvandoLocal(false);
+    }
+
+    async function marcarRodadaNaoRealizada() {
+      if (!rodadaSelecionada) return;
+      if (rodadaSelecionada.status === "finalizada") { mostrarMensagem("Essa rodada já foi finalizada.", "erro"); return; }
+      if (!confirm(`Confirma que a Rodada ${rodadaSelecionada.numero} não vai acontecer? A data será adiada em 7 dias — confirmações e sorteio (se houver) são mantidos como estão.`)) return;
+      setProcessandoRodada(true);
+      const d = new Date(rodadaSelecionada.data + "T12:00:00");
+      d.setDate(d.getDate() + 7);
+      const novaData = d.toISOString().split("T")[0];
+      const { error } = await supabase.from("rodadas").update({ data: novaData }).eq("id", rodadaSelecionada.id);
+      if (error) mostrarMensagem("Erro ao adiar rodada: " + error.message, "erro");
+      else mostrarMensagem(`✅ Rodada adiada para ${d.toLocaleDateString("pt-BR")}.`);
+      await carregarRodadas();
+      setProcessandoRodada(false);
+    }
+
+    async function cancelarSorteio() {
+      if (!rodadaSelecionada) return;
+      const { data: todosJogos } = await supabase.from("jogos").select("id, placar_a, placar_b").eq("rodada_id", rodadaSelecionada.id);
+      if (!todosJogos || todosJogos.length === 0) { mostrarMensagem("Esta rodada ainda não tem sorteio para cancelar.", "erro"); return; }
+      const comPlacar = todosJogos.some(j => j.placar_a !== null || j.placar_b !== null);
+      if (comPlacar) { mostrarMensagem("Não é possível cancelar: já existem placares lançados nesta rodada.", "erro"); return; }
+      if (!confirm(`Confirma cancelar o sorteio da Rodada ${rodadaSelecionada.numero}? Os ${todosJogos.length} jogos gerados serão apagados. As confirmações continuam valendo — é só gerar um novo sorteio.`)) return;
+      setProcessandoRodada(true);
+      const { error: erroDelete } = await supabase.from("jogos").delete().eq("rodada_id", rodadaSelecionada.id);
+      if (erroDelete) { mostrarMensagem("Erro ao cancelar sorteio: " + erroDelete.message, "erro"); setProcessandoRodada(false); return; }
+      await supabase.from("rodadas").update({ status: "proxima" }).eq("id", rodadaSelecionada.id);
+      mostrarMensagem("✅ Sorteio cancelado. Gere um novo sorteio quando quiser.");
+      await carregarRodadas();
+      setProcessandoRodada(false);
     }
 
     async function salvarSlot(jogoId, campo, valor) {
@@ -1354,6 +1386,22 @@
                   />
                   <button onClick={salvarLocalRodada} disabled={salvandoLocal} style={{ ...styles.btnSalvar, flex: "0 0 auto", padding: "8px 14px", fontSize: 13 }}>
                     {salvandoLocal ? "..." : "📍 Salvar"}
+                  </button>
+                </div>
+              )}
+              {rodadaSelecionada && rodadaSelecionada.status !== "finalizada" && (
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={marcarRodadaNaoRealizada} disabled={processandoRodada} style={{
+                    flex: 1, minWidth: 160, background: "rgba(201,162,39,0.12)", border: "1px solid rgba(201,162,39,0.4)",
+                    color: "#c9a227", borderRadius: 8, padding: "8px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                  }}>
+                    🌧️ Rodada não realizada
+                  </button>
+                  <button onClick={cancelarSorteio} disabled={processandoRodada} style={{
+                    flex: 1, minWidth: 160, background: "rgba(231,76,60,0.12)", border: "1px solid rgba(231,76,60,0.4)",
+                    color: "#e74c3c", borderRadius: 8, padding: "8px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                  }}>
+                    ✖️ Cancelar sorteio
                   </button>
                 </div>
               )}
