@@ -804,7 +804,7 @@ export default function Rodada() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 16, paddingTop: 16, borderTop: '1px solid #2a5a3a', fontSize: 12, color: '#5a8a6a' }}>
-          Veronica Beach Tennis · Londrina/PR
+          Lake Beach Sports · Londrina/PR
         </div>
       </div>
     )

@@ -1,4 +1,4 @@
-// Gera e baixa um arquivo .ics da rodada (08h às 12h, Verônica Beach Tennis).
+// Gera e baixa um arquivo .ics da rodada (08h às 12h, Lake Beach Sports).
 export function gerarIcs(rodada) {
   if (!rodada) return null
   const inicio = new Date(rodada.data + 'T08:00:00-03:00')
@@ -15,7 +15,7 @@ export function gerarIcs(rodada) {
     `DTSTART:${fmt(inicio)}`,
     `DTEND:${fmt(fim)}`,
     `SUMMARY:Resenha BT - Rodada ${rodada.numero}`,
-    'LOCATION:Verônica Beach Tennis, Londrina - PR',
+    'LOCATION:Lake Beach Sports, Londrina - PR',
     'DESCRIPTION:Liga de Beach Tennis - Torneio de Inverno 2026',
     'END:VEVENT',
     'END:VCALENDAR',
