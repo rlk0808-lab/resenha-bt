@@ -15,7 +15,7 @@ export function gerarIcs(rodada) {
     `DTSTART:${fmt(inicio)}`,
     `DTEND:${fmt(fim)}`,
     `SUMMARY:Resenha BT - Rodada ${rodada.numero}`,
-    'LOCATION:Lake Beach Sports, Londrina - PR',
+    `LOCATION:${rodada.local || 'Lake Beach Sports, Londrina - PR'}`,
     'DESCRIPTION:Liga de Beach Tennis - Torneio de Inverno 2026',
     'END:VEVENT',
     'END:VCALENDAR',

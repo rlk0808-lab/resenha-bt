@@ -191,7 +191,7 @@ export default function Home() {
                 })}
               </div>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px' }}>
-                ⏰ 08:00 · Lake Beach Sports, Londrina
+                ⏰ 08:00 · {proximaRodada.local || 'Lake Beach Sports, Londrina'}
               </div>
             </div>
 

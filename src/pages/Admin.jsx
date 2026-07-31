@@ -66,6 +66,8 @@
   }
     const [rodadas, setRodadas] = useState([]);
     const [rodadaSelecionada, setRodadaSelecionada] = useState(null);
+    const [localEdit, setLocalEdit] = useState("");
+    const [salvandoLocal, setSalvandoLocal] = useState(false);
     const [jogadores, setJogadores] = useState([]);
     const [jogos, setJogos] = useState([]);
     const [chaveAtiva, setChaveAtiva] = useState("ouro");
@@ -109,6 +111,7 @@
     useEffect(() => { carregarRodadas(); carregarJogadores(); }, []);
     useEffect(() => {
       if (rodadaSelecionada) {
+        setLocalEdit(rodadaSelecionada.local || "");
         carregarJogos();
         carregarListaEspera();
         if (rodadaSelecionada.tipo === "especial") {
@@ -156,6 +159,17 @@
     async function carregarJogadores() {
       const { data } = await supabase.from("jogadores").select("*").order("nome", { ascending: true });
       setJogadores(data || []);
+    }
+
+    async function salvarLocalRodada() {
+      if (!rodadaSelecionada) return;
+      setSalvandoLocal(true);
+      const valor = localEdit.trim() || null;
+      const { error } = await supabase.from("rodadas").update({ local: valor }).eq("id", rodadaSelecionada.id);
+      if (error) mostrarMensagem("Erro ao salvar local: " + error.message, "erro");
+      else mostrarMensagem("✅ Local da rodada atualizado.");
+      await carregarRodadas();
+      setSalvandoLocal(false);
     }
 
     async function salvarSlot(jogoId, campo, valor) {
@@ -1313,6 +1327,20 @@
                   </button>
                 ))}
               </div>
+              {rodadaSelecionada && (
+                <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="text"
+                    value={localEdit}
+                    onChange={(e) => setLocalEdit(e.target.value)}
+                    placeholder="Local padrão (Lake Beach Sports, Londrina)"
+                    style={{ ...styles.select, flex: 1, cursor: "text" }}
+                  />
+                  <button onClick={salvarLocalRodada} disabled={salvandoLocal} style={{ ...styles.btnSalvar, flex: "0 0 auto", padding: "8px 14px", fontSize: 13 }}>
+                    {salvandoLocal ? "..." : "📍 Salvar"}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* ── ENCERRAR TEMPORADA ── */}

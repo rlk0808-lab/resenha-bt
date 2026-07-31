@@ -804,7 +804,7 @@ export default function Rodada() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 16, paddingTop: 16, borderTop: '1px solid #2a5a3a', fontSize: 12, color: '#5a8a6a' }}>
-          Lake Beach Sports · Londrina/PR
+          {rodadaDetalhe.local || 'Lake Beach Sports, Londrina/PR'}
         </div>
       </div>
     )
@@ -1021,6 +1021,7 @@ export default function Rodada() {
               }}>
                 📅 agenda
               </button>
+              <div style={{ marginTop: 4 }}>⏰ 08:00 · {proximaRodada.local || 'Lake Beach Sports, Londrina'}</div>
             </div>
             {proximaJogos.length > 0 && (
               <button onClick={() => setAoVivo(!aoVivo)} style={{
