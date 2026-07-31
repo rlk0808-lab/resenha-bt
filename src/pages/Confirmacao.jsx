@@ -19,7 +19,7 @@ export default function Confirmacao({ session }) {
   const [confirmandoPendente, setConfirmandoPendente] = useState(false);
   const [confirmacaoSucesso, setConfirmacaoSucesso] = useState(false);
 
-  const LIMITE_PRINCIPAL = VAGAS_LISTA_PRINCIPAL;
+  const LIMITE_PRINCIPAL = rodadaAtual?.vagas_total || VAGAS_LISTA_PRINCIPAL;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (session?.user) carregarDados(); }, [session]);

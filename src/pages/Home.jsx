@@ -206,7 +206,7 @@ export default function Home() {
                   <div>
                     <div style={{ fontWeight: 700, color: '#2d7a45' }}>Presença confirmada!</div>
                     <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
-                      {totalConfirmados} confirmado{totalConfirmados !== 1 ? 's' : ''} de {VAGAS_LISTA_PRINCIPAL}
+                      {totalConfirmados} confirmado{totalConfirmados !== 1 ? 's' : ''} de {proximaRodada.vagas_total || VAGAS_LISTA_PRINCIPAL}
                     </div>
                   </div>
                 </div>
