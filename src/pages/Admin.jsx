@@ -154,15 +154,21 @@
       const { data } = await query;
       setRodadas(data || []);
       if (data && data.length > 0) {
-        // Seleciona a rodada ativa, ou proxima, ou a última
-        const ativa = data.find(r => r.status === "ativa")
-          || data.find(r => r.status === "proxima")
-          || data[data.length - 1];
-        setRodadaSelecionada(ativa);
+        // Preserva a rodada que o admin já tinha selecionado (só reidrata os
+        // dados dela) — sem isso, qualquer ação (salvar local, cancelar sorteio
+        // etc.) recarrega a lista e joga a seleção de volta pra rodada ativa,
+        // mesmo que o admin estivesse mexendo em outra rodada.
+        setRodadaSelecionada(prev => {
+          const atualizada = prev && data.find(r => r.id === prev.id);
+          if (atualizada) return atualizada;
+          // Primeira carga: seleciona a rodada ativa, ou proxima, ou a última
+          return data.find(r => r.status === "ativa") || data.find(r => r.status === "proxima") || data[data.length - 1];
+        });
         // O formato salvo no banco (na rodada aberta pra confirmações) é a
         // fonte de verdade — evita divergir do localStorage de outro admin/dispositivo
-        if (ativa?.vagas_total) {
-          const formato = FORMATOS_RODADA.find(f => f.total === ativa.vagas_total);
+        const aberta = data.find(r => r.status === "ativa") || data.find(r => r.status === "proxima");
+        if (aberta?.vagas_total) {
+          const formato = FORMATOS_RODADA.find(f => f.total === aberta.vagas_total);
           if (formato) setFormatoRodadaPersistido(formato);
         }
       }
@@ -208,8 +214,9 @@
       if (comPlacar) { mostrarMensagem("Não é possível cancelar: já existem placares lançados nesta rodada.", "erro"); return; }
       if (!confirm(`Confirma cancelar o sorteio da Rodada ${rodadaSelecionada.numero}? Os ${todosJogos.length} jogos gerados serão apagados. As confirmações continuam valendo — é só gerar um novo sorteio.`)) return;
       setProcessandoRodada(true);
-      const { error: erroDelete } = await supabase.from("jogos").delete().eq("rodada_id", rodadaSelecionada.id);
+      const { data: deletados, error: erroDelete } = await supabase.from("jogos").delete().eq("rodada_id", rodadaSelecionada.id).select("id");
       if (erroDelete) { mostrarMensagem("Erro ao cancelar sorteio: " + erroDelete.message, "erro"); setProcessandoRodada(false); return; }
+      if (!deletados || deletados.length === 0) { mostrarMensagem("Não foi possível apagar os jogos (sem permissão no banco). Nada foi alterado — avise o desenvolvedor.", "erro"); setProcessandoRodada(false); return; }
       await supabase.from("rodadas").update({ status: "proxima" }).eq("id", rodadaSelecionada.id);
       mostrarMensagem("✅ Sorteio cancelado. Gere um novo sorteio quando quiser.");
       await carregarRodadas();
