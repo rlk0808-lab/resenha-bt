@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import Evolucao from './Evolucao'
+import DetalhadoRodadas from './DetalhadoRodadas'
 import { acessivelClique } from '../lib/a11y'
 import { buscarClassificacaoTemporadaAtual } from '../lib/temporada'
 
@@ -9,6 +10,7 @@ export default function Classificacao() {
   const [modoDescarte, setModoDescarte] = useState(false)
   const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
   const [verEvolucao, setVerEvolucao] = useState(false)
+  const [verDetalhado, setVerDetalhado] = useState(false)
   const [jogadorAtualId, setJogadorAtualId] = useState(null)
   const [ligaAtual, setLigaAtual] = useState(null)
   const [totalSemDescarte, setTotalSemDescarte] = useState([])
@@ -70,9 +72,14 @@ export default function Classificacao() {
         <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>›</span>
       </div>
         <h1 className="section-title" style={{ margin: 0 }}>🏆 Classificação</h1>
-        <button onClick={() => setVerEvolucao(true)} style={{ background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 8, padding: '6px 12px', color: '#c9a227', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-          📈 Evolução
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setVerDetalhado(true)} style={{ background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 8, padding: '6px 12px', color: '#c9a227', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+            📋 Detalhado
+          </button>
+          <button onClick={() => setVerEvolucao(true)} style={{ background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 8, padding: '6px 12px', color: '#c9a227', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+            📈 Evolução
+          </button>
+        </div>
       </div>
 
       {/* Tabs Temporada Atual / Histórico Total */}
@@ -171,6 +178,7 @@ export default function Classificacao() {
         )}
       </div>
       {verEvolucao && <Evolucao onFechar={() => setVerEvolucao(false)} jogadorAtualId={jogadorAtualId} />}
+      {verDetalhado && <DetalhadoRodadas onFechar={() => setVerDetalhado(false)} />}
     </div>
   )
 }
