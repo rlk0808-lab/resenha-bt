@@ -688,6 +688,21 @@
 
       if (erros.length > 0) { mostrarMensagem("Erros: " + erros.join(", "), "erro"); setCalculando(false); return; }
 
+      // Todo jogador ativo que não jogou esta rodada (confirmado ou não) grava
+      // pontos:0 explicitamente — falta é de quem não foi, não só de quem
+      // confirmou e não apareceu. Sem isso, a rodada simplesmente não existe
+      // pra ele e não pode ser descartada como manda o regulamento
+      // ("faltas contam pontuação 0").
+      const nomesQuePontuaram = new Set(todos.map(j => j.nome));
+      const faltantes = jogadores.filter(jog => jog.ativo && !nomesQuePontuaram.has(jog.nome));
+      for (const jog of faltantes) {
+        const { data: existentes } = await supabase.from("pontuacao").select("id")
+          .eq("jogador_id", jog.id).eq("rodada_id", rodadaSelecionada.id);
+        if (!existentes || existentes.length === 0) {
+          await supabase.from("pontuacao").insert({ jogador_id: jog.id, rodada_id: rodadaSelecionada.id, pontos: 0, vitorias: 0 });
+        }
+      }
+
       if (rodadaSelecionada?.tipo === "especial") {
         // Especial: salva com chave = time do jogador
         for (const j of (rankingPreview.ouro || [])) {

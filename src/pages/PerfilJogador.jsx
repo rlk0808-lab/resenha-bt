@@ -15,9 +15,12 @@ export default function PerfilJogador() {
   const [jogador, setJogador] = useState(null)
   const [jogadorAtual, setJogadorAtual] = useState(null)
   const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
+  const [modoDescarte, setModoDescarte] = useState(false)
   const [ligaAtualNome, setLigaAtualNome] = useState(null)
   const [pontosTotal, setPontosTotal] = useState(0)
+  const [pontosTotalDescarte, setPontosTotalDescarte] = useState(0)
   const [pontosAtual, setPontosAtual] = useState(0)
+  const [pontosAtualDescarte, setPontosAtualDescarte] = useState(0)
   const [dadosTotal, setDadosTotal] = useState(DADOS_H2H_VAZIOS)
   const [dadosAtual, setDadosAtual] = useState(DADOS_H2H_VAZIOS)
   const [badges, setBadges] = useState([])
@@ -38,15 +41,19 @@ export default function PerfilJogador() {
     if (!jogadorData) { setLoading(false); return }
     setJogador(jogadorData)
 
-    const [{ data: pts }, liga, rodadaIdsAtual, statsAtualJog] = await Promise.all([
+    const [{ data: pts }, { data: totalDescarte }, liga, rodadaIdsAtual, statsAtualJog, statsAtualJogDescarte] = await Promise.all([
       supabase.from('pontuacao').select('pontos').eq('jogador_id', id),
+      supabase.from('classificacao_com_descarte').select('pontos').eq('id', id).limit(1),
       buscarLigaAtual(),
       buscarRodadaIdsLigaAtual(),
       buscarStatsJogadorTemporadaAtual(id),
+      buscarStatsJogadorTemporadaAtual(id, { comDescarte: true }),
     ])
     setPontosTotal(pts?.reduce((s, p) => s + (p.pontos || 0), 0) || 0)
+    setPontosTotalDescarte(totalDescarte?.[0]?.pontos || 0)
     setLigaAtualNome(liga)
     setPontosAtual(statsAtualJog.pontos_total)
+    setPontosAtualDescarte(statsAtualJogDescarte.pontos_total)
 
     const { data: bads } = await supabase.from('badges')
       .select('tipo, rodadas(numero)').eq('jogador_id', id).order('created_at', { ascending: false })
@@ -76,7 +83,9 @@ export default function PerfilJogador() {
 
   const dados = periodo === 'atual' ? dadosAtual : dadosTotal
   const { jogos: jogosDetalhados, parceiros, adversarios } = dados
-  const pontos = periodo === 'atual' ? pontosAtual : pontosTotal
+  const pontos = periodo === 'atual'
+    ? (modoDescarte ? pontosAtualDescarte : pontosAtual)
+    : (modoDescarte ? pontosTotalDescarte : pontosTotal)
 
   // H2H com jogador atual
   const nomeAtual = jogadorAtual?.nome
@@ -171,6 +180,33 @@ export default function PerfilJogador() {
             letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s'
           }}>{label}</button>
         ))}
+      </div>
+
+      {/* Toggle Descarte */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#e8f5e9' }}>
+            {modoDescarte ? '✂️ Com descarte' : '📊 Sem descarte'}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+            {modoDescarte ? '2 piores resultados descartados' : 'Todos os pontos somados'}
+          </div>
+        </div>
+        <div
+          onClick={() => setModoDescarte(!modoDescarte)}
+          style={{
+            width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+            background: modoDescarte ? '#c9a227' : 'rgba(255,255,255,0.15)',
+            position: 'relative', transition: 'background 0.2s',
+          }}
+        >
+          <div style={{
+            position: 'absolute', top: 2,
+            left: modoDescarte ? 22 : 2,
+            width: 20, height: 20, borderRadius: '50%',
+            background: '#fff', transition: 'left 0.2s',
+          }} />
+        </div>
       </div>
 
       {/* Stats */}

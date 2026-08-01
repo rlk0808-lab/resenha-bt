@@ -76,8 +76,8 @@ export async function buscarClassificacaoTemporadaAtual({ comDescarte = false } 
 // Stats de um único jogador na temporada atual (equivalente a stats_jogador,
 // mas escopado à liga atual). Reaproveita o cálculo da classificação inteira
 // porque a posição de um jogador depende de todo mundo.
-export async function buscarStatsJogadorTemporadaAtual(jogadorId) {
-  const { liga, lista } = await buscarClassificacaoTemporadaAtual({ comDescarte: false })
+export async function buscarStatsJogadorTemporadaAtual(jogadorId, { comDescarte = false } = {}) {
+  const { liga, lista } = await buscarClassificacaoTemporadaAtual({ comDescarte })
   const jogador = lista.find(j => j.id === jogadorId)
   return {
     liga,
