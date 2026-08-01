@@ -293,6 +293,24 @@ export default function Confirmacao({ session }) {
     setProcessando(false);
   }
 
+  async function notificarPromovido(jogadorId) {
+    try {
+      const { data: subs } = await supabase.from("push_subscriptions")
+        .select("endpoint, p256dh, auth").eq("jogador_id", jogadorId);
+      if (!subs || subs.length === 0) return;
+      await fetch("/api/send-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscriptions: subs,
+          title: "Vaga aberta! 🎾",
+          body: "Você foi promovido da lista de espera para a lista principal.",
+          url: "/confirmacao",
+        }),
+      });
+    } catch (e) { console.error("Erro ao notificar promovido:", e); }
+  }
+
   async function cancelarPresenca() {
     if (!confirmacao) return;
     if (!confirm("Deseja cancelar sua confirmação?")) return;
@@ -303,7 +321,9 @@ export default function Confirmacao({ session }) {
       mostrarMensagem("Erro ao cancelar: " + error.message, "erro");
     } else {
       if (eraConfirmado && listaEspera.length > 0) {
-        await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", listaEspera[0].id);
+        const promovido = listaEspera[0];
+        await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", promovido.id);
+        await notificarPromovido(promovido.jogador_id);
         mostrarMensagem("Confirmação cancelada. O próximo da espera foi promovido.", "info");
       } else {
         mostrarMensagem("Confirmação cancelada.", "info");
