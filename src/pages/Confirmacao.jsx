@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabase";
-import { VAGAS_LISTA_PRINCIPAL } from "../lib/constants";
+import { VAGAS_LISTA_PRINCIPAL, FORMATOS_RODADA } from "../lib/constants";
 import { calcularPrazoConfirmacao } from "../lib/prazo";
 import { useCountdown, formatarRestante } from "../lib/useCountdown";
 import { baixarIcs } from "../lib/calendario";
@@ -20,6 +20,9 @@ export default function Confirmacao({ session }) {
   const [confirmacaoSucesso, setConfirmacaoSucesso] = useState(false);
 
   const LIMITE_PRINCIPAL = rodadaAtual?.vagas_total || VAGAS_LISTA_PRINCIPAL;
+  const formatoAtual = FORMATOS_RODADA.find(f => f.total === LIMITE_PRINCIPAL) || FORMATOS_RODADA[0];
+  const ouroAlvo = formatoAtual.ouro;
+  const prataAlvo = formatoAtual.prata;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (session?.user) carregarDados(); }, [session]);
@@ -125,7 +128,7 @@ export default function Confirmacao({ session }) {
   // - Se jogadores da Ouro faltam: sobem mais da Prata (4º, 5º, 6º...)
   // - A partir do 6º faltante da Ouro: 10º, 11º, 12º se mantêm (não descem)
   // - Celso (e outros que desceram) ficam na Prata até a prévia
-  function calcularPrevia(confirmados, rankingAnt) {
+  function calcularPrevia(confirmados, rankingAnt, ouroAlvo) {
     const nomeConfirmados = new Set(confirmados.map(c => c.jogadores?.nome));
 
     // Sem ranking anterior: usa chave atual do banco
@@ -136,8 +139,9 @@ export default function Confirmacao({ session }) {
       };
     }
 
-    // Passo 1: identifica quem desce (10º, 11º, 12º da Ouro)
-    const ouroDescem = new Set(rankingAnt.ouro.slice(-3).map(r => r.jogadores?.nome));
+    // Passo 1: identifica quem desce (últimos 3 colocados da Ouro)
+    const ultimosOuro = rankingAnt.ouro.slice(-3);
+    const ouroDescem = new Set(ultimosOuro.map(r => r.jogadores?.nome));
 
     // Passo 2: Ouro que FICA (posições 1-9 que confirmaram)
     const ouroFicam = rankingAnt.ouro
@@ -154,23 +158,27 @@ export default function Confirmacao({ session }) {
     // Passo 4: sobem fixos (pos 1-3 da Prata que confirmaram)
     const prataSobemFixos = prataTodos.filter(r => r.posicao <= 3).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
     const vagasFixasNaoPreenchidas = 3 - prataSobemFixos.length;
-    // Passo 5: sobem extras (pos 4-6 por falta na Ouro + vagas dos fixos não confirmados)
-    const totalVagasExtras = qtdFaltasEfetivas + vagasFixasNaoPreenchidas;
+    // Passo 5: sobem extras (pos 4-6 por falta na Ouro, ou por formato
+    // expandido — ex: formato 32 precisa de 16 na Ouro, não 12)
+    const expansaoFormato = Math.max(0, (ouroAlvo || 12) - 12);
+    const totalVagasExtras = qtdFaltasEfetivas + vagasFixasNaoPreenchidas + expansaoFormato;
     const prataSobemExtras = prataTodos.filter(r => r.posicao >= 4 && r.posicao <= 6)
       .slice(0, totalVagasExtras).map(r => ({ nome: r.jogadores?.nome, status: "subiu" }));
-    // Passo 6: vagas restantes → mantém 10-12 da Ouro
+    // Passo 6: vagas restantes → mantém quem ia descer (não posições fixas
+    // 10/11/12 — só valem quando a Ouro de referência tem 12 jogadores; numa
+    // Ouro de 16, ouroFicam já vai até a posição 13 e usar [10,11,12] fixo
+    // duplicava nomes que já estavam em ouroFicam)
     const vagasRestantes = totalVagasExtras - prataSobemExtras.length;
     const ouroMantem = [];
     if (vagasRestantes > 0) {
       let vagasPreenchidas = 0;
-      [10, 11, 12].forEach(pos => {
-        if (vagasPreenchidas >= vagasRestantes) return;
-        const jogPos = rankingAnt.ouro.find(r => r.posicao === pos);
-        if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
+      for (const jogPos of ultimosOuro) {
+        if (vagasPreenchidas >= vagasRestantes) break;
+        if (nomeConfirmados.has(jogPos.jogadores?.nome)) {
           ouroMantem.push({ nome: jogPos.jogadores?.nome, status: "mantido" });
           vagasPreenchidas++;
         }
-      });
+      }
     }
     // Passo 7: ainda falta → sobe pos 7+ da Prata
     const vagasAindaRestantes = vagasRestantes - ouroMantem.length;
@@ -180,7 +188,7 @@ export default function Confirmacao({ session }) {
     const prataSobem = [...prataSobemFixos, ...prataSobemExtras, ...prataSobemUltimos];
 
     // Passo 6: monta Ouro final
-    const ouroFinal = [...ouroFicam, ...prataSobemFixos, ...prataSobemExtras, ...ouroMantem, ...prataSobemUltimos].slice(0, 12);
+    const ouroFinal = [...ouroFicam, ...prataSobemFixos, ...prataSobemExtras, ...ouroMantem, ...prataSobemUltimos].slice(0, ouroAlvo || 12);
     const nomesOuro = new Set(ouroFinal.map(j => j.nome));
 
     // Passo 7: monta Prata final
@@ -214,10 +222,10 @@ export default function Confirmacao({ session }) {
 
   const previaChaves = useMemo(() => {
     if (listaConfirmados.length > 0 || rankingAnterior.ouro.length > 0) {
-      return calcularPrevia(listaConfirmados, rankingAnterior);
+      return calcularPrevia(listaConfirmados, rankingAnterior, ouroAlvo);
     }
     return { ouro: [], prata: [] };
-  }, [listaConfirmados, rankingAnterior]);
+  }, [listaConfirmados, rankingAnterior, ouroAlvo]);
 
   const restantePrazo = useCountdown(calcularPrazoConfirmacao(rodadaAtual));
 
@@ -333,8 +341,8 @@ export default function Confirmacao({ session }) {
   }
 
   const status = statusConfirmacao();
-  const vagasOuro = Math.max(0, 12 - previaChaves.ouro.length);
-  const vagasPrata = Math.max(0, 12 - previaChaves.prata.length);
+  const vagasOuro = Math.max(0, ouroAlvo - previaChaves.ouro.length);
+  const vagasPrata = Math.max(0, prataAlvo - previaChaves.prata.length);
   const fechada = listaFechada();
   const dentroPrazo = dentroDoPrazoListaPrincipal();
 
@@ -485,7 +493,7 @@ export default function Confirmacao({ session }) {
               <p style={{ fontSize: 12, color: "#5a8a6a", marginBottom: 14 }}>↑ subiu &nbsp;↓ desceu &nbsp;= mantido por falta na Ouro</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥇 Ouro ({previaChaves.ouro.length}/12)</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: ouro, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥇 Ouro ({previaChaves.ouro.length}/{ouroAlvo})</div>
                   {previaChaves.ouro.map((j, idx) => (
                     <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: "1px solid #1e3d2a" }}>
                       <span style={{ fontSize: 10, color: "#5a8a6a", width: 16 }}>{idx + 1}</span>
@@ -500,7 +508,7 @@ export default function Confirmacao({ session }) {
                   ))}
                 </div>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥈 Prata ({previaChaves.prata.length}/12)</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: prata, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>🥈 Prata ({previaChaves.prata.length}/{prataAlvo})</div>
                   {previaChaves.prata.map((j, idx) => (
                     <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", borderBottom: "1px solid #1e3d2a" }}>
                       <span style={{ fontSize: 10, color: "#5a8a6a", width: 16 }}>{idx + 1}</span>

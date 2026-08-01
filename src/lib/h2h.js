@@ -40,10 +40,16 @@ export function calcularStatsDeJogos(jogosComPlacar, nomePerfil) {
     .sort((a, b) => b.jogos - a.jogos)
   const melhorDupla = parceiros.filter(p => p.jogos >= 2).sort((a, b) => b.pct - a.pct)[0] || null
 
+  // Ordena por created_at (timestamp absoluto, sempre crescente) em vez de
+  // numero_rodada — esse número reinicia em 1 a cada temporada nova, então
+  // usá-lo como critério principal inverteria a ordem cronológica real depois
+  // da 1a virada de temporada (rodada 20 da liga antiga "parecia" mais recente
+  // que a rodada 2 da liga nova). rodada_interna só desempata jogos com o
+  // mesmíssimo timestamp (inseridos juntos no sorteio).
   const jogosOrdenados = [...jogosComPlacar].sort((a, b) => {
-    if (b.numero_rodada !== a.numero_rodada) return (b.numero_rodada || 0) - (a.numero_rodada || 0)
-    if (b.rodada_interna !== a.rodada_interna) return (b.rodada_interna || 0) - (a.rodada_interna || 0)
-    return new Date(b.created_at) - new Date(a.created_at)
+    const diff = new Date(b.created_at) - new Date(a.created_at)
+    if (diff !== 0) return diff
+    return (b.rodada_interna || 0) - (a.rodada_interna || 0)
   })
   let seq = 0, tipo = null
   for (const jogo of jogosOrdenados) {

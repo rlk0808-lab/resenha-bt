@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { acessivelClique } from '../lib/a11y'
+import { buscarLigaAtual } from '../lib/temporada'
 
 const CORES = [
   '#f5c518', '#2ecc71', '#3498db', '#e74c3c', '#9b59b6',
@@ -28,9 +29,14 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
   async function carregar() {
     setLoading(true)
 
+    // Escopado à liga atual: o número da rodada reinicia em 1 a cada temporada
+    // nova, então sem esse filtro uma "Rodada 1" da liga nova sobrescreveria
+    // os dados da "Rodada 1" da liga anterior no gráfico (mesma chave de mapa).
+    const ligaAtual = await buscarLigaAtual()
     const { data: rods } = await supabase
       .from('rodadas').select('id, numero, tipo')
       .eq('status', 'finalizada')
+      .eq('liga', ligaAtual)
       .order('numero', { ascending: true })
     setRodadas(rods || [])
 

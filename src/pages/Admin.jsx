@@ -1,17 +1,12 @@
   import { useState, useEffect } from "react";
   import { supabase } from "../lib/supabase";
-  import { VAGAS_LISTA_PRINCIPAL } from "../lib/constants";
+  import { VAGAS_LISTA_PRINCIPAL, FORMATOS_RODADA } from "../lib/constants";
   import { buscarClassificacaoTemporadaAtual, buscarLigaAtual } from "../lib/temporada";
   import { acessivelClique } from "../lib/a11y";
   import { gerarSorteioQualify } from "../lib/sorteioQualify";
+  import { proximoSabadoISO } from "../lib/prazo";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
-
-  const FORMATOS_RODADA = [
-    { label: "24", sub: "12🥇+12🥈", ouro: 12, prata: 12, total: 24 },
-    { label: "28", sub: "12🥇+16🥈", ouro: 12, prata: 16, total: 28 },
-    { label: "32", sub: "16🥇+16🥈", ouro: 16, prata: 16, total: 32 },
-  ];
 
   // Estrutura fixa do chaveamento (índices 0-11 = slots J1-J12)
   // Formato por rodada: [a1, a2, b1, b2] = dupla(a1,a2) x dupla(b1,b2)
@@ -378,7 +373,8 @@
         const rankPrata = (rankAnt || []).filter(r => r.chave === "prata");
 
         // Os 3 últimos da Ouro descem
-        const ouroDescem = new Set(rankOuro.slice(-3).map(r => r.jogadores?.nome));
+        const ultimosOuro = rankOuro.slice(-3);
+        const ouroDescem = new Set(ultimosOuro.map(r => r.jogadores?.nome));
 
         // Ouro que fica (posições 1-9 que confirmaram)
         const ouroFicam = rankOuro
@@ -403,17 +399,22 @@
         const prataSobemExtras = prataTodos.filter(r => r.posicao >= 4 && r.posicao <= 6)
           .slice(0, totalVagasExtras).map(r => r.jogadores?.nome);
         const vagasRestantes = totalVagasExtras - prataSobemExtras.length;
+        // Quem "mantém" são os próprios candidatos a descer (ultimosOuro),
+        // na ordem de melhor colocado primeiro — não posições fixas 10/11/12,
+        // que só correspondem à Ouro de 12 jogadores. Numa Ouro de 16 (formato
+        // 32), ouroFicam já vai até a posição 13, e usar [10,11,12] fixo
+        // duplicava esses nomes (já estavam em ouroFicam) em vez de resgatar
+        // quem realmente ia descer.
         const ouroMantem = [];
         if (vagasRestantes > 0) {
           let vagasPreenchidas = 0;
-          [10, 11, 12].forEach(pos => {
-            if (vagasPreenchidas >= vagasRestantes) return;
-            const jogPos = rankOuro.find(r => r.posicao === pos);
-            if (jogPos && nomeConfirmados.has(jogPos.jogadores?.nome)) {
+          for (const jogPos of ultimosOuro) {
+            if (vagasPreenchidas >= vagasRestantes) break;
+            if (nomeConfirmados.has(jogPos.jogadores?.nome)) {
               ouroMantem.push(jogPos.jogadores?.nome);
               vagasPreenchidas++;
             }
-          });
+          }
         }
         // Se ainda faltar → sobe pos 7, 8, 9... da Prata
         const vagasAindaRestantes = vagasRestantes - ouroMantem.length;
@@ -617,22 +618,30 @@
     const findJog = (nome) => jogsDB.find(j => j.nome === nome);
     const badges = [];
     const todosRanking = [...(ranking.ouro || []), ...(ranking.prata || [])];
-    const campeaoOuro = ranking.ouro?.[0];
-    if (campeaoOuro) { const jog = findJog(campeaoOuro.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_ouro" }); }
-    const campeaoPrata = ranking.prata?.[0];
-    if (campeaoPrata) { const jog = findJog(campeaoPrata.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_prata" }); }
-    const ultimoOuro = ranking.ouro?.[(ranking.ouro?.length || 0) - 1];
-    if (ultimoOuro) { const jog = findJog(ultimoOuro.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "congelado" }); }
-    const ultimoPrata = ranking.prata?.[(ranking.prata?.length || 0) - 1];
-    if (ultimoPrata) { const jog = findJog(ultimoPrata.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "congelado" }); }
+    // Rodada especial: todo mundo (times A e B) entra em ranking.ouro como
+    // artifício técnico, sem chave real — badges de chave (campeão da chave,
+    // último da chave, subiu/desceu de chave) não fazem sentido aqui, porque
+    // ninguém realmente muda de chave numa rodada especial (só a normal, ver
+    // salvarPontuacao).
+    const ehEspecial = rodadaSelecionada?.tipo === "especial";
+    if (!ehEspecial) {
+      const campeaoOuro = ranking.ouro?.[0];
+      if (campeaoOuro) { const jog = findJog(campeaoOuro.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_ouro" }); }
+      const campeaoPrata = ranking.prata?.[0];
+      if (campeaoPrata) { const jog = findJog(campeaoPrata.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "campeao_prata" }); }
+      const ultimoOuro = ranking.ouro?.[(ranking.ouro?.length || 0) - 1];
+      if (ultimoOuro) { const jog = findJog(ultimoOuro.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "congelado" }); }
+      const ultimoPrata = ranking.prata?.[(ranking.prata?.length || 0) - 1];
+      if (ultimoPrata) { const jog = findJog(ultimoPrata.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "congelado" }); }
+      for (const j of (ranking.ouro || []).slice(-3)) { const jog = findJog(j.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "queda_livre" }); }
+      for (const j of (ranking.prata || []).slice(0, 3)) { const jog = findJog(j.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "ascensao" }); }
+    }
     for (const j of todosRanking) {
       const jog = findJog(j.nome); if (!jog) continue;
       if (j.vitorias >= 4) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "dia_perfeito" });
       else if (j.vitorias >= 3) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "hat_trick" });
       if (j.vitorias === 0) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "dia_negro" });
     }
-    for (const j of (ranking.ouro || []).slice(-3)) { const jog = findJog(j.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "queda_livre" }); }
-    for (const j of (ranking.prata || []).slice(0, 3)) { const jog = findJog(j.nome); if (jog) badges.push({ jogador_id: jog.id, rodada_id: rodadaId, tipo: "ascensao" }); }
     if (jogosRodada) {
       const statsJog = {};
       for (const jogo of jogosRodada) {
@@ -753,12 +762,8 @@
 
       const { data: proximaExistente } = await supabase.from("rodadas").select("id").eq("status", "proxima").limit(1);
       if (!proximaExistente || proximaExistente.length === 0) {
-        const hoje = new Date();
-        const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
-        const proximoSabado = new Date(hoje);
-        proximoSabado.setDate(hoje.getDate() + diasParaSabado);
         const proximoNumero = rodadaSelecionada.numero + 1;
-        await supabase.from("rodadas").insert({ numero: proximoNumero, data: proximoSabado.toISOString().split("T")[0], status: "proxima", liga: rodadaSelecionada.liga, tipo: (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal" });
+        await supabase.from("rodadas").insert({ numero: proximoNumero, data: proximoSabadoISO(), status: "proxima", liga: rodadaSelecionada.liga, tipo: (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal" });
         await enviarNotificacao("Lista aberta!", `A lista para a Rodada ${proximoNumero} esta aberta. Confirme sua presenca!`, "/confirmacao");
         mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} criada.`);
       } else {
@@ -973,12 +978,8 @@
         if (erroReset) { mostrarMensagem("Temporada arquivada, mas houve erro ao resetar chaves: " + erroReset.message, "erro"); setEncerrandoTemporada(false); return; }
       }
 
-      const hoje = new Date();
-      const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
-      const proximoSabado = new Date(hoje);
-      proximoSabado.setDate(hoje.getDate() + diasParaSabado);
       const { error: erroNovaRodada } = await supabase.from("rodadas").insert({
-        numero: 0, data: proximoSabado.toISOString().split("T")[0], status: "proxima",
+        numero: 0, data: proximoSabadoISO(), status: "proxima",
         liga: novaLigaNome.trim(), tipo: "qualify",
       });
       if (erroNovaRodada) { mostrarMensagem("Temporada arquivada, mas houve erro ao criar o qualify: " + erroNovaRodada.message, "erro"); setEncerrandoTemporada(false); return; }
@@ -1045,12 +1046,8 @@
 
       await supabase.from("rodadas").update({ status: "finalizada" }).eq("id", rodadaSelecionada.id);
 
-      const hoje = new Date();
-      const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7;
-      const proximoSabado = new Date(hoje);
-      proximoSabado.setDate(hoje.getDate() + diasParaSabado);
       const { error: erroRodada1 } = await supabase.from("rodadas").insert({
-        numero: 1, data: proximoSabado.toISOString().split("T")[0], status: "proxima",
+        numero: 1, data: proximoSabadoISO(), status: "proxima",
         liga: rodadaSelecionada.liga, tipo: "normal",
       });
       if (erroRodada1) { mostrarMensagem("Chaves definidas, mas houve erro ao criar a Rodada 1: " + erroRodada1.message, "erro"); setFechandoLista(false); return; }
