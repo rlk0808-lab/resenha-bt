@@ -680,6 +680,37 @@
     }
   }
 
+    // Posta um resumo da rodada no Feed, atribuído ao próprio admin logado
+    // (a RLS de feed_posts só deixa postar em nome do jogador vinculado à
+    // conta autenticada — não existe "post do sistema").
+    async function postarResumoFeed(rodada, ranking) {
+      if (!ranking) return;
+      try {
+        const { data: meuJog } = await supabase.from("jogadores").select("id").eq("user_id", session.user.id).limit(1);
+        const meuJogadorId = meuJog?.[0]?.id;
+        if (!meuJogadorId) return;
+
+        let texto;
+        if (rodada.tipo === "especial") {
+          const vencedor = (ranking.ouro || []).find(j => j.timeVencedor);
+          texto = vencedor
+            ? `🏆 Rodada Especial ${rodada.numero} encerrada! Time ${vencedor.time === "time_a" ? "A" : "B"} levou a melhor no saldo de games.`
+            : `🎾 Rodada Especial ${rodada.numero} encerrada!`;
+        } else {
+          const campeaoOuro = ranking.ouro?.[0]?.nome;
+          const campeaoPrata = ranking.prata?.[0]?.nome;
+          const partes = [];
+          if (campeaoOuro) partes.push(`🥇 Ouro: ${campeaoOuro}`);
+          if (campeaoPrata) partes.push(`🥈 Prata: ${campeaoPrata}`);
+          texto = partes.length > 0
+            ? `🎾 Rodada ${rodada.numero} encerrada!\n${partes.join(" · ")}`
+            : `🎾 Rodada ${rodada.numero} encerrada!`;
+        }
+
+        await supabase.from("feed_posts").insert({ jogador_id: meuJogadorId, texto });
+      } catch (e) { console.error("Erro ao postar resumo no feed:", e); }
+    }
+
     async function salvarPontuacao() {
       if (!rankingPreview) return;
       setCalculando(true);
@@ -773,6 +804,10 @@
 
       // Calcula badges da rodada
       await calcularBadges(rodadaSelecionada.id, rankingPreview);
+
+      // Posta um resumo automático no Feed, pra ele ficar vivo toda semana
+      // sem depender de alguém lembrar de postar manualmente.
+      await postarResumoFeed(rodadaSelecionada, rankingPreview);
 
       await carregarJogadores();
       setRankingPreview(null);
@@ -955,6 +990,39 @@
     // pra decidir quem vai pra Ouro/Prata; ver processarQualify()).
     // NÃO apaga nada de rodadas/jogos/pontuacao — fica guardado como
     // histórico total, acessível depois.
+    // Badge "Sempre Presente": jogador ativo que jogou de verdade (apareceu
+    // em ranking_rodada, não só "falta com pontos:0") em TODAS as rodadas
+    // normais finalizadas da temporada que está encerrando, desde que ele
+    // já estava cadastrado. Exige pelo menos 3 rodadas elegíveis pra não
+    // premiar quem entrou faltando 1-2 rodadas pro fim da temporada.
+    async function premiarPresencaPerfeita(liga) {
+      const { data: rodadasLiga } = await supabase.from("rodadas").select("id, created_at")
+        .eq("liga", liga).eq("status", "finalizada").neq("tipo", "especial");
+      if (!rodadasLiga || rodadasLiga.length === 0) return;
+
+      const { data: rankingsLiga } = await supabase.from("ranking_rodada").select("jogador_id, rodada_id")
+        .in("rodada_id", rodadasLiga.map(r => r.id));
+      const jogouPorJogador = {};
+      for (const r of (rankingsLiga || [])) {
+        if (!jogouPorJogador[r.jogador_id]) jogouPorJogador[r.jogador_id] = new Set();
+        jogouPorJogador[r.jogador_id].add(r.rodada_id);
+      }
+
+      const ultimaRodadaId = rodadasLiga[rodadasLiga.length - 1].id;
+      const badgesPresenca = [];
+      for (const jog of jogadores.filter(j => j.ativo)) {
+        const rodadasElegiveis = rodadasLiga.filter(r => new Date(jog.created_at) <= new Date(r.created_at));
+        if (rodadasElegiveis.length < 3) continue;
+        const jogou = jogouPorJogador[jog.id] || new Set();
+        if (rodadasElegiveis.every(r => jogou.has(r.id))) {
+          badgesPresenca.push({ jogador_id: jog.id, rodada_id: ultimaRodadaId, tipo: "sempre_presente" });
+        }
+      }
+      if (badgesPresenca.length > 0) {
+        await supabase.from("badges").upsert(badgesPresenca, { onConflict: "jogador_id,rodada_id,tipo", ignoreDuplicates: true });
+      }
+    }
+
     async function encerrarTemporada() {
       if (!novaLigaNome.trim()) { mostrarMensagem("Digite o nome da nova liga.", "erro"); return; }
       setEncerrandoTemporada(true);
@@ -970,6 +1038,8 @@
       }));
       const { error: erroArquivo } = await supabase.from("temporadas").insert(registros);
       if (erroArquivo) { mostrarMensagem("Erro ao arquivar temporada: " + erroArquivo.message, "erro"); setEncerrandoTemporada(false); return; }
+
+      await premiarPresencaPerfeita(ligaAtual);
 
       if (resetarChaveNovaLiga) {
         // Chave antiga não tem mais sentido até o qualify decidir a nova —

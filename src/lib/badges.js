@@ -11,6 +11,7 @@ export const BADGE_INFO = {
   pneu:          { emoji: '🍩', label: 'Pneu',          cor: '#fd79a8', positivo: false },
   dormindo:      { emoji: '😴', label: 'Dormindo',      cor: '#b2bec3', positivo: false },
   queda_livre:   { emoji: '📉', label: 'Queda Livre',   cor: '#d63031', positivo: false },
+  sempre_presente: { emoji: '🎯', label: 'Sempre Presente', cor: '#2ecc71', positivo: true },
 }
 
 export const BADGE_LEGENDA = [
@@ -26,4 +27,5 @@ export const BADGE_LEGENDA = [
   { emoji: '🍩', label: 'Pneu', desc: 'Tomou um 6x0', cor: '#fd79a8' },
   { emoji: '😴', label: 'Dormindo', desc: 'Perdeu todos por 3+ de diferenca', cor: '#b2bec3' },
   { emoji: '📉', label: 'Queda Livre', desc: 'Desceu da Ouro para Prata', cor: '#d63031' },
+  { emoji: '🎯', label: 'Sempre Presente', desc: 'Não faltou nenhuma rodada normal da temporada', cor: '#2ecc71' },
 ]
