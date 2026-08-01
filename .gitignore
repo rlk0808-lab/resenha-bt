@@ -25,3 +25,6 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Supabase CLI local cache (project link, gerado por `supabase link`)
+supabase/.temp
