@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { BADGE_INFO } from '../lib/badges'
 import { acessivelClique } from '../lib/a11y'
+import { enviarPush } from '../lib/notificar'
 
 export default function Feed() {
   const [posts, setPosts] = useState([])
@@ -89,28 +90,22 @@ export default function Feed() {
       texto: textoFinal,
       foto_url,
     })
-    // Notifica mencionados
-    const mencoes = textoFinal.match(/@[\w.]+/g)
-    if (mencoes && mencoes.length > 0) {
-      const prefixos = mencoes.map(m => m.slice(1).trim())
-      const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
-      const jogs = (todosJogs || []).filter(j => prefixos.some(p => j.nome.startsWith(p) || j.nome === p))
-      if (jogs && jogs.length > 0) {
-        const ids = jogs.map(j => j.id)
-        const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
-        if (subs && subs.length > 0) {
-          await fetch('/api/send-notification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              subscriptions: subs,
-              title: jogadorAtual.nome + ' te mencionou no Feed!',
-              body: textoFinal,
-              url: '/feed'
-            })
-          })
-        }
-      }
+    // Notifica mencionados — casa pelo nome COMPLETO de cada jogador
+    // (inserirMencao sempre grava o nome inteiro, com espaço/acento), em
+    // vez de um regex \w genérico que corta em espaço e não reconhece
+    // acento (e podia notificar o jogador errado quando dois
+    // compartilhavam o primeiro nome).
+    const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
+    const jogs = (todosJogs || []).filter(j => textoFinal.includes('@' + j.nome))
+    if (jogs.length > 0) {
+      const ids = jogs.map(j => j.id)
+      const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
+      await enviarPush({
+        subscriptions: subs,
+        title: jogadorAtual.nome + ' te mencionou no Feed!',
+        body: textoFinal,
+        url: '/feed',
+      })
     }
     setTexto('')
     cancelarFoto()
@@ -121,17 +116,18 @@ export default function Feed() {
     if (!jogadorAtual) return
     const post = posts.find(p => p.id === postId)
     const jaCurti = post?.feed_reacoes?.some(r => r.jogador_id === jogadorAtual.id)
-    if (jaCurti) {
-      await supabase.from('feed_reacoes').delete().eq('post_id', postId).eq('jogador_id', jogadorAtual.id)
-    } else {
-      await supabase.from('feed_reacoes').insert({ post_id: postId, jogador_id: jogadorAtual.id, emoji: '❤️' })
-    }
+    const { error } = jaCurti
+      ? await supabase.from('feed_reacoes').delete().eq('post_id', postId).eq('jogador_id', jogadorAtual.id)
+      : await supabase.from('feed_reacoes').insert({ post_id: postId, jogador_id: jogadorAtual.id, emoji: '❤️' })
+    if (error) { alert('Não foi possível curtir: ' + error.message); return }
     await carregarPosts()
   }
 
   async function deletarPost(postId) {
     if (!confirm('Excluir este post?')) return
-    await supabase.from('feed_posts').delete().eq('id', postId)
+    const { error } = await supabase.from('feed_posts').delete().eq('id', postId)
+    if (error) { alert('Não foi possível excluir: ' + error.message); return }
+    await carregarPosts()
   }
 
   function toggleComentarios(postId) {
@@ -158,7 +154,8 @@ export default function Feed() {
   }
 
   async function deletarComentario(comentarioId) {
-    await supabase.from('feed_comentarios').delete().eq('id', comentarioId)
+    const { error } = await supabase.from('feed_comentarios').delete().eq('id', comentarioId)
+    if (error) { alert('Não foi possível excluir: ' + error.message); return }
     await carregarPosts()
   }
 
@@ -168,7 +165,9 @@ export default function Feed() {
     const pos = e.target.selectionStart
     setCursorPos(pos)
     const antes = val.slice(0, pos)
-    const match = antes.match(/@(\w*)$/)
+    // Inclui acentos (À-ÿ) — só \w perdia o filtro assim que a pessoa
+    // digitava "ã", "ç" etc., que é a maioria dos nomes reais do app.
+    const match = antes.match(/@([\wÀ-ÖØ-öø-ÿ]*)$/)
     if (match) {
       setMencaoAtiva(true)
       setFiltroBusca(match[1])
@@ -181,7 +180,7 @@ export default function Feed() {
   function inserirMencao(nome) {
     const antes = texto.slice(0, cursorPos)
     const depois = texto.slice(cursorPos)
-    const novoTexto = antes.replace(/@\w*$/, '@' + nome + ' ') + depois
+    const novoTexto = antes.replace(/@[\wÀ-ÖØ-öø-ÿ]*$/, '@' + nome + ' ') + depois
     setTexto(novoTexto)
     setMencaoAtiva(false)
     textareaRef.current?.focus()
@@ -189,9 +188,15 @@ export default function Feed() {
 
   function renderTexto(txt) {
     if (!txt) return null
-    const parts = txt.split(/(@\w+)/g)
+    // Destaca só menções a jogadores de verdade (nome completo, com
+    // espaço/acento) — um regex \w genérico não reconhecia nome composto
+    // nem acentuado (a maioria dos nomes reais do app).
+    const nomes = jogadores.map(j => j.nome).filter(Boolean).sort((a, b) => b.length - a.length)
+    if (nomes.length === 0) return txt
+    const regex = new RegExp('(@(?:' + nomes.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + '))', 'g')
+    const parts = txt.split(regex)
     return parts.map((part, i) =>
-      part.startsWith('@')
+      part.startsWith('@') && nomes.includes(part.slice(1))
         ? <span key={i} style={{ color: '#c9a227', fontWeight: 700 }}>{part}</span>
         : <span key={i}>{part}</span>
     )
