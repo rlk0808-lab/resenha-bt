@@ -32,6 +32,17 @@ function calcJogosPorJogador(lista, nomeParaId) {
   return map
 }
 
+// Link "ver todos (N)" / "ver menos" no rodapé de um card de ranking —
+// cada card guarda seu próprio estado de expandido (chave `expandKey`).
+function VerTodos({ aberto, total, mostrando, onClick }) {
+  if (total <= mostrando) return null
+  return (
+    <div {...acessivelClique(onClick)} style={{ textAlign: 'center', padding: '10px 0 2px', fontSize: 12, color: '#7fb89a', cursor: 'pointer', fontWeight: 700 }}>
+      {aberto ? '▴ Ver menos' : `▾ Ver todos (${total})`}
+    </div>
+  )
+}
+
 export default function Stats() {
   const navigate = useNavigate()
   const [badges, setBadges] = useState([])
@@ -45,7 +56,7 @@ export default function Stats() {
   const [classificacaoTotal, setClassificacaoTotal] = useState([])
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState('badges')
-  const [mostrarTodos, setMostrarTodos] = useState(false)
+  const [expandido, setExpandido] = useState({})
   const [relatorioPeriodo, setRelatorioPeriodo] = useState('atual')
   const [ordenacao, setOrdenacao] = useState({ campo: 'pontos', dir: -1 })
 
@@ -90,6 +101,10 @@ export default function Stats() {
     carregar()
   }, [])
 
+  function toggleExpandido(key) {
+    setExpandido(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
   // Agrupa badges por tipo
   const rankingBadges = Object.entries(BADGE_INFO).map(([tipo, info]) => {
     const jogadoresComBadge = {}
@@ -99,15 +114,15 @@ export default function Stats() {
       if (!jogadoresComBadge[nome]) jogadoresComBadge[nome] = { nome, foto: b.jogadores?.foto_url, count: 0 }
       jogadoresComBadge[nome].count++
     })
-    const ranking = Object.values(jogadoresComBadge).sort((a,b) => b.count - a.count).slice(0, 3)
-    return { tipo, info, ranking }
-  }).filter(r => r.ranking.length > 0)
+    const todos = Object.values(jogadoresComBadge).sort((a,b) => b.count - a.count)
+    return { tipo, info, todos, ranking: todos.slice(0, 3) }
+  }).filter(r => r.todos.length > 0)
 
   // 🏆 Mais vitórias — sempre por jogador_id, via pontuacao + ranking_rodada
   // (src/lib/temporada.js:buscarVitoriasGerais). Nunca recalculado a partir
   // do nome em `jogos` — essa era a origem do número errado que o app
   // mostrava (vitórias de uma substituição de jogador iam pro nome errado).
-  const rankingVitorias = mostrarTodos ? vitoriasGerais : vitoriasGerais.slice(0, 10)
+  const rankingVitorias = expandido.vitorias ? vitoriasGerais : vitoriasGerais.slice(0, 10)
 
   // Função auxiliar para calcular stats por chave (por partida — sem
   // equivalente em `pontuacao`/`ranking_rodada`, então continua vindo de
@@ -129,7 +144,7 @@ export default function Stats() {
     const rankPctTodos = Object.values(pctMap).filter(j => j.total >= 8)
       .map(j => ({ ...j, pct: Math.round(j.vitorias / j.total * 100) }))
       .sort((a,b) => b.pct - a.pct)
-    const rankPct = mostrarTodos ? rankPctTodos : rankPctTodos.slice(0, 10)
+    const rankPct = expandido.pct ? rankPctTodos : rankPctTodos.slice(0, 10)
 
     // Saldo
     const saldoMap = {}
@@ -139,7 +154,7 @@ export default function Stats() {
       ;[j.dupla_b_1, j.dupla_b_2].filter(Boolean).forEach(n => { saldoMap[n] = (saldoMap[n] || 0) - saldo })
     })
     const rankSaldoTodos = Object.entries(saldoMap).map(([nome, saldo]) => ({ nome, saldo })).sort((a,b) => b.saldo - a.saldo)
-    const rankSaldo = mostrarTodos ? rankSaldoTodos : rankSaldoTodos.slice(0, 10)
+    const rankSaldo = expandido.saldo ? rankSaldoTodos : rankSaldoTodos.slice(0, 10)
 
     // Duplas
     const duplaMap = {}
@@ -161,7 +176,7 @@ export default function Stats() {
       }
     })
     const rankDuplasTodos = Object.values(duplaMap).filter(d => d.jogos >= 3).sort((a,b) => b.vitorias - a.vitorias)
-    const rankDuplas = mostrarTodos ? rankDuplasTodos : rankDuplasTodos.slice(0, 8)
+    const rankDuplas = expandido.duplas ? rankDuplasTodos : rankDuplasTodos.slice(0, 8)
 
     // Carrasco
     const carrascoMap = {}
@@ -177,13 +192,17 @@ export default function Stats() {
       })
     })
     const rankCarrascoTodos = Object.values(carrascoMap).filter(c => c.count >= 2).sort((a,b) => b.count - a.count)
-    const rankCarrasco = mostrarTodos ? rankCarrascoTodos : rankCarrascoTodos.slice(0, 8)
+    const rankCarrasco = expandido.carrasco ? rankCarrascoTodos : rankCarrascoTodos.slice(0, 8)
 
-    return { rankPct, rankSaldo, rankDuplas, rankCarrasco }
+    return {
+      rankPct, rankSaldo, rankDuplas, rankCarrasco,
+      totalPct: rankPctTodos.length, totalSaldo: rankSaldoTodos.length,
+      totalDuplas: rankDuplasTodos.length, totalCarrasco: rankCarrascoTodos.length,
+    }
   }
 
   const [chaveExtra, setChaveExtra] = useState('ouro')
-  const { rankPct, rankSaldo, rankDuplas, rankCarrasco } = calcPorChave(chaveExtra)
+  const { rankPct, rankSaldo, rankDuplas, rankCarrasco, totalPct, totalSaldo, totalDuplas, totalCarrasco } = calcPorChave(chaveExtra)
 
   // Média de pontos por rodada (da tabela pontuacao — sempre por jogador_id)
   const mediaPontos = {}
@@ -198,7 +217,7 @@ export default function Stats() {
     .filter(j => j.rodadas >= 3)
     .map(j => ({ ...j, media: Math.round(j.total / j.rodadas) }))
     .sort((a,b) => b.media - a.media)
-  const rankingMedia = mostrarTodos ? rankingMediaTodos : rankingMediaTodos.slice(0, 10)
+  const rankingMedia = expandido.media ? rankingMediaTodos : rankingMediaTodos.slice(0, 10)
 
   // Pneu — conta quantas vezes cada jogador tomou 6x0
   const pneuCount = {}
@@ -209,7 +228,7 @@ export default function Stats() {
     if (perdeuB) [j.dupla_b_1, j.dupla_b_2].filter(Boolean).forEach(n => { pneuCount[n] = (pneuCount[n] || 0) + 1 })
   })
   const pneuOrdenado = Object.entries(pneuCount).sort((a,b) => b[1]-a[1])
-  const pneuLista = mostrarTodos ? pneuOrdenado : pneuOrdenado.slice(0, 5)
+  const pneuLista = expandido.pneu ? pneuOrdenado : pneuOrdenado.slice(0, 5)
 
   // ─── Relatório Completo ────────────────────────────────────────────────
   const nomeParaId = {}
@@ -280,46 +299,37 @@ export default function Stats() {
         ))}
       </div>
 
-      {(aba === 'vitorias' || aba === 'extra') && (
-        <div
-          onClick={() => setMostrarTodos(v => !v)}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }}
-        >
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
-            {mostrarTodos ? '👀 Mostrando todos os jogadores' : 'Mostrando só o topo de cada ranking'}
-          </span>
-          <div style={{ width: 40, height: 22, borderRadius: 11, background: mostrarTodos ? '#c9a227' : 'rgba(255,255,255,0.15)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
-            <div style={{ position: 'absolute', top: 2, left: mostrarTodos ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
-          </div>
-        </div>
-      )}
-
       {aba === 'badges' && (
         <div>
-          {rankingBadges.map(({ tipo, info, ranking }) => (
-            <div key={tipo} className="card" style={{ marginBottom: 12, borderLeft: `3px solid ${info.cor}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 20 }}>{info.emoji}</span>
-                <span style={{ fontWeight: 700, fontSize: 14, color: info.cor }}>{info.label}</span>
-              </div>
-              {ranking.map((j, idx) => (
-                <div key={j.nome} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                  <div style={{ width: 20, fontSize: 12, fontWeight: 700, color: idx === 0 ? info.cor : 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
-                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
-                  </div>
-                  {j.foto ? (
-                    <img src={j.foto} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: info.cor + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: info.cor }}>
-                      {j.nome[0]}
-                    </div>
-                  )}
-                  <div style={{ flex: 1, fontSize: 13, color: '#e8f5e9' }}>{j.nome}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: info.cor }}>{j.count}x</div>
+          {rankingBadges.map(({ tipo, info, todos, ranking }) => {
+            const key = 'badge_' + tipo
+            const lista = expandido[key] ? todos : ranking
+            return (
+              <div key={tipo} className="card" style={{ marginBottom: 12, borderLeft: `3px solid ${info.cor}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 20 }}>{info.emoji}</span>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: info.cor }}>{info.label}</span>
                 </div>
-              ))}
-            </div>
-          ))}
+                {lista.map((j, idx) => (
+                  <div key={j.nome} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                    <div style={{ width: 20, fontSize: 12, fontWeight: 700, color: idx === 0 ? info.cor : 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
+                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                    </div>
+                    {j.foto ? (
+                      <img src={j.foto} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: info.cor + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: info.cor }}>
+                        {j.nome[0]}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, fontSize: 13, color: '#e8f5e9' }}>{j.nome}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: info.cor }}>{j.count}x</div>
+                  </div>
+                ))}
+                <VerTodos aberto={!!expandido[key]} total={todos.length} mostrando={3} onClick={() => toggleExpandido(key)} />
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -338,6 +348,7 @@ export default function Stats() {
               <div style={{ fontSize: 13, fontWeight: 700, color: '#fd79a8' }}>{count}x 🍩</div>
             </div>
           ))}
+          <VerTodos aberto={!!expandido.pneu} total={pneuOrdenado.length} mostrando={5} onClick={() => toggleExpandido('pneu')} />
         </div>
       )}
 
@@ -368,6 +379,7 @@ export default function Stats() {
               </div>
             </div>
           ))}
+          <VerTodos aberto={!!expandido.vitorias} total={vitoriasGerais.length} mostrando={10} onClick={() => toggleExpandido('vitorias')} />
         </div>
       )}
       {aba === 'extra' && (
@@ -395,6 +407,7 @@ export default function Stats() {
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#2ecc71' }}>{j.pct}%</div>
               </div>
             ))}
+            <VerTodos aberto={!!expandido.pct} total={totalPct} mostrando={10} onClick={() => toggleExpandido('pct')} />
           </div>
 
           {/* Saldo de games */}
@@ -407,6 +420,7 @@ export default function Stats() {
                 <div style={{ fontSize: 14, fontWeight: 700, color: j.saldo >= 0 ? '#f39c12' : '#e74c3c' }}>{j.saldo > 0 ? '+' : ''}{j.saldo}</div>
               </div>
             ))}
+            <VerTodos aberto={!!expandido.saldo} total={totalSaldo} mostrando={10} onClick={() => toggleExpandido('saldo')} />
           </div>
 
           {/* Média de pontos — sempre geral */}
@@ -421,6 +435,7 @@ export default function Stats() {
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#c9a227' }}>{j.media}pts</div>
               </div>
             ))}
+            <VerTodos aberto={!!expandido.media} total={rankingMediaTodos.length} mostrando={10} onClick={() => toggleExpandido('media')} />
           </div>
 
           {/* Duplas mais vitoriosas */}
@@ -435,6 +450,7 @@ export default function Stats() {
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#1abc9c' }}>{Math.round(d.vitorias/d.jogos*100)}%</div>
               </div>
             ))}
+            <VerTodos aberto={!!expandido.duplas} total={totalDuplas} mostrando={8} onClick={() => toggleExpandido('duplas')} />
           </div>
 
           {/* Carrasco */}
@@ -447,6 +463,7 @@ export default function Stats() {
                   <div style={{ flex: 1, fontSize: 13, color: '#e8f5e9' }}>{c.vencedor} <span style={{ color: 'rgba(255,255,255,0.3)' }}>vs</span> {c.perdedor}</div>
                 </div>
               ))}
+              <VerTodos aberto={!!expandido.carrasco} total={totalCarrasco} mostrando={8} onClick={() => toggleExpandido('carrasco')} />
             </div>
           )}
         </div>
