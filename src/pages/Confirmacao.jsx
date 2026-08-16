@@ -4,6 +4,7 @@ import { VAGAS_LISTA_PRINCIPAL, FORMATOS_RODADA } from "../lib/constants";
 import { calcularPrazoConfirmacao } from "../lib/prazo";
 import { useCountdown, formatarRestante } from "../lib/useCountdown";
 import { baixarIcs } from "../lib/calendario";
+import { enviarPush } from "../lib/notificar";
 
 export default function Confirmacao({ session }) {
   const [rodadaAtual, setRodadaAtual] = useState(null);
@@ -298,12 +299,7 @@ export default function Confirmacao({ session }) {
     try {
       const { data: subs } = await supabase.from("push_subscriptions")
         .select("endpoint, p256dh, auth").eq("jogador_id", jogadorId);
-      if (!subs || subs.length === 0) return;
-      await fetch("/api/send-notification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptions: subs, title: titulo, body: corpo, url: "/confirmacao" }),
-      });
+      await enviarPush({ subscriptions: subs, title: titulo, body: corpo, url: "/confirmacao" });
     } catch (e) { console.error("Erro ao notificar confirmação:", e); }
   }
 
@@ -311,16 +307,11 @@ export default function Confirmacao({ session }) {
     try {
       const { data: subs } = await supabase.from("push_subscriptions")
         .select("endpoint, p256dh, auth").eq("jogador_id", jogadorId);
-      if (!subs || subs.length === 0) return;
-      await fetch("/api/send-notification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subscriptions: subs,
-          title: "Vaga aberta! 🎾",
-          body: "Você foi promovido da lista de espera para a lista principal.",
-          url: "/confirmacao",
-        }),
+      await enviarPush({
+        subscriptions: subs,
+        title: "Vaga aberta! 🎾",
+        body: "Você foi promovido da lista de espera para a lista principal.",
+        url: "/confirmacao",
       });
     } catch (e) { console.error("Erro ao notificar promovido:", e); }
   }

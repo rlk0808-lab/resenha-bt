@@ -5,6 +5,7 @@
   import { acessivelClique } from "../lib/a11y";
   import { gerarSorteioQualify } from "../lib/sorteioQualify";
   import { proximoSabadoISO } from "../lib/prazo";
+  import { enviarPush } from "../lib/notificar";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
 
@@ -529,12 +530,7 @@
         let query = supabase.from("push_subscriptions").select("endpoint, p256dh, auth");
         if (jogadorIds && jogadorIds.length > 0) query = query.in("jogador_id", jogadorIds);
         const { data: subs } = await query;
-        if (!subs || subs.length === 0) return;
-        await fetch("/api/send-notification", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subscriptions: subs, title: titulo, body: corpo, url })
-        });
+        await enviarPush({ subscriptions: subs, title: titulo, body: corpo, url });
       } catch (e) { console.error("Erro notificacao:", e); }
     }
     // ─── PONTUAÇÃO ───────────────────────────────────────────────────────────
@@ -1300,9 +1296,7 @@
         const jogId = c.jogadores?.id || c.jogador_id;
         if (jogId) {
           const { data: sub } = await supabase.from("push_subscriptions").select("endpoint, p256dh, auth").eq("jogador_id", jogId);
-          if (sub && sub.length > 0) {
-            await fetch("/api/send-notification", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscriptions: sub, title: "Voce entrou na lista!", body: "Voce foi promovido da lista de espera para a lista principal. Ate sabado!", url: "/confirmacao" }) });
-          }
+          await enviarPush({ subscriptions: sub, title: "Voce entrou na lista!", body: "Voce foi promovido da lista de espera para a lista principal. Ate sabado!", url: "/confirmacao" });
         }
       }
       mostrarMensagem(`✅ ${promover.length} jogador(es) promovido(s) da lista de espera!`);
