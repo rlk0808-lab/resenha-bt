@@ -20,33 +20,33 @@ export default function Cadastro() {
   });
 
   async function validarToken() {
-    const { data, error } = await supabase
-      .from("convites")
-      .select("*")
-      .eq("token", token)
-      .limit(1);
+    // validar_convite (RPC) só devolve válido/motivo, nunca a linha
+    // inteira — antes o app fazia select direto em `convites`, que
+    // dependia de uma policy pública deixando qualquer visitante listar
+    // TODOS os convites (token + email). Ver migration
+    // 20260816160000_fecha_convites.sql.
+    const { data, error } = await supabase.rpc("validar_convite", { p_token: token });
+    const resultado = data?.[0];
 
-    if (error || !data || data.length === 0) {
-      setMensagemErro("Convite não encontrado. Solicite um novo convite ao organizador.");
+    if (error || !resultado) {
+      setMensagemErro("Não foi possível validar o convite. Tente novamente.");
       setEtapa("erro");
       return;
     }
 
-    const conviteData = data[0];
+    if (resultado.valido) {
+      setEtapa("formulario");
+      return;
+    }
 
-    if (conviteData.usado) {
+    if (resultado.motivo === "usado") {
       setMensagemErro("Este convite já foi utilizado.");
-      setEtapa("erro");
-      return;
-    }
-
-    if (new Date(conviteData.expires_at) < new Date()) {
+    } else if (resultado.motivo === "expirado") {
       setMensagemErro("Este convite expirou. Solicite um novo convite ao organizador.");
-      setEtapa("erro");
-      return;
+    } else {
+      setMensagemErro("Convite não encontrado. Solicite um novo convite ao organizador.");
     }
-
-    setEtapa("formulario");
+    setEtapa("erro");
   }
 
   useEffect(() => {
