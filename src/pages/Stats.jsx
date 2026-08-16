@@ -372,6 +372,12 @@ export default function Stats() {
                   <div style={{ fontSize: 10, color: '#8e9eab' }}>Prata</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#8e9eab' }}>{j.vitoriasPrata}V</div>
                 </div>
+                {j.vitoriasOutras > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, color: '#7fb89a' }}>Especial</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#7fb89a' }}>{j.vitoriasOutras}V</div>
+                  </div>
+                )}
                 <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: 8 }}>
                   <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Total</div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#2ecc71' }}>{j.total}V</div>

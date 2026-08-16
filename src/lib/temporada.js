@@ -114,11 +114,17 @@ export async function buscarVitoriasGerais() {
 
   const porJogador = {}
   for (const p of (pontuacaoRows || [])) {
-    if (!porJogador[p.jogador_id]) porJogador[p.jogador_id] = { vitoriasOuro: 0, vitoriasPrata: 0, pontos: 0, rodadasJogadas: 0 }
+    if (!porJogador[p.jogador_id]) porJogador[p.jogador_id] = { vitoriasOuro: 0, vitoriasPrata: 0, vitoriasOutras: 0, pontos: 0, rodadasJogadas: 0 }
     const acc = porJogador[p.jogador_id]
     const chave = chavePorLinha[p.jogador_id + '_' + p.rodada_id]
+    // Rodadas especiais usam chave "time_a"/"time_b" (ou vêm sem linha em
+    // ranking_rodada) — não são nem Ouro nem Prata. Cair no "else" de um
+    // if(chave==='ouro') as jogava tudo dentro de Prata (bug: inflava a
+    // Prata de quem jogou especial, ex: Ricardo aparecendo com 8V na
+    // Prata sendo que só tinha 3 — as outras 5 eram de 2 rodadas especiais).
     if (chave === 'ouro') acc.vitoriasOuro += p.vitorias || 0
-    else acc.vitoriasPrata += p.vitorias || 0
+    else if (chave === 'prata') acc.vitoriasPrata += p.vitorias || 0
+    else acc.vitoriasOutras += p.vitorias || 0
     acc.pontos += p.pontos || 0
     acc.rodadasJogadas += 1
   }
@@ -129,8 +135,8 @@ export async function buscarVitoriasGerais() {
       const acc = porJogador[j.id]
       return {
         id: j.id, nome: j.nome, foto: j.foto_url,
-        vitoriasOuro: acc.vitoriasOuro, vitoriasPrata: acc.vitoriasPrata,
-        total: acc.vitoriasOuro + acc.vitoriasPrata,
+        vitoriasOuro: acc.vitoriasOuro, vitoriasPrata: acc.vitoriasPrata, vitoriasOutras: acc.vitoriasOutras,
+        total: acc.vitoriasOuro + acc.vitoriasPrata + acc.vitoriasOutras,
         pontos: acc.pontos, rodadasJogadas: acc.rodadasJogadas,
       }
     })
