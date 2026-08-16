@@ -257,40 +257,54 @@ export default function Confirmacao({ session }) {
 
     // REGRA: quem não jogou a última rodada NORMAL → sempre espera
     // Quem jogou apenas a especial (extras) → espera com prioridade
-    let status;
-    if (listaFechada()) {
-      status = "espera"; // Sorteio já feito — entra apenas na espera
-    } else if (!jogouUltimaRodada) {
-      status = "espera";
-    } else if (jogouUltimaRodada === "especial") {
-      status = "espera";
-    } else if (listaConfirmados.length < LIMITE_PRINCIPAL && dentroPrazo) {
-      status = "confirmado";
-    } else {
-      status = "espera";
-    }
+    // Só a checagem de vaga disputada (contagem x limite) precisa ser
+    // atômica — isso fica por conta da função `confirmar_presenca` no
+    // banco, travada por rodada, pra dois jogadores confirmando ao mesmo
+    // tempo não estourarem a última vaga (ver migration
+    // 20260816140000_confirma_presenca_atomica.sql).
+    const elegivelPrincipal = !listaFechada() && jogouUltimaRodada === true && dentroPrazo;
 
-    const { error } = await supabase.from("confirmacoes").insert({
-      jogador_id: jogador.id, rodada_id: rodadaAtual.id, status,
+    const { data: status, error } = await supabase.rpc("confirmar_presenca", {
+      p_rodada_id: rodadaAtual.id, p_limite: LIMITE_PRINCIPAL, p_elegivel_principal: elegivelPrincipal,
     });
 
     if (error) {
       mostrarMensagem("Erro ao confirmar: " + error.message, "erro");
     } else {
+      const numeroRodada = rodadaAtual.numero;
       if (status === "confirmado") {
         mostrarMensagem("✅ Presença confirmada na lista principal!", "sucesso", true);
         setConfirmacaoSucesso(true);
+        notificarConfirmacaoPropria(jogador.id, "Presença confirmada! ✅",
+          `Você está na lista principal da Rodada ${numeroRodada}. Até lá!`);
       } else if (!jogouUltimaRodada) {
         mostrarMensagem("⏳ Você não jogou a última rodada. Entrou na lista de espera.", "info", true);
         setConfirmacaoSucesso(true);
+        notificarConfirmacaoPropria(jogador.id, "Você entrou na lista de espera",
+          `Rodada ${numeroRodada}: como você não jogou a última rodada, entrou na espera. Avisamos se surgir vaga.`);
       } else {
         mostrarMensagem("⏳ Prazo encerrado. Você entrou na lista de espera.", "info", true);
         setConfirmacaoSucesso(true);
+        notificarConfirmacaoPropria(jogador.id, "Você entrou na lista de espera",
+          `Rodada ${numeroRodada}: o prazo da lista principal encerrou. Avisamos se surgir vaga.`);
       }
       await carregarConfirmacoes(rodadaAtual.id, jogador);
       setTimeout(() => { document.getElementById('lista-confirmados')?.scrollIntoView({ behavior: 'smooth' }); }, 300);
     }
     setProcessando(false);
+  }
+
+  async function notificarConfirmacaoPropria(jogadorId, titulo, corpo) {
+    try {
+      const { data: subs } = await supabase.from("push_subscriptions")
+        .select("endpoint, p256dh, auth").eq("jogador_id", jogadorId);
+      if (!subs || subs.length === 0) return;
+      await fetch("/api/send-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscriptions: subs, title: titulo, body: corpo, url: "/confirmacao" }),
+      });
+    } catch (e) { console.error("Erro ao notificar confirmação:", e); }
   }
 
   async function notificarPromovido(jogadorId) {

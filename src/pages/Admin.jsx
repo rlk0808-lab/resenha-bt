@@ -687,7 +687,11 @@
       }
     }
     if (badges.length > 0) {
-      await supabase.from("badges").upsert(badges, { onConflict: "jogador_id,rodada_id,tipo", ignoreDuplicates: true });
+      const { error } = await supabase.from("badges").upsert(badges, { onConflict: "jogador_id,rodada_id,tipo", ignoreDuplicates: true });
+      if (error) {
+        console.error("Erro ao gravar badges:", error);
+        mostrarMensagem("Pontuação salva, mas houve erro ao gravar os badges da rodada: " + error.message, "erro");
+      }
     }
   }
 
@@ -733,11 +737,16 @@
         if (!jogador) { erros.push(`Não encontrado: ${j.nome}`); continue; }
         const { data: existentes } = await supabase.from("pontuacao").select("id").eq("jogador_id", jogador.id).eq("rodada_id", rodadaSelecionada.id);
         const existente = existentes?.[0];
-        if (existente) { await supabase.from("pontuacao").update({ pontos: j.ptosLiga, vitorias: j.vitorias }).eq("id", existente.id); }
-        else { await supabase.from("pontuacao").insert({ jogador_id: jogador.id, rodada_id: rodadaSelecionada.id, pontos: j.ptosLiga, vitorias: j.vitorias }); }
+        const { error } = existente
+          ? await supabase.from("pontuacao").update({ pontos: j.ptosLiga, vitorias: j.vitorias }).eq("id", existente.id)
+          : await supabase.from("pontuacao").insert({ jogador_id: jogador.id, rodada_id: rodadaSelecionada.id, pontos: j.ptosLiga, vitorias: j.vitorias });
+        if (error) erros.push(`Pontuação de ${j.nome}: ${error.message}`);
       }
 
-      if (erros.length > 0) { mostrarMensagem("Erros: " + erros.join(", "), "erro"); setCalculando(false); return; }
+      // Aborta ANTES de mexer em chave/ranking/status da rodada — se a
+      // pontuação de alguém não gravou, o resto (subida/descida, ranking,
+      // "rodada finalizada") ficaria baseado em dado incompleto.
+      if (erros.length > 0) { mostrarMensagem("Erros ao salvar pontuação — nada mais foi gravado: " + erros.join(", "), "erro"); setCalculando(false); return; }
 
       // Todo jogador ativo que não jogou esta rodada (confirmado ou não) grava
       // pontos:0 explicitamente — falta é de quem não foi, não só de quem
@@ -750,7 +759,8 @@
         const { data: existentes } = await supabase.from("pontuacao").select("id")
           .eq("jogador_id", jog.id).eq("rodada_id", rodadaSelecionada.id);
         if (!existentes || existentes.length === 0) {
-          await supabase.from("pontuacao").insert({ jogador_id: jog.id, rodada_id: rodadaSelecionada.id, pontos: 0, vitorias: 0 });
+          const { error } = await supabase.from("pontuacao").insert({ jogador_id: jog.id, rodada_id: rodadaSelecionada.id, pontos: 0, vitorias: 0 });
+          if (error) erros.push(`Pontos 0 de ${jog.nome}: ${error.message}`);
         }
       }
 
@@ -760,7 +770,8 @@
           const jogador = jogadores.find(jg => jg.nome === j.nome);
           if (!jogador) continue;
           await supabase.from("ranking_rodada").delete().eq("rodada_id", rodadaSelecionada.id).eq("jogador_id", jogador.id);
-          await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave: j.time || "time_a", posicao: j.posicao, pontos_liga: j.ptosLiga });
+          const { error } = await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave: j.time || "time_a", posicao: j.posicao, pontos_liga: j.ptosLiga });
+          if (error) erros.push(`Ranking de ${j.nome}: ${error.message}`);
         }
       } else {
         for (const chave of ["ouro", "prata"]) {
@@ -768,7 +779,8 @@
             const jogador = jogadores.find(jg => jg.nome === j.nome);
             if (!jogador) continue;
             await supabase.from("ranking_rodada").delete().eq("rodada_id", rodadaSelecionada.id).eq("jogador_id", jogador.id);
-            await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave, posicao: j.posicao, pontos_liga: j.ptosLiga });
+            const { error } = await supabase.from("ranking_rodada").insert({ rodada_id: rodadaSelecionada.id, jogador_id: jogador.id, chave, posicao: j.posicao, pontos_liga: j.ptosLiga });
+            if (error) erros.push(`Ranking de ${j.nome}: ${error.message}`);
           }
         }
       }
@@ -777,12 +789,12 @@
         // 1. Os 3 últimos da Ouro descem
         for (const nome of (rankingPreview.ouro || []).slice(-3).map(j => j.nome)) {
           const jog = jogadores.find(jg => jg.nome === nome);
-          if (jog) await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
+          if (jog) { const { error } = await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id); if (error) erros.push(`Descida de ${nome}: ${error.message}`); }
         }
         // 2. Os 3 primeiros da Prata sobem
         for (const nome of (rankingPreview.prata || []).slice(0, 3).map(j => j.nome)) {
           const jog = jogadores.find(jg => jg.nome === nome);
-          if (jog) await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jog.id);
+          if (jog) { const { error } = await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jog.id); if (error) erros.push(`Subida de ${nome}: ${error.message}`); }
         }
         // 3. Jogadores da Ouro que NÃO jogaram esta rodada → descem para Prata
         const nomesQueJogaram = new Set([
@@ -793,14 +805,26 @@
           jg => jg.chave === "ouro" && !nomesQueJogaram.has(jg.nome)
         );
         for (const jog of jogadoresOuroQueFaltaram) {
-          await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
+          const { error } = await supabase.from("jogadores").update({ chave: "prata" }).eq("id", jog.id);
+          if (error) erros.push(`Rebaixamento de ${jog.nome}: ${error.message}`);
         }
         if (jogadoresOuroQueFaltaram.length > 0) {
           console.log("Rebaixados por falta:", jogadoresOuroQueFaltaram.map(j => j.nome));
         }
       }
 
-      await supabase.from("rodadas").update({ status: "finalizada" }).eq("id", rodadaSelecionada.id);
+      if (erros.length > 0) {
+        mostrarMensagem("Pontuação salva, mas houve erros no ranking/chaves — confira manualmente: " + erros.join(", "), "erro");
+        setCalculando(false);
+        return;
+      }
+
+      const { error: erroFinaliza } = await supabase.from("rodadas").update({ status: "finalizada" }).eq("id", rodadaSelecionada.id);
+      if (erroFinaliza) {
+        mostrarMensagem("Pontuação e ranking salvos, mas não consegui marcar a rodada como finalizada: " + erroFinaliza.message, "erro");
+        setCalculando(false);
+        return;
+      }
 
       const { data: proximaExistente } = await supabase.from("rodadas").select("id").eq("status", "proxima").limit(1);
       if (!proximaExistente || proximaExistente.length === 0) {

@@ -13,7 +13,8 @@ export default function Home() {
   const navigate = useNavigate()
   const [proximaRodada, setProximaRodada] = useState(null)
   const [rodadaAtual, setRodadaAtual] = useState(null)
-  const TOTAL_RODADAS = 12
+  const [ligaAtualNome, setLigaAtualNome] = useState(null)
+  const [totalRodadasLiga, setTotalRodadasLiga] = useState(0)
   const [confirmado, setConfirmado] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [confirmacaoId, setConfirmacaoId] = useState(null)
@@ -49,6 +50,12 @@ export default function Home() {
         // Próxima rodada = proxima ou ativa
         const proxima = todasRodadas.find(r => r.status === 'proxima') || ativa || null
         setProximaRodada(proxima)
+
+        // Liga atual e total de rodadas dela — evita texto/progresso fixo
+        // que ficaria errado assim que uma temporada nova começar
+        const liga = atual?.liga || proxima?.liga || todasRodadas[todasRodadas.length - 1]?.liga || null
+        setLigaAtualNome(liga)
+        setTotalRodadasLiga(liga ? todasRodadas.filter(r => r.liga === liga).length : 0)
 
         if (proxima && user) {
           const { data: jogadores } = await supabase
@@ -131,7 +138,7 @@ export default function Home() {
   }
 
   const rodadasFinalizadas = rodadaAtual?.numero || 0
-  const progresso = (rodadasFinalizadas / TOTAL_RODADAS) * 100
+  const progresso = totalRodadasLiga > 0 ? (rodadasFinalizadas / totalRodadasLiga) * 100 : 0
   const restantePrazo = useCountdown(calcularPrazoConfirmacao(proximaRodada))
 
   if (loading) return (
@@ -153,7 +160,7 @@ export default function Home() {
           lineHeight: 1
         }}>BOM DIA, CAMPEÃO!</h1>
         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', marginTop: '6px' }}>
-          Torneio de Inverno 2026 · Liga em andamento
+          {ligaAtualNome || 'Liga'} · Liga em andamento
         </p>
       </div>
 
@@ -290,14 +297,14 @@ export default function Home() {
               fontSize: '12px', color: 'rgba(255,255,255,0.4)',
               letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px'
             }}>Liga</div>
-            <div style={{ fontWeight: 700 }}>Torneio de Inverno 2026</div>
+            <div style={{ fontWeight: 700 }}>{ligaAtualNome || '—'}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{
               fontSize: '12px', color: 'rgba(255,255,255,0.4)',
               letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px'
             }}>Rodadas</div>
-            <div style={{ fontWeight: 700 }}>{rodadaAtual?.numero || 0} / {TOTAL_RODADAS}</div>
+            <div style={{ fontWeight: 700 }}>{rodadaAtual?.numero || 0} / {totalRodadasLiga || '—'}</div>
           </div>
         </div>
         <div style={{
@@ -443,7 +450,7 @@ export default function Home() {
           <span style={{ fontSize: 28 }}>📋</span>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#c9a227' }}>Regulamento</div>
-            <div style={{ fontSize: 12, color: '#7fb89a', marginTop: 2 }}>Torneio de Inverno 2026</div>
+            <div style={{ fontSize: 12, color: '#7fb89a', marginTop: 2 }}>{ligaAtualNome || 'Liga atual'}</div>
           </div>
         </div>
         <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 20 }}>›</span>
