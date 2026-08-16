@@ -22,9 +22,8 @@ export async function buscarClassificacaoTemporadaAtual({ comDescarte = false } 
   if (!liga) return { liga: null, lista: [] }
 
   const rodadas = await buscarRodadasDaLiga(liga)
-  const rodadaIds = comDescarte
-    ? rodadas.filter(r => r.status === 'finalizada').map(r => r.id)
-    : rodadas.map(r => r.id)
+  const rodadasFinalizadas = rodadas.filter(r => r.status === 'finalizada')
+  const rodadaIds = comDescarte ? rodadasFinalizadas.map(r => r.id) : rodadas.map(r => r.id)
 
   const [{ data: jogadoresRows }, { data: pontuacaoRows }] = await Promise.all([
     supabase.from('jogadores').select('id, nome, chave, foto_url'),
@@ -42,16 +41,23 @@ export async function buscarClassificacaoTemporadaAtual({ comDescarte = false } 
   const resultado = []
   for (const j of (jogadoresRows || [])) {
     const pontuacoes = porJogador[j.id] || []
+    if (pontuacoes.length === 0) continue // nunca participou dessa liga, nem uma vez
 
     if (comDescarte) {
-      if (pontuacoes.length === 0) continue // precisa ter jogado ao menos uma rodada finalizada
-      const consideradas = [...pontuacoes].sort((a, b) => a.pontos - b.pontos).slice(2)
-      if (consideradas.length === 0) continue // só jogou 1-2 rodadas, ambas descartadas
+      // Quem já jogou pelo menos 1 rodada da liga entra na conta de TODA
+      // rodada finalizada da liga — mesmo as de antes de ter se
+      // cadastrado, que valem pontos:0 e concorrem normalmente pra serem
+      // uma das 2 descartadas (mesma regra de quem faltou já cadastrado).
+      const porRodadaId = {}
+      for (const p of pontuacoes) porRodadaId[p.rodada_id] = p
+      const todasAsRodadas = rodadasFinalizadas.map(r => porRodadaId[r.id] || { pontos: 0, vitorias: 0 })
+      if (todasAsRodadas.length <= 2) continue // liga com 2 ou menos rodadas — nada sobra pra contar
+      const consideradas = [...todasAsRodadas].sort((a, b) => a.pontos - b.pontos).slice(2)
       resultado.push({
         id: j.id, nome: j.nome, chave: j.chave, foto_url: j.foto_url,
         pontos: consideradas.reduce((s, p) => s + p.pontos, 0),
         vitorias: consideradas.reduce((s, p) => s + p.vitorias, 0),
-        rodadas_jogadas: consideradas.length,
+        rodadas_jogadas: pontuacoes.length, // participação real — não conta as rodadas fantasma
       })
     } else {
       resultado.push({

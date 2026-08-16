@@ -39,24 +39,31 @@ export default function DetalhadoRodadas({ onFechar }) {
 
   // Uma linha por jogador que tem pelo menos uma pontuação nessa liga.
   // Marca as 2 piores rodadas de cada um como "descartadas" (mesma regra de src/lib/temporada.js).
+  //
+  // Quem já jogou pelo menos 1 rodada da liga entra na conta de TODA
+  // rodada dela — inclusive as de antes de ter se cadastrado, que valem
+  // pontos:0 e concorrem normalmente a serem uma das 2 descartadas (em
+  // vez de "não existirem" e forçar o descarte a cair só sobre rodadas
+  // que o jogador realmente disputou).
   const linhas = jogadores.map(j => {
     const porRodada = {}
     for (const r of rodadas) {
       const row = pontuacao.find(p => p.jogador_id === j.id && p.rodada_id === r.id)
       porRodada[r.numero] = row ? row.pontos : null
     }
-    const jogadas = rodadas.map(r => ({ numero: r.numero, pts: porRodada[r.numero] })).filter(x => x.pts !== null)
-    const total = jogadas.reduce((s, x) => s + x.pts, 0)
+    const jogou = Object.values(porRodada).some(v => v !== null)
+    const total = Object.values(porRodada).reduce((s, v) => s + (v || 0), 0)
+    const todasAsRodadas = rodadas.map(r => ({ numero: r.numero, pts: porRodada[r.numero] ?? 0 }))
 
     const descartadas = new Set()
     let totalComDescarte = total
-    if (jogadas.length > 2) {
-      const piores = [...jogadas].sort((a, b) => a.pts - b.pts).slice(0, 2)
+    if (jogou && todasAsRodadas.length > 2) {
+      const piores = [...todasAsRodadas].sort((a, b) => a.pts - b.pts).slice(0, 2)
       piores.forEach(p => descartadas.add(p.numero))
       totalComDescarte = total - piores.reduce((s, p) => s + p.pts, 0)
     }
 
-    return { jogador: j, porRodada, total, totalComDescarte, descartadas, jogou: jogadas.length > 0 }
+    return { jogador: j, porRodada, total, totalComDescarte, descartadas, jogou }
   }).filter(l => l.jogou).sort((a, b) => b.total - a.total)
 
   function exportarCSV() {
