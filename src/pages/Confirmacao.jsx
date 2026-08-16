@@ -297,18 +297,14 @@ export default function Confirmacao({ session }) {
 
   async function notificarConfirmacaoPropria(jogadorId, titulo, corpo) {
     try {
-      const { data: subs } = await supabase.from("push_subscriptions")
-        .select("endpoint, p256dh, auth").eq("jogador_id", jogadorId);
-      await enviarPush({ subscriptions: subs, title: titulo, body: corpo, url: "/confirmacao" });
+      await enviarPush({ jogadorIds: [jogadorId], title: titulo, body: corpo, url: "/confirmacao" });
     } catch (e) { console.error("Erro ao notificar confirmação:", e); }
   }
 
   async function notificarPromovido(jogadorId) {
     try {
-      const { data: subs } = await supabase.from("push_subscriptions")
-        .select("endpoint, p256dh, auth").eq("jogador_id", jogadorId);
       await enviarPush({
-        subscriptions: subs,
+        jogadorIds: [jogadorId],
         title: "Vaga aberta! 🎾",
         body: "Você foi promovido da lista de espera para a lista principal.",
         url: "/confirmacao",

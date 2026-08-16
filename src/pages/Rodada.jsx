@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { baixarIcs } from '../lib/calendario'
 import { acessivelClique } from '../lib/a11y'
+import { enviarPush } from '../lib/notificar'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -580,20 +581,12 @@ export default function Rodada() {
         const nomesMencionados = mencoes.map(m => m.slice(1).trim())
         const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
         if (jogs && jogs.length > 0) {
-          const ids = jogs.map(j => j.id)
-          const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
-          if (subs && subs.length > 0) {
-            await fetch('/api/send-notification', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                subscriptions: subs,
-                title: jogadorAtual.nome + ' te mencionou!',
-                body: texto,
-                url: '/rodada'
-              })
-            })
-          }
+          await enviarPush({
+            jogadorIds: jogs.map(j => j.id),
+            title: jogadorAtual.nome + ' te mencionou!',
+            body: texto,
+            url: '/rodada',
+          })
         }
       }
     }

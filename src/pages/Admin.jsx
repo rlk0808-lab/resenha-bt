@@ -527,10 +527,7 @@
 
   async function enviarNotificacao(titulo, corpo, url, jogadorIds) {
       try {
-        let query = supabase.from("push_subscriptions").select("endpoint, p256dh, auth");
-        if (jogadorIds && jogadorIds.length > 0) query = query.in("jogador_id", jogadorIds);
-        const { data: subs } = await query;
-        await enviarPush({ subscriptions: subs, title: titulo, body: corpo, url });
+        await enviarPush({ jogadorIds, title: titulo, body: corpo, url });
       } catch (e) { console.error("Erro notificacao:", e); }
     }
     // ─── PONTUAÇÃO ───────────────────────────────────────────────────────────
@@ -1295,8 +1292,7 @@
         await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", c.id);
         const jogId = c.jogadores?.id || c.jogador_id;
         if (jogId) {
-          const { data: sub } = await supabase.from("push_subscriptions").select("endpoint, p256dh, auth").eq("jogador_id", jogId);
-          await enviarPush({ subscriptions: sub, title: "Voce entrou na lista!", body: "Voce foi promovido da lista de espera para a lista principal. Ate sabado!", url: "/confirmacao" });
+          await enviarPush({ jogadorIds: [jogId], title: "Voce entrou na lista!", body: "Voce foi promovido da lista de espera para a lista principal. Ate sabado!", url: "/confirmacao" });
         }
       }
       mostrarMensagem(`✅ ${promover.length} jogador(es) promovido(s) da lista de espera!`);

@@ -98,10 +98,8 @@ export default function Feed() {
     const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
     const jogs = (todosJogs || []).filter(j => textoFinal.includes('@' + j.nome))
     if (jogs.length > 0) {
-      const ids = jogs.map(j => j.id)
-      const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').in('jogador_id', ids)
       await enviarPush({
-        subscriptions: subs,
+        jogadorIds: jogs.map(j => j.id),
         title: jogadorAtual.nome + ' te mencionou no Feed!',
         body: textoFinal,
         url: '/feed',

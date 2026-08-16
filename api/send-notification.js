@@ -7,7 +7,16 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY
 )
 
-const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY)
+// Cliente com a anon key só pra validar o token de quem está chamando.
+const supabaseAuth = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY)
+
+// Cliente com a service_role key — só existe aqui no servidor, nunca no
+// bundle do front (por isso sem prefixo VITE_). Bypassa RLS de propósito:
+// é o único jeito de ler o push_subscriptions de OUTRO jogador (ex:
+// notificar quem foi promovido da lista de espera) sem deixar o
+// navegador de qualquer jogador ler o endpoint/chaves de notificação de
+// todo mundo, que era o problema antes.
+const supabaseAdmin = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -19,11 +28,20 @@ export default async function handler(req, res) {
   const authHeader = req.headers.authorization || ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
   if (!token) return res.status(401).json({ error: 'Não autenticado' })
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
   if (authError || !user) return res.status(401).json({ error: 'Sessão inválida' })
 
-  const { subscriptions, title, body, url } = req.body
-  if (!subscriptions || !title) return res.status(400).json({ error: 'Dados inválidos' })
+  // jogadorIds ausente/vazio = broadcast pra todo mundo inscrito (usado
+  // em "lista aberta"/"sorteio publicado"). Com jogadorIds, notifica só
+  // esses jogadores específicos.
+  const { jogadorIds, title, body, url } = req.body
+  if (!title) return res.status(400).json({ error: 'Dados inválidos' })
+
+  let query = supabaseAdmin.from('push_subscriptions').select('endpoint, p256dh, auth')
+  if (Array.isArray(jogadorIds) && jogadorIds.length > 0) query = query.in('jogador_id', jogadorIds)
+  const { data: subscriptions, error: subError } = await query
+  if (subError) return res.status(500).json({ error: subError.message })
+  if (!subscriptions || subscriptions.length === 0) return res.json({ enviados: 0, total: 0 })
 
   const payload = JSON.stringify({ title, body, url: url || '/' })
   const results = await Promise.allSettled(
