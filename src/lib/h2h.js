@@ -1,7 +1,17 @@
+// Identifica se um jogador é o ocupante de uma posição da dupla num jogo.
+// Casa preferencialmente por jogador_id (dupla_x_id, ver migration
+// 20260816120000_jogos_jogador_id.sql) — imune a nome duplicado/editado
+// depois. Jogos antigos, sem essas colunas preenchidas, caem no nome.
+export function ehJogador(jogo, posicao, jogadorId, jogadorNome) {
+  const id = jogo[posicao + '_id']
+  if (id != null && jogadorId != null) return id === jogadorId
+  return jogo[posicao] === jogadorNome
+}
+
 // Calcula parceiros, adversários, melhor dupla e sequência a partir de um
 // conjunto de jogos já finalizados (com placar) de um jogador específico.
 // Compartilhado entre Perfil.jsx e PerfilJogador.jsx.
-export function calcularStatsDeJogos(jogosComPlacar, nomePerfil) {
+export function calcularStatsDeJogos(jogosComPlacar, nomePerfil, idPerfil) {
   if (!jogosComPlacar || jogosComPlacar.length === 0) {
     return { jogos: [], parceiros: [], adversarios: [], melhorDupla: null, sequencia: null }
   }
@@ -9,11 +19,11 @@ export function calcularStatsDeJogos(jogosComPlacar, nomePerfil) {
   const statsParc = {}
   const statsAdv = {}
   for (const jogo of jogosComPlacar) {
-    const estouNoA = jogo.dupla_a_1 === nomePerfil || jogo.dupla_a_2 === nomePerfil
+    const estouNoA = ehJogador(jogo, 'dupla_a_1', idPerfil, nomePerfil) || ehJogador(jogo, 'dupla_a_2', idPerfil, nomePerfil)
     const euVenci = estouNoA ? jogo.placar_a > jogo.placar_b : jogo.placar_b > jogo.placar_a
     const parceiro = estouNoA
-      ? (jogo.dupla_a_1 === nomePerfil ? jogo.dupla_a_2 : jogo.dupla_a_1)
-      : (jogo.dupla_b_1 === nomePerfil ? jogo.dupla_b_2 : jogo.dupla_b_1)
+      ? (ehJogador(jogo, 'dupla_a_1', idPerfil, nomePerfil) ? jogo.dupla_a_2 : jogo.dupla_a_1)
+      : (ehJogador(jogo, 'dupla_b_1', idPerfil, nomePerfil) ? jogo.dupla_b_2 : jogo.dupla_b_1)
     if (parceiro) {
       if (!statsParc[parceiro]) statsParc[parceiro] = { jogos: 0, vitorias: 0 }
       statsParc[parceiro].jogos++
@@ -53,7 +63,7 @@ export function calcularStatsDeJogos(jogosComPlacar, nomePerfil) {
   })
   let seq = 0, tipo = null
   for (const jogo of jogosOrdenados) {
-    const estouNoA = jogo.dupla_a_1 === nomePerfil || jogo.dupla_a_2 === nomePerfil
+    const estouNoA = ehJogador(jogo, 'dupla_a_1', idPerfil, nomePerfil) || ehJogador(jogo, 'dupla_a_2', idPerfil, nomePerfil)
     const venci = estouNoA ? jogo.placar_a > jogo.placar_b : jogo.placar_b > jogo.placar_a
     const t = venci ? 'V' : 'D'
     if (tipo === null) { tipo = t; seq = 1 }

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { acessivelClique } from '../lib/a11y'
-import { calcularStatsDeJogos, DADOS_H2H_VAZIOS } from '../lib/h2h'
+import { calcularStatsDeJogos, DADOS_H2H_VAZIOS, ehJogador } from '../lib/h2h'
 import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
 import { BADGE_INFO } from '../lib/badges'
 
@@ -65,12 +65,12 @@ export default function PerfilJogador() {
     setJogadoresMap(mapa)
 
     const { data: jogos } = await supabase.from('jogos').select('*')
-      .or(`dupla_a_1.eq.${jogadorData.nome},dupla_a_2.eq.${jogadorData.nome},dupla_b_1.eq.${jogadorData.nome},dupla_b_2.eq.${jogadorData.nome}`)
+      .or(`dupla_a_1.eq.${jogadorData.nome},dupla_a_2.eq.${jogadorData.nome},dupla_b_1.eq.${jogadorData.nome},dupla_b_2.eq.${jogadorData.nome},dupla_a_1_id.eq.${id},dupla_a_2_id.eq.${id},dupla_b_1_id.eq.${id},dupla_b_2_id.eq.${id}`)
 
     const jogosComPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
-    setDadosTotal(calcularStatsDeJogos(jogosComPlacar, jogadorData.nome))
+    setDadosTotal(calcularStatsDeJogos(jogosComPlacar, jogadorData.nome, jogadorData.id))
     const jogosLigaAtual = jogosComPlacar.filter(j => rodadaIdsAtual.has(j.rodada_id))
-    setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, jogadorData.nome))
+    setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, jogadorData.nome, jogadorData.id))
 
     setLoading(false)
   }
@@ -93,7 +93,7 @@ export default function PerfilJogador() {
 
   const totalJogos = jogosDetalhados.length
   const totalVitorias = jogosDetalhados.filter(j => {
-    const estouNoA = j.dupla_a_1 === nomeJogador || j.dupla_a_2 === nomeJogador
+    const estouNoA = ehJogador(j, 'dupla_a_1', jogador.id, nomeJogador) || ehJogador(j, 'dupla_a_2', jogador.id, nomeJogador)
     return estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
   }).length
   const totalDerrotas = totalJogos - totalVitorias

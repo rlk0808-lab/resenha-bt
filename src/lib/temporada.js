@@ -96,3 +96,43 @@ export async function buscarRodadaIdsLigaAtual() {
   const rodadas = await buscarRodadasDaLiga(liga)
   return new Set(rodadas.map(r => r.id))
 }
+
+// Vitórias por jogador, quebradas por chave (Ouro/Prata), somando SEMPRE
+// por jogador_id — `pontuacao` e `ranking_rodada` nunca são tocadas pela
+// substituição de jogador (diferente de `jogos`, que guarda nome em texto
+// e pode ter sido reescrita retroativamente). Histórico total (todas as
+// ligas), mesmo recorte que a aba "Vitórias" de Estatísticas sempre teve.
+export async function buscarVitoriasGerais() {
+  const [{ data: jogadoresRows }, { data: pontuacaoRows }, { data: rankingRows }] = await Promise.all([
+    supabase.from('jogadores').select('id, nome, foto_url'),
+    supabase.from('pontuacao').select('jogador_id, rodada_id, pontos, vitorias'),
+    supabase.from('ranking_rodada').select('jogador_id, rodada_id, chave'),
+  ])
+
+  const chavePorLinha = {}
+  for (const r of (rankingRows || [])) chavePorLinha[r.jogador_id + '_' + r.rodada_id] = r.chave
+
+  const porJogador = {}
+  for (const p of (pontuacaoRows || [])) {
+    if (!porJogador[p.jogador_id]) porJogador[p.jogador_id] = { vitoriasOuro: 0, vitoriasPrata: 0, pontos: 0, rodadasJogadas: 0 }
+    const acc = porJogador[p.jogador_id]
+    const chave = chavePorLinha[p.jogador_id + '_' + p.rodada_id]
+    if (chave === 'ouro') acc.vitoriasOuro += p.vitorias || 0
+    else acc.vitoriasPrata += p.vitorias || 0
+    acc.pontos += p.pontos || 0
+    acc.rodadasJogadas += 1
+  }
+
+  return (jogadoresRows || [])
+    .filter(j => porJogador[j.id])
+    .map(j => {
+      const acc = porJogador[j.id]
+      return {
+        id: j.id, nome: j.nome, foto: j.foto_url,
+        vitoriasOuro: acc.vitoriasOuro, vitoriasPrata: acc.vitoriasPrata,
+        total: acc.vitoriasOuro + acc.vitoriasPrata,
+        pontos: acc.pontos, rodadasJogadas: acc.rodadasJogadas,
+      }
+    })
+    .sort((a, b) => b.total - a.total)
+}

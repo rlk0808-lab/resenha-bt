@@ -5,7 +5,7 @@ import { registrarNotificacoes, verificarNotificacoes } from '../lib/useNotifica
 import { BADGE_INFO } from '../lib/badges'
 import { acessivelClique } from '../lib/a11y'
 import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
-import { calcularStatsDeJogos, DADOS_H2H_VAZIOS } from '../lib/h2h'
+import { calcularStatsDeJogos, DADOS_H2H_VAZIOS, ehJogador } from '../lib/h2h'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -72,12 +72,12 @@ export default function Perfil() {
         setJogadoresMap(mapa)
 
         const { data: jogos } = await supabase.from('jogos').select('*')
-          .or(`dupla_a_1.eq.${p.nome},dupla_a_2.eq.${p.nome},dupla_b_1.eq.${p.nome},dupla_b_2.eq.${p.nome}`)
+          .or(`dupla_a_1.eq.${p.nome},dupla_a_2.eq.${p.nome},dupla_b_1.eq.${p.nome},dupla_b_2.eq.${p.nome},dupla_a_1_id.eq.${p.id},dupla_a_2_id.eq.${p.id},dupla_b_1_id.eq.${p.id},dupla_b_2_id.eq.${p.id}`)
 
         const jogosComPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
-        setDadosTotal(calcularStatsDeJogos(jogosComPlacar, p.nome))
+        setDadosTotal(calcularStatsDeJogos(jogosComPlacar, p.nome, p.id))
         const jogosLigaAtual = jogosComPlacar.filter(j => rodadaIdsAtual.has(j.rodada_id))
-        setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, p.nome))
+        setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, p.nome, p.id))
       }
 
       const notifOk = await verificarNotificacoes()
@@ -151,7 +151,7 @@ export default function Perfil() {
   // Vitórias/derrotas/aproveitamento sempre recalculados dos jogos do período ativo
   const totalJogosReal = jogosDetalhados?.length || 0
   const totalVitoriasReal = perfil?.nome ? jogosDetalhados.filter(j => {
-    const estouNoA = j.dupla_a_1 === perfil.nome || j.dupla_a_2 === perfil.nome
+    const estouNoA = ehJogador(j, 'dupla_a_1', perfil.id, perfil.nome) || ehJogador(j, 'dupla_a_2', perfil.id, perfil.nome)
     return estouNoA ? j.placar_a > j.placar_b : j.placar_b > j.placar_a
   }).length : 0
   const totalDerrotasReal = totalJogosReal - totalVitoriasReal

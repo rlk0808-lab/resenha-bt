@@ -175,6 +175,13 @@
       setJogadores(data || []);
     }
 
+    // jogos.dupla_*_id — guarda o jogador_id junto do nome em cada posição
+    // (ver migration 20260816120000_jogos_jogador_id.sql). Blinda as stats
+    // por partida contra corrupção de nome (ex: substituição de jogador).
+    function idPorNome(nome) {
+      return jogadores.find(j => j.nome === nome)?.id || null;
+    }
+
     async function salvarLocalRodada() {
       if (!rodadaSelecionada) return;
       setSalvandoLocal(true);
@@ -219,7 +226,7 @@
     }
 
     async function salvarSlot(jogoId, campo, valor) {
-      await supabase.from("jogos").update({ [campo]: valor || null }).eq("id", jogoId)
+      await supabase.from("jogos").update({ [campo]: valor || null, [campo + "_id"]: idPorNome(valor) }).eq("id", jogoId)
       await carregarJogos()
     }
 
@@ -245,6 +252,8 @@
         rodada_id: rodadaSelecionada.id, numero_rodada: rodadaSelecionada.numero,
         dupla_a_1: novoJogo.dupla_a_1, dupla_a_2: novoJogo.dupla_a_2 || null,
         dupla_b_1: novoJogo.dupla_b_1, dupla_b_2: novoJogo.dupla_b_2 || null,
+        dupla_a_1_id: idPorNome(novoJogo.dupla_a_1), dupla_a_2_id: idPorNome(novoJogo.dupla_a_2),
+        dupla_b_1_id: idPorNome(novoJogo.dupla_b_1), dupla_b_2_id: idPorNome(novoJogo.dupla_b_2),
         placar_a: novoJogo.placar_a !== "" ? parseInt(novoJogo.placar_a) : null,
         placar_b: novoJogo.placar_b !== "" ? parseInt(novoJogo.placar_b) : null,
         chave: chaveAtiva,
@@ -303,6 +312,8 @@
         rj.map(([a1, a2, b1, b2]) => ({
           rodada_id: rodadaSelecionada.id, numero_rodada: rodadaSelecionada.numero,
           dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
+          dupla_a_1_id: idPorNome(a1), dupla_a_2_id: idPorNome(a2),
+          dupla_b_1_id: idPorNome(b1), dupla_b_2_id: idPorNome(b2),
           placar_a: null, placar_b: null, chave: chaveAtiva,
         }))
       );
@@ -493,8 +504,8 @@
       const sorteioPrata = gerarSorteio(jogPrata);
       if (!sorteioOuro || !sorteioPrata) { mostrarMensagem("Erro ao gerar sorteio.", "erro"); setFechandoLista(false); return; }
 
-      const insertsOuro = sorteioOuro.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "ouro", rodada_interna: ri + 1 })));
-      const insertsPrata = sorteioPrata.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, placar_a: null, placar_b: null, chave: "prata", rodada_interna: ri + 1 })));
+      const insertsOuro = sorteioOuro.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, dupla_a_1_id: idPorNome(a1), dupla_a_2_id: idPorNome(a2), dupla_b_1_id: idPorNome(b1), dupla_b_2_id: idPorNome(b2), placar_a: null, placar_b: null, chave: "ouro", rodada_interna: ri + 1 })));
+      const insertsPrata = sorteioPrata.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({ rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2, dupla_a_1_id: idPorNome(a1), dupla_a_2_id: idPorNome(a2), dupla_b_1_id: idPorNome(b1), dupla_b_2_id: idPorNome(b2), placar_a: null, placar_b: null, chave: "prata", rodada_interna: ri + 1 })));
 
       await supabase.from("jogos").delete().eq("rodada_id", rodada.id).is("placar_a", null);
       const { error: erroInsert } = await supabase.from("jogos").insert([...insertsOuro, ...insertsPrata]);
@@ -839,14 +850,21 @@
       const nomesDepoisSorteio = new Set((confirmsDepois || []).map(c => c.jogadores?.nome).filter(Boolean));
 
       const substituir = async (de, para, chave) => {
+        const paraId = idPorNome(para);
         const updates = [];
         for (const jogo of jogosRodada) {
           if (chave && jogo.chave !== chave) continue;
+          // Só reatribui jogos AINDA NÃO disputados. Um jogo com placar já
+          // lançado é história real — trocar o nome dele credita/rouba uma
+          // vitória de quem nunca jogou aquela partida (bug reportado:
+          // jogador com 1 rodada disputada aparecendo com vitórias que não
+          // eram dele nas telas de Estatísticas).
+          if (jogo.placar_a !== null || jogo.placar_b !== null) continue;
           const campos = {};
-          if (jogo.dupla_a_1 === de) campos.dupla_a_1 = para;
-          if (jogo.dupla_a_2 === de) campos.dupla_a_2 = para;
-          if (jogo.dupla_b_1 === de) campos.dupla_b_1 = para;
-          if (jogo.dupla_b_2 === de) campos.dupla_b_2 = para;
+          if (jogo.dupla_a_1 === de) { campos.dupla_a_1 = para; campos.dupla_a_1_id = paraId; }
+          if (jogo.dupla_a_2 === de) { campos.dupla_a_2 = para; campos.dupla_a_2_id = paraId; }
+          if (jogo.dupla_b_1 === de) { campos.dupla_b_1 = para; campos.dupla_b_1_id = paraId; }
+          if (jogo.dupla_b_2 === de) { campos.dupla_b_2 = para; campos.dupla_b_2_id = paraId; }
           if (Object.keys(campos).length > 0) updates.push(supabase.from("jogos").update(campos).eq("id", jogo.id));
         }
         await Promise.all(updates);
@@ -1174,6 +1192,7 @@
 
       const inserts = sorteio.flatMap((rj, ri) => rj.map(([a1, a2, b1, b2]) => ({
         rodada_id: rodada.id, numero_rodada: rodada.numero, dupla_a_1: a1, dupla_a_2: a2, dupla_b_1: b1, dupla_b_2: b2,
+        dupla_a_1_id: idPorNome(a1), dupla_a_2_id: idPorNome(a2), dupla_b_1_id: idPorNome(b1), dupla_b_2_id: idPorNome(b2),
         placar_a: null, placar_b: null, chave: "qualify", rodada_interna: ri + 1,
       })));
 
