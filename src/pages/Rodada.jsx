@@ -274,10 +274,18 @@ export default function Rodada() {
     setMensagemPlacar(null)
   }
 
-  async function salvarPlacarJogador(jogoId) {
+  async function salvarPlacarJogador(jogoId, jogo) {
     const pa = parseInt(placarForm.a)
     const pb = parseInt(placarForm.b)
     if (isNaN(pa) || isNaN(pb)) { setMensagemPlacar('Preencha os dois placares.'); return }
+    // Já tinha um placar diferente lançado (por qualquer um dos 4 da
+    // partida) — evita sobrescrever silenciosamente um valor que outra
+    // pessoa já colocou, sem quem está corrigindo perceber.
+    const jaTinhaPlacar = jogo.placar_a !== null && jogo.placar_b !== null
+    const mudouValor = jaTinhaPlacar && (jogo.placar_a !== pa || jogo.placar_b !== pb)
+    if (mudouValor && !confirm(`Esse jogo já está com o placar ${jogo.placar_a} × ${jogo.placar_b}. Confirma trocar para ${pa} × ${pb}?`)) {
+      return
+    }
     setSalvandoPlacar(true)
     setMensagemPlacar(null)
     const updateData = { placar_a: pa, placar_b: pb }
@@ -388,7 +396,7 @@ export default function Rodada() {
               <button onClick={cancelarEdicaoPlacar} style={{ flex: 1, background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: '8px 0', cursor: 'pointer', fontSize: 13 }}>
                 Cancelar
               </button>
-              <button onClick={() => salvarPlacarJogador(jogo.id)} disabled={salvandoPlacar} style={{ flex: 1, background: '#c9a227', border: 'none', color: '#0d2b1a', fontWeight: 700, borderRadius: 8, padding: '8px 0', cursor: 'pointer', fontSize: 13 }}>
+              <button onClick={() => salvarPlacarJogador(jogo.id, jogo)} disabled={salvandoPlacar} style={{ flex: 1, background: '#c9a227', border: 'none', color: '#0d2b1a', fontWeight: 700, borderRadius: 8, padding: '8px 0', cursor: 'pointer', fontSize: 13 }}>
                 {salvandoPlacar ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
