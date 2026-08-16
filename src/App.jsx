@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState, Suspense, lazy } from 'react'
 import { supabase } from './lib/supabase'
+import { isAdmin } from './lib/admin'
 import Login from './pages/Login'
 import Layout from './components/Layout'
 
@@ -74,7 +75,7 @@ export default function App() {
             <Route index element={<Home />} />
             <Route path="classificacao" element={<Classificacao />} />
             <Route path="rodada" element={<Rodada />} />
-            <Route path="admin" element={<Admin session={session} />} />
+            <Route path="admin" element={isAdmin(session) ? <Admin session={session} /> : <Navigate to="/" />} />
             <Route path="perfil" element={<Perfil />} />
             <Route path="feed" element={<Feed />} />
             <Route path="jogador/:id" element={<PerfilJogador />} />

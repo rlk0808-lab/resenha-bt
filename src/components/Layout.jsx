@@ -3,16 +3,11 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Home, Trophy, Calendar, User, LogOut, Settings, MessageCircle } from 'lucide-react'
 import { useOnlineStatus } from '../lib/useOnlineStatus'
-
-const ADMINS = [
-  'a60b3e0f-5528-400c-8e0f-8fb3f9226070', // Robson
-  '118a0596-1e11-4943-b8f2-9e49bd234dcf', // Celso
-  'a506b568-7183-4aab-b86f-5adbb5f435a6', // Marcel
-];
+import { isAdmin as checaAdmin } from '../lib/admin'
 
 export default function Layout({ session }) {
   const navigate = useNavigate()
-  const isAdmin = ADMINS.includes(session?.user?.id)
+  const isAdmin = checaAdmin(session)
   const online = useOnlineStatus()
 
   // O tema claro só afetava os componentes genéricos (.card/.input/.tabela) —
