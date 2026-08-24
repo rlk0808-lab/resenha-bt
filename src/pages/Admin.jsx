@@ -8,6 +8,11 @@
   import { enviarPush } from "../lib/notificar";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
+  // 12ª rodada = última da temporada — pontuação da liga vale em dobro
+  // (Regulamento: "12ª Rodada — Pontuação dobrada / Divisão normal entre
+  // Ouro e Prata"). Mesmo padrão de número fixo já usado pras especiais
+  // (rodada 4 e 8, ver criação da próxima rodada em salvarPontuacao).
+  const RODADA_FINAL_DOBRADA = 12;
 
   // Estrutura fixa do chaveamento (índices 0-11 = slots J1-J12)
   // Formato por rodada: [a1, a2, b1, b2] = dupla(a1,a2) x dupla(b1,b2)
@@ -587,8 +592,9 @@
           j.timeVencedor = isVencedor;
         });
       } else {
+        const dobra = rodadaSelecionada?.numero === RODADA_FINAL_DOBRADA ? 2 : 1;
         jogadoresList.forEach((j, idx) => {
-          j.ptosLiga = (chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === "prata" && idx === 0 ? 3 : 0);
+          j.ptosLiga = ((chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === "prata" && idx === 0 ? 3 : 0)) * dobra;
           j.posicao = idx + 1;
         });
       }
