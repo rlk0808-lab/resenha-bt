@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { BADGE_INFO } from '../lib/badges'
 import { acessivelClique } from '../lib/a11y'
 import { enviarPush } from '../lib/notificar'
+import { nomeRodada } from '../lib/rodada'
 
 export default function Feed() {
   const [posts, setPosts] = useState([])
@@ -47,7 +48,7 @@ export default function Feed() {
   async function carregarPosts() {
     const { data } = await supabase
       .from('feed_posts')
-      .select(`*, jogadores(nome, foto_url, chave), rodadas(numero), feed_reacoes(jogador_id, jogadores(nome)), feed_comentarios(id, texto, created_at, jogador_id, jogadores(nome, foto_url))`)
+      .select(`*, jogadores(nome, foto_url, chave), rodadas(numero, tipo), feed_reacoes(jogador_id, jogadores(nome)), feed_comentarios(id, texto, created_at, jogador_id, jogadores(nome, foto_url))`)
       .order('created_at', { ascending: false })
       .limit(50)
     setPosts(data || [])
@@ -312,7 +313,7 @@ export default function Feed() {
                 <span style={{ fontSize: 20 }}>{BADGE_INFO[post.badge_tipo].emoji}</span>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: BADGE_INFO[post.badge_tipo].cor }}>{BADGE_INFO[post.badge_tipo].label}</div>
-                  {post.rodadas?.numero && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Rodada {post.rodadas.numero}</div>}
+                  {post.rodadas && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{nomeRodada(post.rodadas)}</div>}
                 </div>
               </div>
             )}

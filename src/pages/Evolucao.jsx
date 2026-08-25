@@ -37,6 +37,7 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
       .from('rodadas').select('id, numero, tipo')
       .eq('status', 'finalizada')
       .eq('liga', ligaAtual)
+      .neq('tipo', 'qualify') // qualify não grava pontuacao — só poluiria o gráfico com um ponto zerado
       .order('numero', { ascending: true })
     setRodadas(rods || [])
 

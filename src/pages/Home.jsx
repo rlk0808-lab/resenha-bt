@@ -8,6 +8,7 @@ import { BADGE_INFO, BADGE_LEGENDA } from '../lib/badges'
 import { calcularPrazoConfirmacao } from '../lib/prazo'
 import { useCountdown, formatarRestante } from '../lib/useCountdown'
 import { acessivelClique } from '../lib/a11y'
+import { nomeRodada } from '../lib/rodada'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -39,23 +40,30 @@ export default function Home() {
 
       if (todasRodadas) {
 
-        // Rodada atual = última finalizada ou ativa
-        // (ordena por created_at, não numero — numero reinicia a cada liga nova)
-        const finalizada = todasRodadas.filter(r => r.status === 'finalizada')
-          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
         const ativa = todasRodadas.find(r => r.status === 'ativa')
-        const atual = ativa || finalizada[finalizada.length - 1] || null
-        setRodadaAtual(atual)
 
         // Próxima rodada = proxima ou ativa
         const proxima = todasRodadas.find(r => r.status === 'proxima') || ativa || null
         setProximaRodada(proxima)
 
-        // Liga atual e total de rodadas dela — evita texto/progresso fixo
-        // que ficaria errado assim que uma temporada nova começar
-        const liga = atual?.liga || proxima?.liga || todasRodadas[todasRodadas.length - 1]?.liga || null
+        // Liga atual = liga da rodada mais recente já criada (mesmo
+        // critério de buscarLigaAtual() em lib/temporada.js) — evita
+        // mostrar a liga antiga só porque ela é quem tem a última rodada
+        // finalizada (ex: durante o Qualify da liga nova, antes de
+        // qualquer rodada normal dela existir).
+        const maisRecente = [...todasRodadas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+        const liga = maisRecente?.liga || null
         setLigaAtualNome(liga)
-        setTotalRodadasLiga(liga ? todasRodadas.filter(r => r.liga === liga).length : 0)
+        const rodadasDaLiga = liga ? todasRodadas.filter(r => r.liga === liga) : []
+        setTotalRodadasLiga(rodadasDaLiga.length)
+
+        // Rodada atual (pra "Rodada atual" e progresso) = última rodada
+        // NORMAL finalizada ou ativa dentro dessa liga — o Qualify (numero
+        // sempre 0) não conta como progresso de rodada.
+        const finalizadaDaLiga = rodadasDaLiga.filter(r => r.status === 'finalizada' && r.tipo !== 'qualify')
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        const atual = (ativa?.liga === liga && ativa?.tipo !== 'qualify' ? ativa : null) || finalizadaDaLiga[finalizadaDaLiga.length - 1] || null
+        setRodadaAtual(atual)
 
         if (proxima && user) {
           const { data: jogadores } = await supabase
@@ -89,10 +97,11 @@ export default function Home() {
         }
       }
 
-      // Busca última rodada finalizada e seus resultados
-      // (created_at, não numero — numero reinicia a cada liga nova)
+      // Busca última rodada NORMAL finalizada e seus resultados (created_at,
+      // não numero — numero reinicia a cada liga nova). O Qualify não entra
+      // aqui: não grava ranking_rodada/badges, o card ficaria vazio.
       const { data: rodsFin } = await supabase.from('rodadas').select('*')
-        .eq('status', 'finalizada').order('created_at', { ascending: false }).limit(1)
+        .eq('status', 'finalizada').neq('tipo', 'qualify').order('created_at', { ascending: false }).limit(1)
       const ultima = rodsFin?.[0]
       if (ultima) {
         setUltimaRodada(ultima)
@@ -191,7 +200,7 @@ export default function Home() {
               <div style={{
                 fontFamily: "'Bebas Neue', sans-serif",
                 fontSize: '32px', letterSpacing: '2px', color: '#ffffff'
-              }}>Rodada {proximaRodada.numero}</div>
+              }}>{nomeRodada(proximaRodada)}</div>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', marginTop: '4px' }}>
                 📅 {new Date(proximaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', {
                   weekday: 'long', day: '2-digit', month: 'long', timeZone: 'America/Sao_Paulo'
@@ -328,7 +337,7 @@ export default function Home() {
                 🏆 Últimos Resultados
               </div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                Rodada {ultimaRodada.numero} · {new Date(ultimaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' })}
+                {nomeRodada(ultimaRodada)} · {new Date(ultimaRodada.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' })}
               </div>
             </div>
           </div>

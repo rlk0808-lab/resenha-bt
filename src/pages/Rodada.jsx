@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { baixarIcs } from '../lib/calendario'
 import { acessivelClique } from '../lib/a11y'
 import { enviarPush } from '../lib/notificar'
+import { nomeRodada } from '../lib/rodada'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -641,9 +642,10 @@ export default function Rodada() {
       const canvas = await html2canvas(el, { backgroundColor: '#0f2d1e', scale: 2, useCORS: true, logging: false })
       el.style.display = 'none'
       canvas.toBlob(async (blob) => {
-        const file = new File([blob], 'resenha-bt-r' + rodadaDetalhe.numero + '.png', { type: 'image/png' })
+        const nomeArquivo = rodadaDetalhe.tipo === 'qualify' ? 'qualify' : 'r' + rodadaDetalhe.numero
+        const file = new File([blob], 'resenha-bt-' + nomeArquivo + '.png', { type: 'image/png' })
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Resenha BT - Rodada ' + rodadaDetalhe.numero })
+          await navigator.share({ files: [file], title: 'Resenha BT - ' + nomeRodada(rodadaDetalhe) })
         } else {
           const url = URL.createObjectURL(blob)
           const a = document.createElement('a')
@@ -726,7 +728,7 @@ export default function Rodada() {
         <div style={{ textAlign: 'center', marginBottom: 24, borderBottom: '2px solid #2a5a3a', paddingBottom: 20 }}>
           <div style={{ fontSize: 28, fontWeight: 900, color: '#c9a227', letterSpacing: 2 }}>RESENHA BT</div>
           <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}>
-            Rodada {rodadaDetalhe?.numero}{isEspecial ? ' — Especial' : ''}
+            {nomeRodada(rodadaDetalhe)}{isEspecial ? ' — Especial' : ''}
           </div>
           <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 4 }}>{data}</div>
         </div>
@@ -822,7 +824,7 @@ export default function Rodada() {
             borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px'
           }}>← Voltar</button>
           <h1 className="section-title" style={{ margin: 0 }}>
-            Rodada {rodadaDetalhe.numero}
+            {nomeRodada(rodadaDetalhe)}
             {rodadaDetalhe.tipo === 'especial' && <span style={{ fontSize: '14px', color: ouro, marginLeft: 8 }}>Especial</span>}
           </h1>
         </div>
@@ -972,7 +974,7 @@ export default function Rodada() {
               }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '16px', color: '#e8f5e9' }}>
-                    Rodada {r.numero}
+                    {nomeRodada(r)}
                     {r.tipo === 'especial' && <span style={{ fontSize: '12px', color: ouro, marginLeft: 8 }}>Especial</span>}
                   </div>
                   <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
