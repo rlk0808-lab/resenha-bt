@@ -1085,7 +1085,11 @@
       if (resetarChaveNovaLiga) {
         // Chave antiga não tem mais sentido até o qualify decidir a nova —
         // reseta pra prata só pra não exibir badge desatualizado por aí.
-        const { error: erroReset } = await supabase.from("jogadores").update({ chave: "prata" }).neq("id", "");
+        // `id` é uuid — `.neq("id", "")` gera `id=neq.` (string vazia não é
+        // uuid válido) e o Postgres rejeita com 400 antes de atualizar
+        // qualquer linha. `.not("id", "is", null)` é sempre verdadeiro
+        // (id é PK not-null) e funciona em qualquer tipo de coluna.
+        const { error: erroReset } = await supabase.from("jogadores").update({ chave: "prata" }).not("id", "is", null);
         if (erroReset) { mostrarMensagem("Temporada arquivada, mas houve erro ao resetar chaves: " + erroReset.message, "erro"); setEncerrandoTemporada(false); return; }
       }
 
