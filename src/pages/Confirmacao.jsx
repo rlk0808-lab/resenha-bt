@@ -317,15 +317,16 @@ export default function Confirmacao({ session }) {
     if (!confirmacao) return;
     if (!confirm("Deseja cancelar sua confirmação?")) return;
     setProcessando(true);
-    const eraConfirmado = confirmacao.status === "confirmado";
-    const { error } = await supabase.from("confirmacoes").delete().eq("id", confirmacao.id);
+    // RPC (SECURITY DEFINER) em vez de delete+update direto: a policy de
+    // UPDATE de `confirmacoes` agora é admin-only, então promover o
+    // próximo da espera precisa passar pelo servidor (ver migration
+    // 20260825120000_fecha_rls_cadastros_confirmacoes_jogos.sql).
+    const { data: promovidoJogadorId, error } = await supabase.rpc("cancelar_confirmacao", { p_confirmacao_id: confirmacao.id });
     if (error) {
       mostrarMensagem("Erro ao cancelar: " + error.message, "erro");
     } else {
-      if (eraConfirmado && listaEspera.length > 0) {
-        const promovido = listaEspera[0];
-        await supabase.from("confirmacoes").update({ status: "confirmado" }).eq("id", promovido.id);
-        await notificarPromovido(promovido.jogador_id);
+      if (promovidoJogadorId) {
+        await notificarPromovido(promovidoJogadorId);
         mostrarMensagem("Confirmação cancelada. O próximo da espera foi promovido.", "info");
       } else {
         mostrarMensagem("Confirmação cancelada.", "info");

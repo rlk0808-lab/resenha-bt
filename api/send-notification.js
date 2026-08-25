@@ -37,6 +37,16 @@ export default async function handler(req, res) {
   const { jogadorIds, title, body, url } = req.body
   if (!title) return res.status(400).json({ error: 'Dados inválidos' })
 
+  const temAlvoEspecifico = Array.isArray(jogadorIds) && jogadorIds.length > 0
+
+  // Sem jogadorIds = manda pra TODO MUNDO inscrito — exige admin. Checava
+  // só sessão válida antes, então qualquer jogador logado podia broadcastar
+  // spam/phishing pro grupo inteiro batendo direto nesse endpoint.
+  if (!temAlvoEspecifico) {
+    const { data: chamador } = await supabaseAdmin.from('jogadores').select('role').eq('user_id', user.id).limit(1).single()
+    if (chamador?.role !== 'admin') return res.status(403).json({ error: 'Só admin pode notificar todo mundo' })
+  }
+
   let query = supabaseAdmin.from('push_subscriptions').select('endpoint, p256dh, auth')
   if (Array.isArray(jogadorIds) && jogadorIds.length > 0) query = query.in('jogador_id', jogadorIds)
   const { data: subscriptions, error: subError } = await query
