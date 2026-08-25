@@ -370,7 +370,13 @@
       // (sem esse filtro, a 1a rodada de uma liga nova herdaria a Ouro/Prata da liga anterior)
       const { data: rodadasFinalizadas } = await supabase.from("rodadas").select("*")
         .eq("status", "finalizada").eq("liga", rodadaAlvo.liga).order("numero", { ascending: false });
-      const rodAntNormal = rodadasFinalizadas?.find(r => r.tipo !== "especial") || rodadasFinalizadas?.[0];
+      // Especial E Qualify não geram ranking_rodada com chave ouro/prata — usá-los como
+      // referência faz rankOuro/rankPrata virem vazios e jogadoresOuro zerar, o que reseta a
+      // chave de todo mundo confirmado pra prata antes mesmo do "Ouro com 0 confirmados" abortar.
+      // Sem fallback pra rodadasFinalizadas[0]: se não achar nenhuma rodada normal anterior
+      // (ex: Rodada 1 logo após o Qualify), cai no branch "primeira rodada" (usa chave do banco,
+      // que o Qualify já deixou correta).
+      const rodAntNormal = rodadasFinalizadas?.find(r => r.tipo !== "especial" && r.tipo !== "qualify");
 
       const nomeConfirmados = new Set(confirmacoes.map(c => c.jogadores?.nome));
       // Formato 24/28 -> Ouro sempre com 12; formato 32 -> Ouro expande para 16.

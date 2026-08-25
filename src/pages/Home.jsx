@@ -9,6 +9,7 @@ import { calcularPrazoConfirmacao } from '../lib/prazo'
 import { useCountdown, formatarRestante } from '../lib/useCountdown'
 import { acessivelClique } from '../lib/a11y'
 import { nomeRodada } from '../lib/rodada'
+import { enviarPush } from '../lib/notificar'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -137,11 +138,24 @@ export default function Home() {
   async function cancelarPresenca() {
     if (!confirmacaoId) return
     setCancelando(true)
-    const { error } = await supabase.from('confirmacoes').delete().eq('id', confirmacaoId)
+    // RPC em vez de delete direto: também promove o próximo da lista de
+    // espera (mesmo comportamento do cancelamento em Confirmacao.jsx) —
+    // antes esse botão só apagava a própria confirmação e ninguém subia.
+    const { data: promovidoJogadorId, error } = await supabase.rpc('cancelar_confirmacao', { p_confirmacao_id: confirmacaoId })
     if (!error) {
       setConfirmado(false)
       setConfirmacaoId(null)
       setTotalConfirmados(t => Math.max(0, t - 1))
+      if (promovidoJogadorId) {
+        try {
+          await enviarPush({
+            jogadorIds: [promovidoJogadorId],
+            title: 'Vaga aberta! 🎾',
+            body: 'Você foi promovido da lista de espera para a lista principal.',
+            url: '/confirmacao',
+          })
+        } catch (e) { console.error('Erro ao notificar promovido:', e) }
+      }
     }
     setCancelando(false)
   }
