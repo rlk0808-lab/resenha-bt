@@ -6,6 +6,7 @@ import { BADGE_INFO } from '../lib/badges'
 import { acessivelClique } from '../lib/a11y'
 import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
 import { calcularStatsDeJogos, DADOS_H2H_VAZIOS, ehJogador } from '../lib/h2h'
+import { escaparValorFiltroOr } from '../lib/postgrestFiltro'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -71,8 +72,9 @@ export default function Perfil() {
         for (const j of (todosJogs || [])) mapa[j.nome] = j.id
         setJogadoresMap(mapa)
 
+        const nomeFiltro = escaparValorFiltroOr(p.nome)
         const { data: jogos } = await supabase.from('jogos').select('*')
-          .or(`dupla_a_1.eq.${p.nome},dupla_a_2.eq.${p.nome},dupla_b_1.eq.${p.nome},dupla_b_2.eq.${p.nome},dupla_a_1_id.eq.${p.id},dupla_a_2_id.eq.${p.id},dupla_b_1_id.eq.${p.id},dupla_b_2_id.eq.${p.id}`)
+          .or(`dupla_a_1.eq.${nomeFiltro},dupla_a_2.eq.${nomeFiltro},dupla_b_1.eq.${nomeFiltro},dupla_b_2.eq.${nomeFiltro},dupla_a_1_id.eq.${p.id},dupla_a_2_id.eq.${p.id},dupla_b_1_id.eq.${p.id},dupla_b_2_id.eq.${p.id}`)
 
         const jogosComPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
         setDadosTotal(calcularStatsDeJogos(jogosComPlacar, p.nome, p.id))

@@ -576,19 +576,39 @@ export default function Rodada() {
     if (!error) {
       setNovoComentario('')
       await carregarComentarios(rodadaDetalhe.id)
-      // Notifica jogadores mencionados
-      const mencoes = texto.match(/@([\w\s.]+?)(?=\s@|\s*$|[^\w\s.])/g)
-      if (mencoes && mencoes.length > 0) {
-        const nomesMencionados = mencoes.map(m => m.slice(1).trim())
-        const { data: jogs } = await supabase.from('jogadores').select('id').in('nome', nomesMencionados)
-        if (jogs && jogs.length > 0) {
-          await enviarPush({
-            jogadorIds: jogs.map(j => j.id),
-            title: jogadorAtual.nome + ' te mencionou!',
-            body: texto,
-            url: '/rodada',
-          })
+      // Notifica jogadores mencionados — casa pelo nome de cada jogador
+      // direto no texto (nomes mais longos primeiro, com checagem de
+      // fronteira), em vez do regex \w antigo, que era ASCII-only e
+      // cortava em qualquer acento (ex: "@José" virava "Jos", ninguém
+      // encontrado). Mesma técnica de Feed.jsx.
+      const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
+      const candidatos = [...(todosJogs || [])].sort((a, b) => (b.nome?.length || 0) - (a.nome?.length || 0))
+      const posicoesUsadas = []
+      const jogs = []
+      for (const j of candidatos) {
+        if (!j.nome) continue
+        const alvo = '@' + j.nome
+        let idx = texto.indexOf(alvo)
+        while (idx !== -1) {
+          const fim = idx + alvo.length
+          const proximoChar = texto[fim]
+          const naFronteira = proximoChar === undefined || !/\p{L}/u.test(proximoChar)
+          const dentroDeOutraMencao = posicoesUsadas.some(([ini, f]) => idx >= ini && idx < f)
+          if (naFronteira && !dentroDeOutraMencao) {
+            posicoesUsadas.push([idx, fim])
+            jogs.push(j)
+            break
+          }
+          idx = texto.indexOf(alvo, idx + 1)
         }
+      }
+      if (jogs.length > 0) {
+        await enviarPush({
+          jogadorIds: jogs.map(j => j.id),
+          title: jogadorAtual.nome + ' te mencionou!',
+          body: texto,
+          url: '/rodada',
+        })
       }
     }
     setEnviandoComentario(false)

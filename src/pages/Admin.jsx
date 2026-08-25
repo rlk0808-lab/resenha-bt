@@ -618,6 +618,17 @@
       if (rodadaSelecionada?.tipo === "especial") {
         // Especial: todos os jogos juntos (time_a e time_b), sem separação ouro/prata
         const todosJogosEspecial = todosJogos.filter(j => j.chave === "especial" || j.chave === "time_a" || j.chave === "time_b");
+        // Todo jogador com placar lançado precisa estar em timesEspecial —
+        // calcularRankingLocal cairia no fallback "time_a" pra quem não
+        // está, o que pode inverter o time vencedor silenciosamente.
+        const nomesComPlacar = new Set(todosJogosEspecial.filter(j => j.placar_a !== null && j.placar_b !== null)
+          .flatMap(j => [j.dupla_a_1, j.dupla_a_2, j.dupla_b_1, j.dupla_b_2].filter(Boolean)));
+        const nomesSemTime = [...nomesComPlacar].filter(n => !timesEspecial.time_a.includes(n) && !timesEspecial.time_b.includes(n));
+        if (nomesSemTime.length > 0) {
+          mostrarMensagem(`Atribua um time (A ou B) pra: ${nomesSemTime.join(", ")} antes de calcular.`, "erro");
+          setCalculando(false);
+          return;
+        }
         const rankEspecial = calcularRankingLocal(todosJogosEspecial, "especial");
         setRankingPreview({ ouro: rankEspecial, prata: [] });
       } else {
@@ -874,12 +885,17 @@
       const { data: jogosRodada } = await supabase.from("jogos").select("*").eq("rodada_id", rodadaSelecionada.id);
       if (!jogosRodada) { mostrarMensagem("Erro ao buscar jogos.", "erro"); setSubstProcessando(false); return; }
 
-      const { data: rodadaInfo } = await supabase.from("rodadas").select("updated_at").eq("id", rodadaSelecionada.id).limit(1);
-      const dataFechamento = rodadaInfo?.[0]?.updated_at;
-      const { data: confirmsDepois } = await supabase.from("confirmacoes")
-        .select("jogadores(nome)").eq("rodada_id", rodadaSelecionada.id)
-        .eq("status", "confirmado").gt("created_at", dataFechamento);
-      const nomesDepoisSorteio = new Set((confirmsDepois || []).map(c => c.jogadores?.nome).filter(Boolean));
+      // `rodadas` não tem updated_at — usa o created_at mais antigo dos jogos
+      // dessa rodada (todos gravados juntos quando o sorteio foi publicado)
+      // como o momento de fechamento, pra achar quem confirmou depois disso.
+      const dataFechamento = jogosRodada.reduce((min, j) => (!min || j.created_at < min) ? j.created_at : min, null);
+      const nomesDepoisSorteio = new Set();
+      if (dataFechamento) {
+        const { data: confirmsDepois } = await supabase.from("confirmacoes")
+          .select("jogadores(nome)").eq("rodada_id", rodadaSelecionada.id)
+          .eq("status", "confirmado").gt("created_at", dataFechamento);
+        (confirmsDepois || []).forEach(c => { if (c.jogadores?.nome) nomesDepoisSorteio.add(c.jogadores.nome); });
+      }
 
       const substituir = async (de, para, chave) => {
         const paraId = idPorNome(para);
@@ -904,7 +920,7 @@
 
       if (jogadorAusente.chave === "ouro") {
         const { data: rodAntData } = await supabase.from("rodadas").select("id,tipo").eq("status","finalizada").eq("liga", rodadaSelecionada.liga).order("numero",{ascending:false});
-        const rodAntNormal = rodAntData?.find(r => r.tipo !== "especial");
+        const rodAntNormal = rodAntData?.find(r => r.tipo !== "especial" && r.tipo !== "qualify");
         if (!rodAntNormal) { mostrarMensagem("Rodada anterior não encontrada.", "erro"); setSubstProcessando(false); return; }
         const { data: rankPrata } = await supabase.from("ranking_rodada")
           .select("posicao, jogadores(nome)").eq("rodada_id", rodAntNormal.id).eq("chave", "prata")
@@ -977,7 +993,12 @@
         const { error: erroNovo } = await supabase
           .from("jogadores")
           .insert({ nome: vinc.apelido.trim(), apelido: pendente.nome, chave: "prata", ativo: true, user_id: pendente.user_id });
-        if (erroNovo) { mostrarMensagem("Erro ao criar jogador: " + erroNovo.message, "erro"); setAprovando(null); return; }
+        if (erroNovo) {
+          const mensagemErro = erroNovo.code === "23505"
+            ? `Já existe um jogador chamado "${vinc.apelido.trim()}". Escolha outro apelido ou vincule ao jogador existente.`
+            : "Erro ao criar jogador: " + erroNovo.message;
+          mostrarMensagem(mensagemErro, "erro"); setAprovando(null); return;
+        }
       } else {
         const { error: erroVinculo } = await supabase
           .from("jogadores")

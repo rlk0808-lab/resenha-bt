@@ -48,8 +48,15 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
 
     if (jogadorAtualId) setSelecionados([jogadorAtualId])
 
-    const { data: pts } = await supabase
-      .from('pontuacao').select('jogador_id, rodada_id, pontos')
+    // Escopado às rodadas da liga atual — sem isso, um jogador que só
+    // pontuou numa liga antiga (e nunca jogou a atual) ainda passava no
+    // filtro do seletor de atletas (linha ~280, que só checa "tem alguma
+    // pontuação registrada") e desenhava uma linha zerada no gráfico como
+    // se tivesse jogado a temporada atual e não pontuado nada.
+    const rodadaIds = (rods || []).map(r => r.id)
+    const { data: pts } = rodadaIds.length > 0
+      ? await supabase.from('pontuacao').select('jogador_id, rodada_id, pontos').in('rodada_id', rodadaIds)
+      : { data: [] }
 
     // Mapa de pontos por rodada
     const mapaPts = {}

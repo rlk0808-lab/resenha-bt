@@ -96,8 +96,31 @@ export default function Feed() {
     // vez de um regex \w genérico que corta em espaço e não reconhece
     // acento (e podia notificar o jogador errado quando dois
     // compartilhavam o primeiro nome).
+    //
+    // Verifica nomes mais longos primeiro e marca a posição já usada: um
+    // simples .includes('@' + nome) casava "@Marcelo" dentro de
+    // "@Marcelo Augusto" e notificava os dois quando só um foi citado.
     const { data: todosJogs } = await supabase.from('jogadores').select('id, nome')
-    const jogs = (todosJogs || []).filter(j => textoFinal.includes('@' + j.nome))
+    const candidatos = [...(todosJogs || [])].sort((a, b) => (b.nome?.length || 0) - (a.nome?.length || 0))
+    const posicoesUsadas = []
+    const jogs = []
+    for (const j of candidatos) {
+      if (!j.nome) continue
+      const alvo = '@' + j.nome
+      let idx = textoFinal.indexOf(alvo)
+      while (idx !== -1) {
+        const fim = idx + alvo.length
+        const proximoChar = textoFinal[fim]
+        const naFronteira = proximoChar === undefined || !/\p{L}/u.test(proximoChar)
+        const dentroDeOutraMencao = posicoesUsadas.some(([ini, f]) => idx >= ini && idx < f)
+        if (naFronteira && !dentroDeOutraMencao) {
+          posicoesUsadas.push([idx, fim])
+          jogs.push(j)
+          break
+        }
+        idx = textoFinal.indexOf(alvo, idx + 1)
+      }
+    }
     if (jogs.length > 0) {
       await enviarPush({
         jogadorIds: jogs.map(j => j.id),
