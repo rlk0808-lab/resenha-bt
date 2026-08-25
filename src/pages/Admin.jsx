@@ -915,7 +915,8 @@
           if (jogo.dupla_b_2 === de) { campos.dupla_b_2 = para; campos.dupla_b_2_id = paraId; }
           if (Object.keys(campos).length > 0) updates.push(supabase.from("jogos").update(campos).eq("id", jogo.id));
         }
-        await Promise.all(updates);
+        const resultados = await Promise.all(updates);
+        return resultados.filter(r => r.error).map(r => r.error.message);
       };
 
       if (jogadorAusente.chave === "ouro") {
@@ -931,12 +932,23 @@
           return nomesNaPrata.has(nome) && !nomesDepoisSorteio.has(nome);
         })?.jogadores?.nome;
         if (!proximoQueSubiria) { mostrarMensagem("Não foi possível identificar quem sobe da Prata.", "erro"); setSubstProcessando(false); return; }
-        await substituir(substAusente, proximoQueSubiria, "ouro");
-        await substituir(proximoQueSubiria, substReserva, "prata");
-        mostrarMensagem(`✅ ${substAusente} saiu | ${proximoQueSubiria} subiu para Ouro | ${substReserva} entrou na Prata`);
+        const erros1 = await substituir(substAusente, proximoQueSubiria, "ouro");
+        const erros2 = await substituir(proximoQueSubiria, substReserva, "prata");
+        // A chave em `jogadores` (badge do perfil) não acompanha sozinha a
+        // troca de dupla nos jogos — sem isso, quem sobe pra Ouro nesta
+        // rodada continua marcado como Prata até a próxima rodada normal
+        // recalcular subida/descida.
+        const jogPromovido = jogadores.find(j => j.nome === proximoQueSubiria);
+        const erroChave = jogPromovido
+          ? (await supabase.from("jogadores").update({ chave: "ouro" }).eq("id", jogPromovido.id)).error?.message
+          : null;
+        const erros = [...erros1, ...erros2, ...(erroChave ? [erroChave] : [])];
+        if (erros.length > 0) mostrarMensagem(`⚠️ Substituição feita, mas com erro(s): ${erros.join("; ")}`, "erro");
+        else mostrarMensagem(`✅ ${substAusente} saiu | ${proximoQueSubiria} subiu para Ouro | ${substReserva} entrou na Prata`);
       } else {
-        await substituir(substAusente, substReserva, "prata");
-        mostrarMensagem(`✅ ${substAusente} substituído por ${substReserva} na Prata.`);
+        const erros = await substituir(substAusente, substReserva, "prata");
+        if (erros.length > 0) mostrarMensagem(`⚠️ Substituição feita, mas com erro(s): ${erros.join("; ")}`, "erro");
+        else mostrarMensagem(`✅ ${substAusente} substituído por ${substReserva} na Prata.`);
       }
       setModalSubst(false);
       setSubstAusente("");
