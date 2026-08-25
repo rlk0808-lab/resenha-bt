@@ -549,11 +549,11 @@
       const ehEspecial = rodadaSelecionada?.tipo === "especial";
       const stats = {};
       const confrontos = {};
-      const addJogador = (nome) => { if (nome && !stats[nome]) { stats[nome] = { nome, pts: 0, vitorias: 0, saldo: 0 }; confrontos[nome] = {}; } };
+      const addJogador = (nome) => { if (nome && !stats[nome]) { stats[nome] = { nome, pts: 0, vitorias: 0, saldo: 0, saldoTie: 0 }; confrontos[nome] = {}; } };
 
       for (const jogo of jogosChave) {
         if (jogo.placar_a === null || jogo.placar_b === null) continue;
-        const { dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2, placar_a, placar_b } = jogo;
+        const { dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2, placar_a, placar_b, tie_a, tie_b } = jogo;
         [dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2].forEach(addJogador);
         const jogadoresA = [dupla_a_1, dupla_a_2].filter(Boolean);
         const jogadoresB = [dupla_b_1, dupla_b_2].filter(Boolean);
@@ -572,11 +572,27 @@
           vencedores.forEach(n => { stats[n].pts += 15 + saldo; stats[n].vitorias += 1; stats[n].saldo += saldo; });
           perdedores.forEach(n => { stats[n].pts += venceuA ? placar_b : placar_a; stats[n].saldo -= saldo; });
         }
+        // Placar do tiebreak (só existe quando o jogo foi decidido por um) —
+        // usado só como último desempate (ver comparador abaixo), não entra
+        // em pts/saldo.
+        if (tie_a != null && tie_b != null) {
+          const saldoTieJogo = tie_a - tie_b;
+          jogadoresA.forEach(n => { stats[n].saldoTie += saldoTieJogo; });
+          jogadoresB.forEach(n => { stats[n].saldoTie -= saldoTieJogo; });
+        }
         jogadoresA.forEach(a => { jogadoresB.forEach(b => { if (venceuA) { confrontos[a][b] = (confrontos[a][b] || 0) + 1; } else { confrontos[b][a] = (confrontos[b][a] || 0) + 1; } }); });
       }
 
       const jogadoresList = Object.values(stats);
-      jogadoresList.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : b.saldo !== a.saldo ? b.saldo - a.saldo : (b.saldoTie || 0) !== (a.saldoTie || 0) ? (b.saldoTie || 0) - (a.saldoTie || 0) : ((confrontos[b.nome]?.[a.nome] || 0) - (confrontos[a.nome]?.[b.nome] || 0)));
+      // Desempate: pontos -> saldo de games -> confronto direto -> saldo do
+      // placar de tiebreak (último critério, só decide se nada acima resolveu).
+      jogadoresList.sort((a, b) => {
+        if (b.pts !== a.pts) return b.pts - a.pts;
+        if (b.saldo !== a.saldo) return b.saldo - a.saldo;
+        const confrontoDiff = (confrontos[b.nome]?.[a.nome] || 0) - (confrontos[a.nome]?.[b.nome] || 0);
+        if (confrontoDiff !== 0) return confrontoDiff;
+        return (b.saldoTie || 0) - (a.saldoTie || 0);
+      });
 
       if (ehEspecial) {
         // Rodada especial: times definidos pelo campo chave do jogo
