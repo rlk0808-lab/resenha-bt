@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { buscarLigaAtual } from '../lib/temporada'
+import { nomeRodada } from '../lib/rodada'
 
 export default function DetalhadoRodadas({ onFechar }) {
   const navigate = useNavigate()
@@ -17,7 +18,7 @@ export default function DetalhadoRodadas({ onFechar }) {
       setLiga(ligaAtual)
 
       const { data: rods } = await supabase
-        .from('rodadas').select('id, numero')
+        .from('rodadas').select('id, numero, tipo')
         .eq('status', 'finalizada').eq('liga', ligaAtual)
         .order('numero', { ascending: true })
       setRodadas(rods || [])
@@ -67,7 +68,7 @@ export default function DetalhadoRodadas({ onFechar }) {
   }).filter(l => l.jogou).sort((a, b) => b.total - a.total)
 
   function exportarCSV() {
-    const header = ['Jogador', ...rodadas.map(r => `Rodada ${r.numero}`), 'Total (sem descarte)', 'Total (com descarte)']
+    const header = ['Jogador', ...rodadas.map(r => nomeRodada(r)), 'Total (sem descarte)', 'Total (com descarte)']
     const linhasCsv = linhas.map(l => [
       l.jogador.nome,
       ...rodadas.map(r => l.porRodada[r.numero] ?? ''),
@@ -128,7 +129,7 @@ export default function DetalhadoRodadas({ onFechar }) {
                 <tr>
                   <th style={{ position: 'sticky', left: 0, background: '#162f20', minWidth: 140 }}>Jogador</th>
                   {rodadas.map(r => (
-                    <th key={r.id} style={{ textAlign: 'center', minWidth: 48 }}>R{r.numero}</th>
+                    <th key={r.id} style={{ textAlign: 'center', minWidth: 48 }}>{r.tipo === 'qualify' ? 'Qualify' : `R${r.numero}`}</th>
                   ))}
                   <th style={{ textAlign: 'right', minWidth: 90 }}>Total</th>
                   <th style={{ textAlign: 'right', minWidth: 90 }}>C/ descarte</th>

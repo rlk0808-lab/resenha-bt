@@ -5,6 +5,7 @@
   import { acessivelClique } from "../lib/a11y";
   import { gerarSorteioQualify } from "../lib/sorteioQualify";
   import { proximoSabadoISO } from "../lib/prazo";
+  import { nomeRodada } from "../lib/rodada";
   import { enviarPush } from "../lib/notificar";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
@@ -202,7 +203,8 @@
     async function marcarRodadaNaoRealizada() {
       if (!rodadaSelecionada) return;
       if (rodadaSelecionada.status === "finalizada") { mostrarMensagem("Essa rodada já foi finalizada.", "erro"); return; }
-      if (!confirm(`Confirma que a Rodada ${rodadaSelecionada.numero} não vai acontecer? A data será adiada em 7 dias — confirmações e sorteio (se houver) são mantidos como estão.`)) return;
+      const artigoRodadaSelecionada = rodadaSelecionada.tipo === "qualify" ? "o Qualify" : `a ${nomeRodada(rodadaSelecionada)}`;
+      if (!confirm(`Confirma que ${artigoRodadaSelecionada} não vai acontecer? A data será adiada em 7 dias — confirmações e sorteio (se houver) são mantidos como estão.`)) return;
       setProcessandoRodada(true);
       const d = new Date(rodadaSelecionada.data + "T12:00:00");
       d.setDate(d.getDate() + 7);
@@ -220,7 +222,8 @@
       if (!todosJogos || todosJogos.length === 0) { mostrarMensagem("Esta rodada ainda não tem sorteio para cancelar.", "erro"); return; }
       const comPlacar = todosJogos.some(j => j.placar_a !== null || j.placar_b !== null);
       if (comPlacar) { mostrarMensagem("Não é possível cancelar: já existem placares lançados nesta rodada.", "erro"); return; }
-      if (!confirm(`Confirma cancelar o sorteio da Rodada ${rodadaSelecionada.numero}? Os ${todosJogos.length} jogos gerados serão apagados. As confirmações continuam valendo — é só gerar um novo sorteio.`)) return;
+      const doRodadaSelecionada = rodadaSelecionada.tipo === "qualify" ? "do Qualify" : `da ${nomeRodada(rodadaSelecionada)}`;
+      if (!confirm(`Confirma cancelar o sorteio ${doRodadaSelecionada}? Os ${todosJogos.length} jogos gerados serão apagados. As confirmações continuam valendo — é só gerar um novo sorteio.`)) return;
       setProcessandoRodada(true);
       const { data: deletados, error: erroDelete } = await supabase.from("jogos").delete().eq("rodada_id", rodadaSelecionada.id).select("id");
       if (erroDelete) { mostrarMensagem("Erro ao cancelar sorteio: " + erroDelete.message, "erro"); setProcessandoRodada(false); return; }
@@ -1653,7 +1656,7 @@
             )}
 
             <div style={styles.card}>
-              <h2 style={styles.cardTitulo}>🎲 Sorteio Manual {rodadaSelecionada && <span style={styles.badgeRodada}>R{rodadaSelecionada.numero} — {chaveAtiva}</span>}</h2>
+              <h2 style={styles.cardTitulo}>🎲 Sorteio Manual {rodadaSelecionada && <span style={styles.badgeRodada}>{nomeRodada(rodadaSelecionada)} — {chaveAtiva}</span>}</h2>
               <p style={styles.infoText}>Use apenas para sorteios pontuais. Para fechar a rodada use o botão acima.</p>
               {rodadaSelecionada?.tipo !== "especial" && (
                 <button onClick={gerarSorteioLocal} style={styles.btnSortear}>🎲 Gerar Sorteio Manual</button>

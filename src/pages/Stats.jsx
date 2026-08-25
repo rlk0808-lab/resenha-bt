@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { BADGE_INFO } from '../lib/badges'
-import { buscarVitoriasGerais, buscarClassificacaoTemporadaAtual, buscarRodadaIdsLigaAtual, buscarLigaAtual } from '../lib/temporada'
+import { buscarVitoriasGerais, buscarClassificacaoTemporadaAtual, buscarRodadaIdsLigaAtual, listarLigas } from '../lib/temporada'
 import { acessivelClique } from '../lib/a11y'
+
+const HISTORICO_TOTAL = '__total__'
 
 // Agrega jogos por jogador (jogos/vitórias/saldo), casando preferencialmente
 // por dupla_x_id (ver migration 20260816120000_jogos_jogador_id.sql) e caindo
@@ -50,14 +52,14 @@ export default function Stats() {
   const [pontuacao, setPontuacao] = useState([])
   const [jogadores, setJogadores] = useState([])
   const [vitoriasGerais, setVitoriasGerais] = useState([])
-  const [rodadaIdsAtual, setRodadaIdsAtual] = useState(new Set())
-  const [ligaAtual, setLigaAtual] = useState(null)
-  const [classificacaoAtual, setClassificacaoAtual] = useState([])
-  const [classificacaoTotal, setClassificacaoTotal] = useState([])
+  const [ligas, setLigas] = useState([]) // mais recente primeiro; ligas[0] = atual
+  const [relatorioLiga, setRelatorioLiga] = useState(null) // nome da liga, ou HISTORICO_TOTAL
+  const [classificacaoRelatorio, setClassificacaoRelatorio] = useState([])
+  const [rodadaIdsRelatorio, setRodadaIdsRelatorio] = useState(new Set())
+  const [carregandoRelatorio, setCarregandoRelatorio] = useState(true)
   const [loading, setLoading] = useState(true)
   const [aba, setAba] = useState('badges')
   const [expandido, setExpandido] = useState({})
-  const [relatorioPeriodo, setRelatorioPeriodo] = useState('atual')
   const [ordenacao, setOrdenacao] = useState({ campo: 'pontos', dir: -1 })
 
   useEffect(() => {
@@ -82,24 +84,39 @@ export default function Stats() {
       const { data: jogs } = await supabase.from('jogadores').select('id, nome, foto_url, chave')
       setJogadores(jogs || [])
 
-      const [vitGerais, liga, rodIds, { lista: classAtual }] = await Promise.all([
+      const [vitGerais, ls] = await Promise.all([
         buscarVitoriasGerais(),
-        buscarLigaAtual(),
-        buscarRodadaIdsLigaAtual(),
-        buscarClassificacaoTemporadaAtual(),
+        listarLigas(),
       ])
       setVitoriasGerais(vitGerais)
-      setLigaAtual(liga)
-      setRodadaIdsAtual(rodIds)
-      setClassificacaoAtual(classAtual)
-
-      const { data: classTotal } = await supabase.from('classificacao').select('*').order('posicao', { ascending: true })
-      setClassificacaoTotal(classTotal || [])
+      setLigas(ls)
+      setRelatorioLiga(ls[0] || HISTORICO_TOTAL)
 
       setLoading(false)
     }
     carregar()
   }, [])
+
+  useEffect(() => {
+    if (!relatorioLiga) return
+    async function carregarRelatorio() {
+      setCarregandoRelatorio(true)
+      if (relatorioLiga === HISTORICO_TOTAL) {
+        const { data } = await supabase.from('classificacao').select('*').order('posicao', { ascending: true })
+        setClassificacaoRelatorio(data || [])
+        setRodadaIdsRelatorio(null) // null = sem filtro, considera todas as rodadas
+      } else {
+        const [{ lista }, rodIds] = await Promise.all([
+          buscarClassificacaoTemporadaAtual({ liga: relatorioLiga }),
+          buscarRodadaIdsLigaAtual(relatorioLiga),
+        ])
+        setClassificacaoRelatorio(lista)
+        setRodadaIdsRelatorio(rodIds)
+      }
+      setCarregandoRelatorio(false)
+    }
+    carregarRelatorio()
+  }, [relatorioLiga])
 
   function toggleExpandido(key) {
     setExpandido(prev => ({ ...prev, [key]: !prev[key] }))
@@ -234,10 +251,10 @@ export default function Stats() {
   const nomeParaId = {}
   jogadores.forEach(j => { nomeParaId[j.nome] = j.id })
 
-  const baseRelatorio = relatorioPeriodo === 'atual' ? classificacaoAtual : classificacaoTotal
-  const jogosEscopoRelatorio = relatorioPeriodo === 'atual'
-    ? jogos.filter(j => rodadaIdsAtual.has(j.rodada_id))
-    : jogos
+  const baseRelatorio = classificacaoRelatorio
+  const jogosEscopoRelatorio = relatorioLiga === HISTORICO_TOTAL
+    ? jogos
+    : jogos.filter(j => rodadaIdsRelatorio?.has(j.rodada_id))
   const porJogadorRelatorio = calcJogosPorJogador(jogosEscopoRelatorio, nomeParaId)
 
   const relatorioLista = baseRelatorio.map(j => {
@@ -267,7 +284,7 @@ export default function Stats() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    const sufixo = relatorioPeriodo === 'atual' ? (ligaAtual || 'temporada_atual') : 'historico_total'
+    const sufixo = relatorioLiga === HISTORICO_TOTAL ? 'historico_total' : relatorioLiga
     a.download = `relatorio_estatisticas_${sufixo.replace(/\s+/g, '_')}.csv`
     a.click()
     URL.revokeObjectURL(url)
@@ -478,12 +495,16 @@ export default function Stats() {
       {aba === 'relatorio' && (
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: 8, flex: 1 }}>
-              {[{ key: 'atual', label: ligaAtual ? `📅 ${ligaAtual}` : '📅 Temporada Atual' }, { key: 'total', label: '🏆 Histórico Total' }].map(({ key, label }) => (
-                <button key={key} onClick={() => setRelatorioPeriodo(key)} style={{
-                  flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-                  background: relatorioPeriodo === key ? '#c9a227' : 'rgba(255,255,255,0.06)',
-                  color: relatorioPeriodo === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
+            <div style={{ display: 'flex', gap: 8, flex: 1, overflowX: 'auto' }}>
+              {[
+                ...ligas.map((l, i) => ({ key: l, label: i === 0 ? `📅 ${l}` : `📜 ${l}` })),
+                { key: HISTORICO_TOTAL, label: '🏆 Histórico Total' },
+              ].map(({ key, label }) => (
+                <button key={key} onClick={() => setRelatorioLiga(key)} style={{
+                  flex: '0 0 auto', padding: '9px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                  whiteSpace: 'nowrap',
+                  background: relatorioLiga === key ? '#c9a227' : 'rgba(255,255,255,0.06)',
+                  color: relatorioLiga === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
                 }}>{label}</button>
               ))}
             </div>
@@ -495,10 +516,16 @@ export default function Stats() {
               ⬇️ Exportar CSV
             </button>
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
-            {relatorioLista.length} jogador{relatorioLista.length === 1 ? '' : 'es'} — toque num jogador pra ver o perfil completo. Toque numa coluna pra ordenar.
-          </div>
-          {relatorioLista.length === 0 ? (
+          {!carregandoRelatorio && (
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
+              {relatorioLista.length} jogador{relatorioLista.length === 1 ? '' : 'es'} — toque num jogador pra ver o perfil completo. Toque numa coluna pra ordenar.
+            </div>
+          )}
+          {carregandoRelatorio ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+              <div className="spinner" />
+            </div>
+          ) : relatorioLista.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Nenhum dado disponível ainda.</div>
           ) : (
             <div className="card" style={{ padding: 0, overflow: 'auto' }}>

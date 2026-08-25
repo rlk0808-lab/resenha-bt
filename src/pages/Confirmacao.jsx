@@ -5,6 +5,7 @@ import { calcularPrazoConfirmacao } from "../lib/prazo";
 import { useCountdown, formatarRestante } from "../lib/useCountdown";
 import { baixarIcs } from "../lib/calendario";
 import { enviarPush } from "../lib/notificar";
+import { nomeRodada } from "../lib/rodada";
 
 export default function Confirmacao({ session }) {
   const [rodadaAtual, setRodadaAtual] = useState(null);
@@ -272,22 +273,22 @@ export default function Confirmacao({ session }) {
     if (error) {
       mostrarMensagem("Erro ao confirmar: " + error.message, "erro");
     } else {
-      const numeroRodada = rodadaAtual.numero;
+      const daRodadaAtual = rodadaAtual.tipo === "qualify" ? "do Qualify" : `da ${nomeRodada(rodadaAtual)}`;
       if (status === "confirmado") {
         mostrarMensagem("✅ Presença confirmada na lista principal!", "sucesso", true);
         setConfirmacaoSucesso(true);
         notificarConfirmacaoPropria(jogador.id, "Presença confirmada! ✅",
-          `Você está na lista principal da Rodada ${numeroRodada}. Até lá!`);
+          `Você está na lista principal ${daRodadaAtual}. Até lá!`);
       } else if (!jogouUltimaRodada) {
         mostrarMensagem("⏳ Você não jogou a última rodada. Entrou na lista de espera.", "info", true);
         setConfirmacaoSucesso(true);
         notificarConfirmacaoPropria(jogador.id, "Você entrou na lista de espera",
-          `Rodada ${numeroRodada}: como você não jogou a última rodada, entrou na espera. Avisamos se surgir vaga.`);
+          `${nomeRodada(rodadaAtual)}: como você não jogou a última rodada, entrou na espera. Avisamos se surgir vaga.`);
       } else {
         mostrarMensagem("⏳ Prazo encerrado. Você entrou na lista de espera.", "info", true);
         setConfirmacaoSucesso(true);
         notificarConfirmacaoPropria(jogador.id, "Você entrou na lista de espera",
-          `Rodada ${numeroRodada}: o prazo da lista principal encerrou. Avisamos se surgir vaga.`);
+          `${nomeRodada(rodadaAtual)}: o prazo da lista principal encerrou. Avisamos se surgir vaga.`);
       }
       await carregarConfirmacoes(rodadaAtual.id, jogador);
       setTimeout(() => { document.getElementById('lista-confirmados')?.scrollIntoView({ behavior: 'smooth' }); }, 300);
@@ -400,7 +401,7 @@ export default function Confirmacao({ session }) {
             <div style={styles.rodadaInfo}>
               <div>
                 <div style={styles.rodadaLabel}>Próxima Rodada</div>
-                <div style={styles.rodadaNumero}>{rodadaAtual.tipo === "qualify" ? "Qualify" : `Rodada ${rodadaAtual.numero}`}</div>
+                <div style={styles.rodadaNumero}>{nomeRodada(rodadaAtual)}</div>
                 <div style={styles.rodadaData}>
                   📅 {new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", {
                     weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo"
@@ -599,7 +600,7 @@ export default function Confirmacao({ session }) {
               <strong style={{ color: "#c9a227" }}>{jogador?.nome}</strong>
             </p>
             <p style={{ color: "#7fb89a", fontSize: 14, marginBottom: 20 }}>
-              Rodada {rodadaAtual?.numero} — {rodadaAtual ? new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }) : ""}
+              {nomeRodada(rodadaAtual)} — {rodadaAtual ? new Date(rodadaAtual.data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" }) : ""}
             </p>
             {(!jogouUltimaRodada || !dentroPrazo) && (
               <div style={{ background: "#1a2a3a", border: "1px solid #2980b9", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#4a9ad4" }}>

@@ -13,12 +13,26 @@ async function buscarRodadasDaLiga(liga) {
   return data || []
 }
 
+// Toda liga que já teve pelo menos uma rodada, da mais recente pra mais
+// antiga (pela data de criação da 1a rodada dela) — usado pros seletores de
+// "ver por liga" em Classificação/Estatísticas, em vez de só atual/total.
+export async function listarLigas() {
+  const { data } = await supabase.from('rodadas').select('liga, created_at').order('created_at', { ascending: false })
+  const vistas = new Set()
+  const ligas = []
+  for (const r of (data || [])) {
+    if (!vistas.has(r.liga)) { vistas.add(r.liga); ligas.push(r.liga) }
+  }
+  return ligas
+}
+
 // Replica a lógica das views `classificacao` / `classificacao_com_descarte`
 // (soma de pontuacao por jogador, com rank; a versão com descarte ignora os
-// 2 piores resultados de cada jogador), mas escopada só à liga atual — as
+// 2 piores resultados de cada jogador), mas escopada a uma única liga — as
 // views originais somam tudo desde sempre, e viraram o "Histórico Total".
-export async function buscarClassificacaoTemporadaAtual({ comDescarte = false } = {}) {
-  const liga = await buscarLigaAtual()
+// Sem `liga` explícito, usa a liga atual (comportamento original).
+export async function buscarClassificacaoTemporadaAtual({ comDescarte = false, liga: ligaParam = null } = {}) {
+  const liga = ligaParam || await buscarLigaAtual()
   if (!liga) return { liga: null, lista: [] }
 
   const rodadas = await buscarRodadasDaLiga(liga)
@@ -94,10 +108,11 @@ export async function buscarStatsJogadorTemporadaAtual(jogadorId, { comDescarte 
   }
 }
 
-// IDs de rodada que pertencem à liga atual — usado pra filtrar `jogos`
-// (H2H, parceiros, sequência) por temporada atual em vez de histórico total.
-export async function buscarRodadaIdsLigaAtual() {
-  const liga = await buscarLigaAtual()
+// IDs de rodada de uma liga — usado pra filtrar `jogos` (H2H, parceiros,
+// sequência) por uma temporada específica em vez de histórico total. Sem
+// `liga` explícito, usa a liga atual (comportamento original).
+export async function buscarRodadaIdsLigaAtual(ligaParam = null) {
+  const liga = ligaParam || await buscarLigaAtual()
   if (!liga) return new Set()
   const rodadas = await buscarRodadasDaLiga(liga)
   return new Set(rodadas.map(r => r.id))

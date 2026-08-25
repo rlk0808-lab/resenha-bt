@@ -5,36 +5,28 @@ import Evolucao from './Evolucao'
 import DetalhadoRodadas from './DetalhadoRodadas'
 import CalendarioTemporada from './CalendarioTemporada'
 import { acessivelClique } from '../lib/a11y'
-import { buscarClassificacaoTemporadaAtual } from '../lib/temporada'
+import { buscarClassificacaoTemporadaAtual, listarLigas } from '../lib/temporada'
+
+const HISTORICO_TOTAL = '__total__'
 
 export default function Classificacao() {
   const [modoDescarte, setModoDescarte] = useState(false)
-  const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
+  const [ligas, setLigas] = useState([]) // mais recente primeiro; ligas[0] = atual
+  const [selecao, setSelecao] = useState(null) // nome da liga, ou HISTORICO_TOTAL
   const [verEvolucao, setVerEvolucao] = useState(false)
   const [verDetalhado, setVerDetalhado] = useState(false)
   const [verCalendario, setVerCalendario] = useState(false)
   const [jogadorAtualId, setJogadorAtualId] = useState(null)
-  const [ligaAtual, setLigaAtual] = useState(null)
-  const [totalSemDescarte, setTotalSemDescarte] = useState([])
-  const [totalComDescarte, setTotalComDescarte] = useState([])
-  const [atualSemDescarte, setAtualSemDescarte] = useState([])
-  const [atualComDescarte, setAtualComDescarte] = useState([])
+  const [lista, setLista] = useState([])
   const [loading, setLoading] = useState(true)
+  const [carregandoLista, setCarregandoLista] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
     async function load() {
-      const [{ data: sem }, { data: com }, atualSem, atualCom] = await Promise.all([
-        supabase.from('classificacao').select('*').order('posicao', { ascending: true }),
-        supabase.from('classificacao_com_descarte').select('*').order('posicao', { ascending: true }),
-        buscarClassificacaoTemporadaAtual({ comDescarte: false }),
-        buscarClassificacaoTemporadaAtual({ comDescarte: true }),
-      ])
-      setTotalSemDescarte(sem || [])
-      setTotalComDescarte(com || [])
-      setLigaAtual(atualSem.liga)
-      setAtualSemDescarte(atualSem.lista)
-      setAtualComDescarte(atualCom.lista)
+      const ls = await listarLigas()
+      setLigas(ls)
+      setSelecao(ls[0] || HISTORICO_TOTAL)
       // Busca jogador atual para pré-selecionar no gráfico
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
@@ -46,9 +38,22 @@ export default function Classificacao() {
     load()
   }, [])
 
-  const lista = periodo === 'atual'
-    ? (modoDescarte ? atualComDescarte : atualSemDescarte)
-    : (modoDescarte ? totalComDescarte : totalSemDescarte)
+  useEffect(() => {
+    if (!selecao) return
+    async function carregarLista() {
+      setCarregandoLista(true)
+      if (selecao === HISTORICO_TOTAL) {
+        const view = modoDescarte ? 'classificacao_com_descarte' : 'classificacao'
+        const { data } = await supabase.from(view).select('*').order('posicao', { ascending: true })
+        setLista(data || [])
+      } else {
+        const { lista: l } = await buscarClassificacaoTemporadaAtual({ comDescarte: modoDescarte, liga: selecao })
+        setLista(l)
+      }
+      setCarregandoLista(false)
+    }
+    carregarLista()
+  }, [selecao, modoDescarte])
 
   function corPos(pos) {
     if (pos === 1) return 'var(--ouro)'
@@ -87,18 +92,18 @@ export default function Classificacao() {
         </div>
       </div>
 
-      {/* Tabs Temporada Atual / Histórico Total */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
+      {/* Seletor: cada liga separada, ou Histórico Total unificado */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px', overflowX: 'auto' }}>
         {[
-          { key: 'atual', label: ligaAtual ? `📅 ${ligaAtual}` : '📅 Temporada Atual' },
-          { key: 'total', label: '🏆 Histórico Total' },
+          ...ligas.map((l, i) => ({ key: l, label: i === 0 ? `📅 ${l}` : `📜 ${l}` })),
+          { key: HISTORICO_TOTAL, label: '🏆 Histórico Total' },
         ].map(({ key, label }) => (
-          <button key={key} onClick={() => setPeriodo(key)} style={{
-            flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
-            background: periodo === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
-            color: periodo === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
+          <button key={key} onClick={() => setSelecao(key)} style={{
+            flex: '0 0 auto', padding: '10px 14px', border: 'none', borderRadius: '8px',
+            background: selecao === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
+            color: selecao === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
             fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
-            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s'
+            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap'
           }}>{label}</button>
         ))}
       </div>
@@ -141,7 +146,7 @@ export default function Classificacao() {
             </tr>
           </thead>
           <tbody>
-            {lista.map((j) => (
+            {!carregandoLista && lista.map((j) => (
               <tr key={j.id} {...acessivelClique(() => navigate(`/jogador/${j.id}`))} style={{ cursor: 'pointer' }}>
                 <td style={{ textAlign: 'center' }}>
                   <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '18px', color: corPos(j.posicao) }}>
@@ -176,7 +181,11 @@ export default function Classificacao() {
             ))}
           </tbody>
         </table>
-        {lista.length === 0 && (
+        {carregandoLista ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+            <div className="spinner" />
+          </div>
+        ) : lista.length === 0 && (
           <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '14px' }}>
             Nenhum dado disponível ainda
           </div>
