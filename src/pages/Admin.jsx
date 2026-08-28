@@ -954,7 +954,19 @@
         return resultados.filter(r => r.error).map(r => r.error.message);
       };
 
-      if (jogadorAusente.chave === "ouro") {
+      // Qualify e rodadas especiais têm chave única nos jogos (chave =
+      // "qualify"/"especial"/"time_a"/"time_b" — nada a ver com Ouro/Prata do
+      // jogador). A lógica de subida Ouro→Prata e o filtro chave="prata" só
+      // fazem sentido numa rodada normal já dividida em duas chaves; nelas o
+      // filtro nunca batia com nenhum jogo e a troca ficava silenciosamente
+      // sem efeito (bug relatado: botão "funcionava" mas a tabela não mudava).
+      const rodadaChaveUnica = rodadaSelecionada.tipo === "qualify" || rodadaSelecionada.tipo === "especial";
+
+      if (rodadaChaveUnica) {
+        const erros = await substituir(substAusente, substReserva, null);
+        if (erros.length > 0) mostrarMensagem(`⚠️ Substituição feita, mas com erro(s): ${erros.join("; ")}`, "erro");
+        else mostrarMensagem(`✅ ${substAusente} substituído por ${substReserva}.`);
+      } else if (jogadorAusente.chave === "ouro") {
         const { data: rodAntData } = await supabase.from("rodadas").select("id,tipo").eq("status","finalizada").eq("liga", rodadaSelecionada.liga).order("numero",{ascending:false});
         const rodAntNormal = rodAntData?.find(r => r.tipo !== "especial" && r.tipo !== "qualify");
         if (!rodAntNormal) { mostrarMensagem("Rodada anterior não encontrada.", "erro"); setSubstProcessando(false); return; }
