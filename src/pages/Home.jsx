@@ -10,6 +10,7 @@ import { useCountdown, formatarRestante } from '../lib/useCountdown'
 import { acessivelClique } from '../lib/a11y'
 import { nomeRodada } from '../lib/rodada'
 import { enviarPush } from '../lib/notificar'
+import { buscarPunicoesLiga, suspensaoAtiva } from '../lib/punicoes'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -30,6 +31,7 @@ export default function Home() {
   const [ultimaRodada, setUltimaRodada] = useState(null)
   const [feedJogos, setFeedJogos] = useState([])
   const [feedRanking, setFeedRanking] = useState({ ouro: [], prata: [] })
+  const [suspensoesAtivas, setSuspensoesAtivas] = useState([])
 
   useEffect(() => {
     async function load() {
@@ -57,6 +59,21 @@ export default function Home() {
         setLigaAtualNome(liga)
         const rodadasDaLiga = liga ? todasRodadas.filter(r => r.liga === liga) : []
         setTotalRodadasLiga(rodadasDaLiga.length)
+
+        // Suspensões ativas da liga atual (visíveis pra todos, não só o
+        // suspenso) — bloqueio de "rodadaNumero" é o mesmo cálculo usado em
+        // Confirmacao.jsx (lib/punicoes.js).
+        if (liga && proxima) {
+          const punicoesLiga = await buscarPunicoesLiga(liga)
+          const jogadorIds = [...new Set(punicoesLiga.filter(p => p.tipo === 'suspensao').map(p => p.jogador_id))]
+          if (jogadorIds.length > 0) {
+            const { data: jogs } = await supabase.from('jogadores').select('id, nome').in('id', jogadorIds)
+            const ativas = jogadorIds
+              .map(id => ({ jogador: jogs?.find(j => j.id === id), suspensao: suspensaoAtiva(id, proxima.numero, punicoesLiga) }))
+              .filter(x => x.jogador && x.suspensao)
+            setSuspensoesAtivas(ativas)
+          }
+        }
 
         // Rodada atual (pra "Rodada atual" e progresso) = última rodada
         // NORMAL finalizada ou ativa dentro dessa liga — o Qualify (numero
@@ -186,6 +203,28 @@ export default function Home() {
           {ligaAtualNome || 'Liga'} · Liga em andamento
         </p>
       </div>
+
+      {/* Aviso público de suspensões ativas — visível pra todos, não só o suspenso */}
+      {suspensoesAtivas.length > 0 && (
+        <div className="card" style={{
+          marginBottom: '20px', background: 'rgba(192,57,43,0.12)',
+          border: '1px solid rgba(192,57,43,0.4)', borderRadius: '16px', padding: '18px 20px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            <span style={{ fontSize: 18 }}>🚫</span>
+            <span style={{
+              fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
+              letterSpacing: '2px', textTransform: 'uppercase', color: '#e74c3c'
+            }}>Suspensões ativas</span>
+          </div>
+          {suspensoesAtivas.map(({ jogador, suspensao }) => (
+            <div key={jogador.id} style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', padding: '4px 0' }}>
+              <strong>{jogador.nome}</strong> — suspenso até a Rodada {suspensao.rodada_numero + suspensao.quantidade_rodadas}
+              {suspensao.motivo ? ` (${suspensao.motivo})` : ''}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Card próxima rodada */}
       <div className="card" style={{

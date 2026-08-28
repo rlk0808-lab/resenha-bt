@@ -95,7 +95,7 @@ export default function Rodada() {
           } else if (payload.eventType === 'DELETE') {
             novo = prev.filter(j => j.id !== payload.old?.id)
           }
-          calcularRankingVivo(novo)
+          calcularRankingVivo(novo, proximaRodada.numero)
           return novo
         })
       })
@@ -118,7 +118,7 @@ export default function Rodada() {
         .order('chave', { ascending: true })
         .order('created_at', { ascending: true })
       setProximaJogos(j || [])
-      calcularRankingVivo(j || [])
+      calcularRankingVivo(j || [], proxima.numero)
     }
 
     // created_at, não numero — assim rodadas de ligas diferentes não se
@@ -227,8 +227,15 @@ export default function Rodada() {
     }
   }
 
-  function calcularRankingVivo(jogos) {
+  function calcularRankingVivo(jogos, rodadaNumero) {
     const PONTOS_OURO = [25,22,20,18,16,14,12,10,8,8,8,8]
+    // Rodadas especiais (4/8/12): tabela única de colocação pra Ouro e
+    // Prata, tudo dobrado (posição e bônus de vitória) — mesma regra usada
+    // em Admin.jsx (calcularRankingLocal/RODADAS_ESPECIAIS). Recebe o número
+    // da rodada por parâmetro (em vez de ler `proximaRodada` via closure)
+    // pra não criar uma dependência reativa implícita nos efeitos que chamam
+    // essa função.
+    const especial = [4, 8, 12].includes(rodadaNumero)
     const calcChave = (jogosChave, chave) => {
       const stats = {}
       for (const j of jogosChave) {
@@ -245,11 +252,16 @@ export default function Rodada() {
       }
       return Object.values(stats)
         .sort((a,b) => b.pts !== a.pts ? b.pts-a.pts : b.saldo-a.saldo)
-        .map((j,idx) => ({
-          ...j,
-          pontosDia: j.pts,
-          pontos: (chave === 'ouro' ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === 'prata' && idx === 0 ? 3 : 0)
-        }))
+        .map((j,idx) => {
+          const posPts = especial ? (PONTOS_OURO[idx] || 8) : (chave === 'ouro' ? (PONTOS_OURO[idx] || 8) : 8)
+          const bonusCampeaoPrata = (!especial && chave === 'prata' && idx === 0) ? 3 : 0
+          const dobra = especial ? 2 : 1
+          return {
+            ...j,
+            pontosDia: j.pts,
+            pontos: (posPts + j.vitorias * 3 + bonusCampeaoPrata) * dobra
+          }
+        })
     }
     const ouro = calcChave(jogos.filter(j => j.chave === 'ouro'), 'ouro')
     const prata = calcChave(jogos.filter(j => j.chave === 'prata'), 'prata')
@@ -300,7 +312,7 @@ export default function Rodada() {
     } else {
       setProximaJogos(prev => {
         const novo = prev.map(j => j.id === jogoId ? { ...j, ...updateData } : j)
-        calcularRankingVivo(novo)
+        calcularRankingVivo(novo, proximaRodada?.numero)
         return novo
       })
       setEditandoPlacarId(null)

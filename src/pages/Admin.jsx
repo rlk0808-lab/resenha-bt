@@ -7,13 +7,18 @@
   import { proximoSabadoISO } from "../lib/prazo";
   import { nomeRodada } from "../lib/rodada";
   import { enviarPush } from "../lib/notificar";
+  import { buscarPunicoesLiga, contarAtrasos, suspensaoAtiva } from "../lib/punicoes";
 
   const PONTOS_OURO = [25, 22, 20, 18, 16, 14, 12, 10, 8, 8, 8, 8];
   // 12ª rodada = última da temporada — pontuação da liga vale em dobro
   // (Regulamento: "12ª Rodada — Pontuação dobrada / Divisão normal entre
   // Ouro e Prata"). Mesmo padrão de número fixo já usado pras especiais
   // (rodada 4 e 8, ver criação da próxima rodada em salvarPontuacao).
-  const RODADA_FINAL_DOBRADA = 12;
+  // Rodadas especiais (formato normal, pontuação dobrada e tabela única de
+  // colocação para Ouro e Prata) — ver calcularRankingLocal. Não usa mais
+  // `tipo: "especial"` (draft de times), que continua no código intacto
+  // para uma liga futura que queira voltar a usar esse formato.
+  const RODADAS_ESPECIAIS = [4, 8, 12];
 
   // Estrutura fixa do chaveamento (índices 0-11 = slots J1-J12)
   // Formato por rodada: [a1, a2, b1, b2] = dupla(a1,a2) x dupla(b1,b2)
@@ -108,6 +113,9 @@
     const [vinculacoes, setVinculacoes] = useState({});
     const [atletas, setAtletas] = useState([]);
     const [loadingAtletas, setLoadingAtletas] = useState(false);
+    const [punicoes, setPunicoes] = useState([]);
+    const [loadingPunicoes, setLoadingPunicoes] = useState(false);
+    const [processandoPunicaoId, setProcessandoPunicaoId] = useState(null);
     const [listaEsperaAdmin, setListaEsperaAdmin] = useState([]);
     const [promovendo, setPromovendo] = useState(false);
     const [mensagem, setMensagem] = useState(null);
@@ -141,6 +149,7 @@
     useEffect(() => { if (abaAtiva === "convites") carregarConvites(); }, [abaAtiva]);
     useEffect(() => { if (abaAtiva === "aprovacoes") carregarPendentes(); }, [abaAtiva]);
     useEffect(() => { if (abaAtiva === "atletas") carregarAtletas(); }, [abaAtiva]);
+    useEffect(() => { if (abaAtiva === "punicoes") { carregarAtletas(); carregarPunicoes(); } }, [abaAtiva]);
 
     function mostrarMensagem(texto, tipo = "sucesso") {
       setMensagem({ texto, tipo });
@@ -617,9 +626,15 @@
           j.timeVencedor = isVencedor;
         });
       } else {
-        const dobra = rodadaSelecionada?.numero === RODADA_FINAL_DOBRADA ? 2 : 1;
+        const especial = RODADAS_ESPECIAIS.includes(rodadaSelecionada?.numero);
+        const dobra = especial ? 2 : 1;
         jogadoresList.forEach((j, idx) => {
-          j.ptosLiga = ((chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8) + j.vitorias * 3 + (chave === "prata" && idx === 0 ? 3 : 0)) * dobra;
+          // Especial: Ouro e Prata pontuam igualmente pela tabela de posição
+          // (sem o piso fixo de 8 nem o bônus de campeão da Prata), com tudo
+          // dobrado — inclusive o bônus de vitória (3 -> 6).
+          const posPts = especial ? (PONTOS_OURO[idx] || 8) : (chave === "ouro" ? (PONTOS_OURO[idx] || 8) : 8);
+          const bonusCampeaoPrata = (!especial && chave === "prata" && idx === 0) ? 3 : 0;
+          j.ptosLiga = (posPts + j.vitorias * 3 + bonusCampeaoPrata) * dobra;
           j.posicao = idx + 1;
         });
       }
@@ -864,7 +879,11 @@
       const { data: proximaExistente } = await supabase.from("rodadas").select("id").eq("status", "proxima").limit(1);
       if (!proximaExistente || proximaExistente.length === 0) {
         const proximoNumero = rodadaSelecionada.numero + 1;
-        await supabase.from("rodadas").insert({ numero: proximoNumero, data: proximoSabadoISO(), status: "proxima", liga: rodadaSelecionada.liga, tipo: (proximoNumero === 4 || proximoNumero === 8) ? "especial" : "normal" });
+        // tipo sempre "normal" — as rodadas especiais (4/8/12) agora usam o
+        // formato normal, só com pontuação diferente (ver RODADAS_ESPECIAIS
+        // em calcularRankingLocal). tipo:"especial" (draft de times) fica
+        // disponível pra uma liga futura, mas não é mais atribuído aqui.
+        await supabase.from("rodadas").insert({ numero: proximoNumero, data: proximoSabadoISO(), status: "proxima", liga: rodadaSelecionada.liga, tipo: "normal" });
         await enviarNotificacao("Lista aberta!", `A lista para a Rodada ${proximoNumero} esta aberta. Confirme sua presenca!`, "/confirmacao");
         mostrarMensagem(`✅ Pontuação salva! Rodada ${proximoNumero} criada.`);
       } else {
@@ -1068,6 +1087,72 @@
       const { error } = await supabase.from("jogadores").update({ user_id: null, apelido: null }).eq("id", jogador.id);
       if (error) mostrarMensagem("Erro ao revogar: " + error.message, "erro");
       else { mostrarMensagem(`✅ Acesso de ${jogador.nome} revogado.`); carregarAtletas(); }
+    }
+
+    // Rodada de referência pra registrar uma punição: a ativa, senão a
+    // próxima — mesmo padrão já usado em outros pontos do arquivo (linhas
+    // 171/175/1088) pra achar "a rodada atual" a partir do state `rodadas`.
+    function rodadaReferenciaPunicao() {
+      return rodadas.find(r => r.status === "ativa") || rodadas.find(r => r.status === "proxima") || null;
+    }
+
+    async function carregarPunicoes() {
+      setLoadingPunicoes(true);
+      const liga = await buscarLigaAtual();
+      const lista = await buscarPunicoesLiga(liga);
+      setPunicoes(lista);
+      setLoadingPunicoes(false);
+    }
+
+    async function registrarAtraso(jogador) {
+      const rodadaRef = rodadaReferenciaPunicao();
+      if (!rodadaRef) { mostrarMensagem("Nenhuma rodada ativa/próxima encontrada.", "erro"); return; }
+      setProcessandoPunicaoId(jogador.id);
+      const atrasosAnteriores = contarAtrasos(jogador.id, punicoes);
+      const { error } = await supabase.from("punicoes").insert({
+        jogador_id: jogador.id, tipo: "atraso",
+        rodada_id: rodadaRef.id, rodada_numero: rodadaRef.numero, liga: rodadaRef.liga,
+      });
+      if (error) { mostrarMensagem("Erro ao registrar atraso: " + error.message, "erro"); setProcessandoPunicaoId(null); return; }
+
+      // 2º atraso (ou mais) na liga = suspensão automática de 1 rodada.
+      if (atrasosAnteriores + 1 >= 2) {
+        await supabase.from("punicoes").insert({
+          jogador_id: jogador.id, tipo: "suspensao", motivo: "2 atrasos acumulados",
+          rodada_id: rodadaRef.id, rodada_numero: rodadaRef.numero, liga: rodadaRef.liga, quantidade_rodadas: 1,
+        });
+        await enviarNotificacao("🚫 Suspensão aplicada", `Você acumulou 2 atrasos e está suspenso na Rodada ${rodadaRef.numero + 1}.`, "/confirmacao", [jogador.id]);
+        mostrarMensagem(`🚫 ${jogador.nome} atingiu 2 atrasos — suspenso por 1 rodada.`);
+      } else {
+        await enviarNotificacao("⚠️ Notificação de atraso", "Você chegou atrasado e recebeu uma notificação. 2 atrasos geram suspensão de 1 rodada.", "/confirmacao", [jogador.id]);
+        mostrarMensagem(`⚠️ Atraso registrado para ${jogador.nome}.`);
+      }
+      await carregarPunicoes();
+      setProcessandoPunicaoId(null);
+    }
+
+    async function registrarFalta(jogador) {
+      const rodadaRef = rodadaReferenciaPunicao();
+      if (!rodadaRef) { mostrarMensagem("Nenhuma rodada ativa/próxima encontrada.", "erro"); return; }
+      if (!confirm(`Registrar falta sem aviso/justificativa/substituto de ${jogador.nome}? Isso aplica suspensão de 2 rodadas.`)) return;
+      setProcessandoPunicaoId(jogador.id);
+      const { error } = await supabase.from("punicoes").insert({
+        jogador_id: jogador.id, tipo: "suspensao", motivo: "falta sem aviso/justificativa/substituto",
+        rodada_id: rodadaRef.id, rodada_numero: rodadaRef.numero, liga: rodadaRef.liga, quantidade_rodadas: 2,
+      });
+      if (error) { mostrarMensagem("Erro ao registrar falta: " + error.message, "erro"); setProcessandoPunicaoId(null); return; }
+      await enviarNotificacao("🚫 Suspensão aplicada", `Falta sem aviso registrada — você está suspenso até a Rodada ${rodadaRef.numero + 2}.`, "/confirmacao", [jogador.id]);
+      mostrarMensagem(`🚫 Falta registrada — ${jogador.nome} suspenso por 2 rodadas.`);
+      await carregarPunicoes();
+      setProcessandoPunicaoId(null);
+    }
+
+    async function removerPunicao(punicao) {
+      if (!confirm("Remover esta punição?")) return;
+      const { error } = await supabase.from("punicoes").delete().eq("id", punicao.id);
+      if (error) { mostrarMensagem("Erro ao remover: " + error.message, "erro"); return; }
+      mostrarMensagem("Punição removida.");
+      await carregarPunicoes();
     }
 
     async function carregarListaEspera() {
@@ -1547,6 +1632,7 @@
             👤 Aprovações {pendentes.length > 0 && <span style={styles.badge}>{pendentes.length}</span>}
           </button>
           <button onClick={() => setAbaAtiva("atletas")} style={{ ...styles.aba, ...(abaAtiva === "atletas" ? styles.abaAtiva : {}) }}>👥 Atletas</button>
+          <button onClick={() => setAbaAtiva("punicoes")} style={{ ...styles.aba, ...(abaAtiva === "punicoes" ? styles.abaAtiva : {}) }}>🚨 Punições</button>
         </div>
 
         {/* ── ABA JOGOS ── */}
@@ -2097,6 +2183,71 @@
               ))}
           </div>
         )}
+        {/* ── ABA PUNIÇÕES ── */}
+        {abaAtiva === "punicoes" && (() => {
+          const rodadaRef = rodadaReferenciaPunicao();
+          const numeroAtual = rodadaRef?.numero ?? null;
+          return (
+            <div style={styles.card}>
+              <h2 style={styles.cardTitulo}>
+                🚨 Punições — Atraso e Falta
+                <span style={styles.badgeCount}>{punicoes.filter(p => p.tipo === "suspensao").length} suspensão(ões)</span>
+              </h2>
+              <p style={{ fontSize: 12, color: "#7fb89a", marginBottom: 12 }}>
+                1º atraso: notificação. 2 atrasos acumulados: suspensão de 1 rodada. Falta sem
+                aviso/justificativa/substituto: suspensão de 2 rodadas. Ações valem pra rodada
+                atual: {rodadaRef ? `${nomeRodada(rodadaRef)} (${rodadaRef.liga})` : "nenhuma rodada ativa/próxima"}.
+              </p>
+              {loadingPunicoes ? <p style={styles.loadingText}>Carregando...</p>
+                : atletas.filter(a => a.ativo !== false).map((a) => {
+                  const atrasos = contarAtrasos(a.id, punicoes);
+                  const suspensao = numeroAtual != null ? suspensaoAtiva(a.id, numeroAtual, punicoes) : null;
+                  const historico = punicoes.filter(p => p.jogador_id === a.id);
+                  return (
+                    <div key={a.id} style={{ ...styles.pendenteCard, flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={styles.pendenteNome}>{a.nome}</div>
+                        {suspensao ? (
+                          <span style={{ fontSize: 11, color: "#e74c3c", fontWeight: 700 }}>
+                            🚫 suspenso até Rodada {suspensao.rodada_numero + suspensao.quantidade_rodadas}
+                          </span>
+                        ) : atrasos > 0 ? (
+                          <span style={{ fontSize: 11, color: "#f1c40f", fontWeight: 700 }}>⚠️ {atrasos} atraso(s)</span>
+                        ) : (
+                          <span style={{ fontSize: 11, color: "#5a8a6a" }}>sem punições</span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => registrarAtraso(a)} disabled={processandoPunicaoId === a.id || !rodadaRef}
+                          style={{ ...styles.btnRejeitar, background: "#8a6d1a", opacity: (!rodadaRef || processandoPunicaoId === a.id) ? 0.5 : 1 }}>
+                          ⏱️ Registrar atraso
+                        </button>
+                        <button onClick={() => registrarFalta(a)} disabled={processandoPunicaoId === a.id || !rodadaRef}
+                          style={{ ...styles.btnRejeitar, opacity: (!rodadaRef || processandoPunicaoId === a.id) ? 0.5 : 1 }}>
+                          🚷 Registrar falta
+                        </button>
+                      </div>
+                      {historico.length > 0 && (
+                        <div style={{ fontSize: 11, color: "#7fb89a", display: "flex", flexDirection: "column", gap: 4 }}>
+                          {historico.map(p => (
+                            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span>
+                                {p.tipo === "suspensao" ? "🚫" : "⚠️"} {p.tipo} — Rodada {p.rodada_numero}
+                                {p.motivo ? ` (${p.motivo})` : ""}
+                              </span>
+                              <button onClick={() => removerPunicao(p)} style={{ background: "transparent", border: "none", color: "#e74c3c", cursor: "pointer", fontSize: 11 }}>
+                                🗑️ remover
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          );
+        })()}
         {/* Modal de substituição */}
         {modalSubst && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>

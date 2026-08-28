@@ -6,6 +6,7 @@ import { useCountdown, formatarRestante } from "../lib/useCountdown";
 import { baixarIcs } from "../lib/calendario";
 import { enviarPush } from "../lib/notificar";
 import { nomeRodada } from "../lib/rodada";
+import { buscarPunicoesLiga, suspensaoAtiva } from "../lib/punicoes";
 
 export default function Confirmacao({ session }) {
   const [rodadaAtual, setRodadaAtual] = useState(null);
@@ -20,6 +21,7 @@ export default function Confirmacao({ session }) {
   const [mensagem, setMensagem] = useState(null);
   const [confirmandoPendente, setConfirmandoPendente] = useState(false);
   const [confirmacaoSucesso, setConfirmacaoSucesso] = useState(false);
+  const [suspensao, setSuspensao] = useState(null);
 
   const LIMITE_PRINCIPAL = rodadaAtual?.vagas_total || VAGAS_LISTA_PRINCIPAL;
   const formatoAtual = FORMATOS_RODADA.find(f => f.total === LIMITE_PRINCIPAL) || FORMATOS_RODADA[0];
@@ -49,6 +51,13 @@ export default function Confirmacao({ session }) {
     const rodada = data?.[0] || null;
     if (!rodada) return;
     setRodadaAtual(rodada);
+
+    if (jog) {
+      const punicoesLiga = await buscarPunicoesLiga(rodada.liga);
+      setSuspensao(suspensaoAtiva(jog.id, rodada.numero, punicoesLiga));
+    } else {
+      setSuspensao(null);
+    }
 
     // Busca rodadas finalizadas DA MESMA LIGA (senão a 1a rodada de uma liga
     // nova herdaria referências da liga anterior, ou travaria todo mundo na espera)
@@ -246,6 +255,7 @@ export default function Confirmacao({ session }) {
 
   async function confirmarPresenca() {
     if (!jogador || !rodadaAtual) return;
+    if (suspensao) { mostrarMensagem(`🚫 Você está suspenso até a Rodada ${suspensao.rodada_numero + suspensao.quantidade_rodadas}.`, "erro"); return; }
     // Lista fechada: ainda permite entrar na espera
     setProcessando(true);
 
@@ -453,7 +463,17 @@ export default function Confirmacao({ session }) {
           {/* ── MINHA SITUAÇÃO ── */}
           <div style={styles.card}>
             <h2 style={styles.cardTitulo}>Minha situação</h2>
-            {fechada ? (
+            {suspensao ? (
+              <div style={{ ...styles.semConfirmacao, background: "#3a1414", border: "1px solid #e74c3c" }}>
+                <div style={styles.semConfirmacaoIcon}>🚫</div>
+                <div style={{ ...styles.semConfirmacaoTexto, color: "#e74c3c" }}>
+                  Você está suspenso até a Rodada {suspensao.rodada_numero + suspensao.quantidade_rodadas}
+                </div>
+                {suspensao.motivo && (
+                  <div style={{ fontSize: 12, color: "#f1a9a9", marginTop: 4, textAlign: "center" }}>{suspensao.motivo}</div>
+                )}
+              </div>
+            ) : fechada ? (
               <div style={styles.listaEncerrada}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
                 <div style={{ fontSize: 15, color: "#c8e6c9", fontWeight: 700, marginBottom: 4 }}>Lista encerrada</div>

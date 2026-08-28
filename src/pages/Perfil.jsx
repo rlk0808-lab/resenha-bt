@@ -7,6 +7,7 @@ import { acessivelClique } from '../lib/a11y'
 import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
 import { calcularStatsDeJogos, DADOS_H2H_VAZIOS, ehJogador } from '../lib/h2h'
 import { escaparValorFiltroOr } from '../lib/postgrestFiltro'
+import { buscarPunicoesLiga, contarAtrasos, suspensaoAtiva } from '../lib/punicoes'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -31,6 +32,8 @@ export default function Perfil() {
   const fileRef = useRef()
   const navigate = useNavigate()
   const [jogadoresMap, setJogadoresMap] = useState({})
+  const [atrasos, setAtrasos] = useState(0)
+  const [suspensao, setSuspensao] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -52,6 +55,16 @@ export default function Perfil() {
         ])
         setLigaAtualNome(liga)
         setStatsAtual(statsAtualJog)
+
+        if (liga) {
+          const [punicoesLiga, { data: rodadaAtualData }] = await Promise.all([
+            buscarPunicoesLiga(liga),
+            supabase.from('rodadas').select('numero').eq('liga', liga).in('status', ['ativa', 'proxima']).order('numero', { ascending: true }).limit(1),
+          ])
+          const numeroAtual = rodadaAtualData?.[0]?.numero ?? null
+          setAtrasos(contarAtrasos(p.id, punicoesLiga))
+          setSuspensao(numeroAtual != null ? suspensaoAtiva(p.id, numeroAtual, punicoesLiga) : null)
+        }
 
         const { data: temps } = await supabase
           .from('temporadas').select('*').eq('jogador_id', p.id).order('ano', { ascending: false })
@@ -194,10 +207,19 @@ export default function Perfil() {
               {perfil?.nome || 'Jogador'}
             </div>
             {perfil?.apelido && <div style={{ fontSize: 13, color: '#7fb89a', marginTop: 3 }}>{perfil.apelido}</div>}
-            <div style={{ marginTop: '6px' }}>
+            <div style={{ marginTop: '6px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {perfil?.chave === 'ouro'
                 ? <span className="badge-ouro">Chave Ouro</span>
                 : <span className="badge-prata">Chave Prata</span>}
+              {suspensao ? (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#e74c3c', background: 'rgba(192,57,43,0.15)', border: '1px solid rgba(192,57,43,0.4)', borderRadius: 20, padding: '3px 10px' }}>
+                  🚫 suspenso até Rodada {suspensao.rodada_numero + suspensao.quantidade_rodadas}
+                </span>
+              ) : atrasos > 0 ? (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#f1c40f', background: 'rgba(241,196,15,0.12)', border: '1px solid rgba(241,196,15,0.4)', borderRadius: 20, padding: '3px 10px' }}>
+                  ⚠️ {atrasos} atraso(s)
+                </span>
+              ) : null}
             </div>
             {uploadando && <div style={{ fontSize: 12, color: '#7fb89a', marginTop: 4 }}>Enviando foto...</div>}
             {!uploadando && <div style={{ fontSize: 11, color: '#5a8a6a', marginTop: 4, cursor: 'pointer' }} onClick={() => fileRef.current?.click()}>Toque para alterar foto</div>}

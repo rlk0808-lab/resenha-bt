@@ -6,6 +6,7 @@ import { calcularStatsDeJogos, DADOS_H2H_VAZIOS, ehJogador } from '../lib/h2h'
 import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
 import { BADGE_INFO } from '../lib/badges'
 import { escaparValorFiltroOr } from '../lib/postgrestFiltro'
+import { buscarPunicoesLiga, contarAtrasos, suspensaoAtiva } from '../lib/punicoes'
 
 const ouro = '#c9a227'
 const borda = '#2a5a3a'
@@ -29,6 +30,8 @@ export default function PerfilJogador() {
   const [parceiroAberto, setParceiroAberto] = useState(null)
   const [jogadoresMap, setJogadoresMap] = useState({})
   const [loading, setLoading] = useState(true)
+  const [atrasos, setAtrasos] = useState(0)
+  const [suspensao, setSuspensao] = useState(null)
 
   async function carregarPerfil() {
     setLoading(true)
@@ -55,6 +58,16 @@ export default function PerfilJogador() {
     setLigaAtualNome(liga)
     setPontosAtual(statsAtualJog.pontos_total)
     setPontosAtualDescarte(statsAtualJogDescarte.pontos_total)
+
+    if (liga) {
+      const [punicoesLiga, { data: rodadaAtualData }] = await Promise.all([
+        buscarPunicoesLiga(liga),
+        supabase.from('rodadas').select('numero').eq('liga', liga).in('status', ['ativa', 'proxima']).order('numero', { ascending: true }).limit(1),
+      ])
+      const numeroAtual = rodadaAtualData?.[0]?.numero ?? null
+      setAtrasos(contarAtrasos(id, punicoesLiga))
+      setSuspensao(numeroAtual != null ? suspensaoAtiva(id, numeroAtual, punicoesLiga) : null)
+    }
 
     const { data: bads } = await supabase.from('badges')
       .select('tipo, rodadas(numero)').eq('jogador_id', id).order('created_at', { ascending: false })
@@ -157,8 +170,17 @@ export default function PerfilJogador() {
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 2, lineHeight: 1, color: '#fff' }}>{jogador.nome}</div>
-            <div style={{ marginTop: 6 }}>
+            <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {jogador.chave === 'ouro' ? <span className="badge-ouro">Chave Ouro</span> : <span className="badge-prata">Chave Prata</span>}
+              {suspensao ? (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#e74c3c', background: 'rgba(192,57,43,0.15)', border: '1px solid rgba(192,57,43,0.4)', borderRadius: 20, padding: '3px 10px' }}>
+                  🚫 suspenso até Rodada {suspensao.rodada_numero + suspensao.quantidade_rodadas}
+                </span>
+              ) : atrasos > 0 ? (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#f1c40f', background: 'rgba(241,196,15,0.12)', border: '1px solid rgba(241,196,15,0.4)', borderRadius: 20, padding: '3px 10px' }}>
+                  ⚠️ {atrasos} atraso(s)
+                </span>
+              ) : null}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>

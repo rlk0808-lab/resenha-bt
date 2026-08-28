@@ -62,22 +62,23 @@ const secoes = [
   },
   {
     icon: '🎯',
-    titulo: 'Rodadas Especiais (4ª e 8ª)',
+    titulo: 'Rodadas Especiais (4ª, 8ª e 12ª)',
     itens: [
-      'Disputa entre times — sem subida/descida',
-      'Capitães = 2 primeiros da classificação geral',
-      'Draft na sexta-feira anterior ao jogo',
-      'Vitória = saldo de games | Derrota = 0 pontos',
-      'Time vencedor: 40 pts por jogador + 3 por vitória individual',
-      'Time perdedor: 10 pts por jogador + 3 por vitória individual',
-    ]
-  },
-  {
-    icon: '🔚',
-    titulo: '12ª Rodada',
-    itens: [
+      'A rodada acontece normalmente, dividida em Ouro e Prata como qualquer outra',
+      'Sobe e desce valem igual a uma rodada normal',
       'Pontuação dobrada',
-      'Divisão normal entre Ouro e Prata',
+      'Tabela única de colocação (1º ao 12º) vale igualmente para Ouro e Prata — não existe tabela separada nesses dias',
+    ],
+    tabela: [
+      ['1º', '50 pts', '+6 por vitória'],
+      ['2º', '44 pts', '+6 por vitória'],
+      ['3º', '40 pts', '+6 por vitória'],
+      ['4º', '36 pts', '+6 por vitória'],
+      ['5º', '32 pts', '+6 por vitória'],
+      ['6º', '28 pts', '+6 por vitória'],
+      ['7º', '24 pts', '+6 por vitória'],
+      ['8º', '20 pts', '+6 por vitória'],
+      ['9º ao 12º', '16 pts', '+6 por vitória'],
     ]
   },
   {
@@ -103,8 +104,9 @@ const secoes = [
     titulo: 'Pontualidade e Ausência',
     itens: [
       'Jogos iniciam às 08h00 com tolerância de 10 minutos',
-      '2 atrasos = suspensão na rodada seguinte',
-      'Falta sem aviso e sem substituto = suspensão de 2 rodadas',
+      '1º atraso: notificação de atraso',
+      '2 atrasos acumulados: suspensão de 1 rodada',
+      'Falta sem aviso, justificativa ou substituto: suspensão de 2 rodadas',
     ]
   },
   {
@@ -116,8 +118,8 @@ const secoes = [
     ]
   },
   {
-    icon: '❄️',
-    titulo: 'Bônus de Inverno',
+    icon: '🌸',
+    titulo: 'Bônus de Primavera',
     itens: [
       'Campeões da rodada (Ouro e Prata) não pagam a quadra',
       'O valor é dividido entre os demais participantes',
@@ -139,7 +141,7 @@ export default function Regulamento({ onFechar }) {
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: ouro, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: 2, textTransform: 'uppercase' }}>
             📋 Regulamento
           </h1>
-          <div style={{ fontSize: 12, color: '#7fb89a', marginTop: 2 }}>Torneio de Inverno 2026</div>
+          <div style={{ fontSize: 12, color: '#7fb89a', marginTop: 2 }}>Torneio de Primavera 2026</div>
         </div>
       </div>
 
