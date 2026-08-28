@@ -6,8 +6,7 @@ import DetalhadoRodadas from './DetalhadoRodadas'
 import CalendarioTemporada from './CalendarioTemporada'
 import { acessivelClique } from '../lib/a11y'
 import { buscarClassificacaoTemporadaAtual, listarLigas } from '../lib/temporada'
-
-const HISTORICO_TOTAL = '__total__'
+import SeletorLiga, { HISTORICO_TOTAL } from '../components/SeletorLiga'
 
 export default function Classificacao() {
   const [modoDescarte, setModoDescarte] = useState(false)
@@ -93,20 +92,7 @@ export default function Classificacao() {
       </div>
 
       {/* Seletor: cada liga separada, ou Histórico Total unificado */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px', overflowX: 'auto' }}>
-        {[
-          ...ligas.map((l, i) => ({ key: l, label: i === 0 ? `📅 ${l}` : `📜 ${l}` })),
-          { key: HISTORICO_TOTAL, label: '🏆 Histórico Total' },
-        ].map(({ key, label }) => (
-          <button key={key} onClick={() => setSelecao(key)} style={{
-            flex: '0 0 auto', padding: '10px 14px', border: 'none', borderRadius: '8px',
-            background: selecao === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
-            color: selecao === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
-            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap'
-          }}>{label}</button>
-        ))}
-      </div>
+      <SeletorLiga ligas={ligas} selecao={selecao} onSelecionar={setSelecao} />
 
       {/* Toggle Descarte */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>

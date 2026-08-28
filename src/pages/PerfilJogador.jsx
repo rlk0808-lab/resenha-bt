@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { acessivelClique } from '../lib/a11y'
 import { calcularStatsDeJogos, DADOS_H2H_VAZIOS, ehJogador } from '../lib/h2h'
-import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
+import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual, listarLigas } from '../lib/temporada'
 import { BADGE_INFO } from '../lib/badges'
 import { escaparValorFiltroOr } from '../lib/postgrestFiltro'
 import { buscarPunicoesLiga, contarAtrasos, suspensaoAtiva } from '../lib/punicoes'
+import SeletorLiga, { HISTORICO_TOTAL } from '../components/SeletorLiga'
 
 const ouro = '#c9a227'
 const borda = '#2a5a3a'
@@ -16,15 +17,16 @@ export default function PerfilJogador() {
   const navigate = useNavigate()
   const [jogador, setJogador] = useState(null)
   const [jogadorAtual, setJogadorAtual] = useState(null)
-  const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
+  const [ligas, setLigas] = useState([]) // mais recente primeiro; ligas[0] = atual
+  const [selecao, setSelecao] = useState(null) // nome da liga, ou HISTORICO_TOTAL
   const [modoDescarte, setModoDescarte] = useState(false)
-  const [ligaAtualNome, setLigaAtualNome] = useState(null)
   const [pontosTotal, setPontosTotal] = useState(0)
   const [pontosTotalDescarte, setPontosTotalDescarte] = useState(0)
-  const [pontosAtual, setPontosAtual] = useState(0)
+  const [pontosAtual, setPontosAtual] = useState(0) // pontos da liga selecionada
   const [pontosAtualDescarte, setPontosAtualDescarte] = useState(0)
   const [dadosTotal, setDadosTotal] = useState(DADOS_H2H_VAZIOS)
-  const [dadosAtual, setDadosAtual] = useState(DADOS_H2H_VAZIOS)
+  const [dadosAtual, setDadosAtual] = useState(DADOS_H2H_VAZIOS) // dados da liga selecionada
+  const [jogosComPlacar, setJogosComPlacar] = useState([])
   const [badges, setBadges] = useState([])
   const [h2hAberto, setH2hAberto] = useState(null)
   const [parceiroAberto, setParceiroAberto] = useState(null)
@@ -45,19 +47,16 @@ export default function PerfilJogador() {
     if (!jogadorData) { setLoading(false); return }
     setJogador(jogadorData)
 
-    const [{ data: pts }, { data: totalDescarte }, liga, rodadaIdsAtual, statsAtualJog, statsAtualJogDescarte] = await Promise.all([
+    const [{ data: pts }, { data: totalDescarte }, liga, ls] = await Promise.all([
       supabase.from('pontuacao').select('pontos').eq('jogador_id', id),
       supabase.from('classificacao_com_descarte').select('pontos').eq('id', id).limit(1),
       buscarLigaAtual(),
-      buscarRodadaIdsLigaAtual(),
-      buscarStatsJogadorTemporadaAtual(id),
-      buscarStatsJogadorTemporadaAtual(id, { comDescarte: true }),
+      listarLigas(),
     ])
     setPontosTotal(pts?.reduce((s, p) => s + (p.pontos || 0), 0) || 0)
     setPontosTotalDescarte(totalDescarte?.[0]?.pontos || 0)
-    setLigaAtualNome(liga)
-    setPontosAtual(statsAtualJog.pontos_total)
-    setPontosAtualDescarte(statsAtualJogDescarte.pontos_total)
+    setLigas(ls)
+    setSelecao(ls[0] || HISTORICO_TOTAL)
 
     if (liga) {
       const [punicoesLiga, { data: rodadaAtualData }] = await Promise.all([
@@ -82,10 +81,9 @@ export default function PerfilJogador() {
     const { data: jogos } = await supabase.from('jogos').select('*')
       .or(`dupla_a_1.eq.${nomeFiltro},dupla_a_2.eq.${nomeFiltro},dupla_b_1.eq.${nomeFiltro},dupla_b_2.eq.${nomeFiltro},dupla_a_1_id.eq.${id},dupla_a_2_id.eq.${id},dupla_b_1_id.eq.${id},dupla_b_2_id.eq.${id}`)
 
-    const jogosComPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
-    setDadosTotal(calcularStatsDeJogos(jogosComPlacar, jogadorData.nome, jogadorData.id))
-    const jogosLigaAtual = jogosComPlacar.filter(j => rodadaIdsAtual.has(j.rodada_id))
-    setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, jogadorData.nome, jogadorData.id))
+    const comPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
+    setDadosTotal(calcularStatsDeJogos(comPlacar, jogadorData.nome, jogadorData.id))
+    setJogosComPlacar(comPlacar)
 
     setLoading(false)
   }
@@ -93,14 +91,32 @@ export default function PerfilJogador() {
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { carregarPerfil() }, [id])
 
+  // Reage à liga selecionada — cobre liga atual ou qualquer liga passada,
+  // não só "atual/total" como antes. HISTORICO_TOTAL já é coberto pelos
+  // totais calculados uma vez em carregarPerfil acima.
+  useEffect(() => {
+    if (!selecao || selecao === HISTORICO_TOTAL || !jogador) return
+    async function carregarSelecao() {
+      const [statsSel, statsSelDescarte, rodadaIdsSel] = await Promise.all([
+        buscarStatsJogadorTemporadaAtual(id, { liga: selecao }),
+        buscarStatsJogadorTemporadaAtual(id, { comDescarte: true, liga: selecao }),
+        buscarRodadaIdsLigaAtual(selecao),
+      ])
+      setPontosAtual(statsSel.pontos_total)
+      setPontosAtualDescarte(statsSelDescarte.pontos_total)
+      setDadosAtual(calcularStatsDeJogos(jogosComPlacar.filter(j => rodadaIdsSel.has(j.rodada_id)), jogador.nome, jogador.id))
+    }
+    carregarSelecao()
+  }, [selecao, jogador, jogosComPlacar, id])
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="spinner" /></div>
   if (!jogador) return <div><button onClick={() => navigate(-1)} style={btnVoltar}>← Voltar</button><p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Jogador não encontrado.</p></div>
 
-  const dados = periodo === 'atual' ? dadosAtual : dadosTotal
+  const dados = selecao === HISTORICO_TOTAL ? dadosTotal : dadosAtual
   const { jogos: jogosDetalhados, parceiros, adversarios } = dados
-  const pontos = periodo === 'atual'
-    ? (modoDescarte ? pontosAtualDescarte : pontosAtual)
-    : (modoDescarte ? pontosTotalDescarte : pontosTotal)
+  const pontos = selecao === HISTORICO_TOTAL
+    ? (modoDescarte ? pontosTotalDescarte : pontosTotal)
+    : (modoDescarte ? pontosAtualDescarte : pontosAtual)
 
   // H2H com jogador atual
   const nomeAtual = jogadorAtual?.nome
@@ -190,21 +206,8 @@ export default function PerfilJogador() {
         </div>
       </div>
 
-      {/* Tabs Temporada Atual / Total */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
-        {[
-          { key: 'atual', label: ligaAtualNome ? `📅 ${ligaAtualNome}` : '📅 Temporada Atual' },
-          { key: 'total', label: '🏆 Carreira Total' },
-        ].map(({ key, label }) => (
-          <button key={key} onClick={() => setPeriodo(key)} style={{
-            flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
-            background: periodo === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
-            color: periodo === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
-            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s'
-          }}>{label}</button>
-        ))}
-      </div>
+      {/* Seletor: liga atual, cada liga passada, ou carreira total */}
+      <SeletorLiga ligas={ligas} selecao={selecao} onSelecionar={setSelecao} />
 
       {/* Toggle Descarte */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>

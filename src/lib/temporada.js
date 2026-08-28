@@ -96,8 +96,8 @@ export async function buscarClassificacaoTemporadaAtual({ comDescarte = false, l
 // Stats de um único jogador na temporada atual (equivalente a stats_jogador,
 // mas escopado à liga atual). Reaproveita o cálculo da classificação inteira
 // porque a posição de um jogador depende de todo mundo.
-export async function buscarStatsJogadorTemporadaAtual(jogadorId, { comDescarte = false } = {}) {
-  const { liga, lista } = await buscarClassificacaoTemporadaAtual({ comDescarte })
+export async function buscarStatsJogadorTemporadaAtual(jogadorId, { comDescarte = false, liga: ligaParam = null } = {}) {
+  const { liga, lista } = await buscarClassificacaoTemporadaAtual({ comDescarte, liga: ligaParam })
   const jogador = lista.find(j => j.id === jogadorId)
   return {
     liga,
@@ -123,11 +123,21 @@ export async function buscarRodadaIdsLigaAtual(ligaParam = null) {
 // substituição de jogador (diferente de `jogos`, que guarda nome em texto
 // e pode ter sido reescrita retroativamente). Histórico total (todas as
 // ligas), mesmo recorte que a aba "Vitórias" de Estatísticas sempre teve.
-export async function buscarVitoriasGerais() {
+export async function buscarVitoriasGerais(liga = null) {
+  const rodadaIds = liga ? await buscarRodadaIdsLigaAtual(liga) : null
+
+  let queryPontuacao = supabase.from('pontuacao').select('jogador_id, rodada_id, pontos, vitorias')
+  let queryRanking = supabase.from('ranking_rodada').select('jogador_id, rodada_id, chave')
+  if (rodadaIds) {
+    const ids = [...rodadaIds]
+    queryPontuacao = queryPontuacao.in('rodada_id', ids)
+    queryRanking = queryRanking.in('rodada_id', ids)
+  }
+
   const [{ data: jogadoresRows }, { data: pontuacaoRows }, { data: rankingRows }] = await Promise.all([
     supabase.from('jogadores').select('id, nome, foto_url'),
-    supabase.from('pontuacao').select('jogador_id, rodada_id, pontos, vitorias'),
-    supabase.from('ranking_rodada').select('jogador_id, rodada_id, chave'),
+    queryPontuacao,
+    queryRanking,
   ])
 
   const chavePorLinha = {}

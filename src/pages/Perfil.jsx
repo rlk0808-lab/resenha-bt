@@ -4,22 +4,25 @@ import { supabase } from '../lib/supabase'
 import { registrarNotificacoes, verificarNotificacoes } from '../lib/useNotificacoes'
 import { BADGE_INFO } from '../lib/badges'
 import { acessivelClique } from '../lib/a11y'
-import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual } from '../lib/temporada'
+import { buscarLigaAtual, buscarRodadaIdsLigaAtual, buscarStatsJogadorTemporadaAtual, listarLigas } from '../lib/temporada'
 import { calcularStatsDeJogos, DADOS_H2H_VAZIOS, ehJogador } from '../lib/h2h'
 import { escaparValorFiltroOr } from '../lib/postgrestFiltro'
 import { buscarPunicoesLiga, contarAtrasos, suspensaoAtiva } from '../lib/punicoes'
+import SeletorLiga, { HISTORICO_TOTAL } from '../components/SeletorLiga'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
 
 export default function Perfil() {
   const [perfil, setPerfil] = useState(null)
-  const [periodo, setPeriodo] = useState('atual') // 'atual' | 'total'
+  const [ligas, setLigas] = useState([]) // mais recente primeiro; ligas[0] = atual
+  const [selecao, setSelecao] = useState(null) // nome da liga, ou HISTORICO_TOTAL
   const [ligaAtualNome, setLigaAtualNome] = useState(null)
   const [statsTotal, setStatsTotal] = useState(null)
-  const [statsAtual, setStatsAtual] = useState(null)
+  const [statsAtual, setStatsAtual] = useState(null) // stats da liga selecionada (não só a atual)
   const [dadosTotal, setDadosTotal] = useState(DADOS_H2H_VAZIOS)
-  const [dadosAtual, setDadosAtual] = useState(DADOS_H2H_VAZIOS)
+  const [dadosAtual, setDadosAtual] = useState(DADOS_H2H_VAZIOS) // dados da liga selecionada
+  const [jogosComPlacar, setJogosComPlacar] = useState([])
   const [temporadas, setTemporadas] = useState([])
   const [badges, setBadges] = useState([])
   const [h2hAberto, setH2hAberto] = useState(null)
@@ -48,13 +51,13 @@ export default function Perfil() {
           .from('stats_jogador').select('*').eq('jogador_id', p.id).limit(1)
         setStatsTotal(s?.[0] || null)
 
-        const [liga, rodadaIdsAtual, statsAtualJog] = await Promise.all([
+        const [liga, ls] = await Promise.all([
           buscarLigaAtual(),
-          buscarRodadaIdsLigaAtual(),
-          buscarStatsJogadorTemporadaAtual(p.id),
+          listarLigas(),
         ])
         setLigaAtualNome(liga)
-        setStatsAtual(statsAtualJog)
+        setLigas(ls)
+        setSelecao(ls[0] || HISTORICO_TOTAL)
 
         if (liga) {
           const [punicoesLiga, { data: rodadaAtualData }] = await Promise.all([
@@ -89,10 +92,9 @@ export default function Perfil() {
         const { data: jogos } = await supabase.from('jogos').select('*')
           .or(`dupla_a_1.eq.${nomeFiltro},dupla_a_2.eq.${nomeFiltro},dupla_b_1.eq.${nomeFiltro},dupla_b_2.eq.${nomeFiltro},dupla_a_1_id.eq.${p.id},dupla_a_2_id.eq.${p.id},dupla_b_1_id.eq.${p.id},dupla_b_2_id.eq.${p.id}`)
 
-        const jogosComPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
-        setDadosTotal(calcularStatsDeJogos(jogosComPlacar, p.nome, p.id))
-        const jogosLigaAtual = jogosComPlacar.filter(j => rodadaIdsAtual.has(j.rodada_id))
-        setDadosAtual(calcularStatsDeJogos(jogosLigaAtual, p.nome, p.id))
+        const comPlacar = (jogos || []).filter(j => j.placar_a !== null && j.placar_b !== null)
+        setDadosTotal(calcularStatsDeJogos(comPlacar, p.nome, p.id))
+        setJogosComPlacar(comPlacar)
       }
 
       const notifOk = await verificarNotificacoes()
@@ -101,6 +103,22 @@ export default function Perfil() {
     }
     load()
   }, [])
+
+  // Reage à liga selecionada no seletor — cobre tanto a liga atual quanto
+  // qualquer liga passada, não só "atual/total" como antes. HISTORICO_TOTAL
+  // já é coberto por statsTotal/dadosTotal (calculados uma vez no load acima).
+  useEffect(() => {
+    if (!selecao || selecao === HISTORICO_TOTAL || !perfil) return
+    async function carregarSelecao() {
+      const [statsSel, rodadaIdsSel] = await Promise.all([
+        buscarStatsJogadorTemporadaAtual(perfil.id, { liga: selecao }),
+        buscarRodadaIdsLigaAtual(selecao),
+      ])
+      setStatsAtual(statsSel)
+      setDadosAtual(calcularStatsDeJogos(jogosComPlacar.filter(j => rodadaIdsSel.has(j.rodada_id)), perfil.nome, perfil.id))
+    }
+    carregarSelecao()
+  }, [selecao, perfil, jogosComPlacar])
 
   async function compartilharBadge(tipo, rodadaId) {
     if (!perfil) return
@@ -159,9 +177,9 @@ export default function Perfil() {
     </div>
   )
 
-  const dados = periodo === 'atual' ? dadosAtual : dadosTotal
+  const dados = selecao === HISTORICO_TOTAL ? dadosTotal : dadosAtual
   const { jogos: jogosDetalhados, parceiros, adversarios, melhorDupla, sequencia } = dados
-  const statsAtivos = periodo === 'atual' ? statsAtual : statsTotal
+  const statsAtivos = selecao === HISTORICO_TOTAL ? statsTotal : statsAtual
 
   // Vitórias/derrotas/aproveitamento sempre recalculados dos jogos do período ativo
   const totalJogosReal = jogosDetalhados?.length || 0
@@ -261,21 +279,8 @@ export default function Perfil() {
         </div>
       )}
 
-      {/* Tabs Temporada Atual / Total */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
-        {[
-          { key: 'atual', label: ligaAtualNome ? `📅 ${ligaAtualNome}` : '📅 Temporada Atual' },
-          { key: 'total', label: '🏆 Carreira Total' },
-        ].map(({ key, label }) => (
-          <button key={key} onClick={() => setPeriodo(key)} style={{
-            flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
-            background: periodo === key ? 'linear-gradient(135deg, #f5c518, #c9a010)' : 'transparent',
-            color: periodo === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-            fontFamily: "'Barlow Condensed', sans-serif", fontSize: '13px', fontWeight: 700,
-            letterSpacing: '0.5px', cursor: 'pointer', transition: 'all 0.2s'
-          }}>{label}</button>
-        ))}
-      </div>
+      {/* Seletor: liga atual, cada liga passada, ou carreira total */}
+      <SeletorLiga ligas={ligas} selecao={selecao} onSelecionar={setSelecao} />
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>

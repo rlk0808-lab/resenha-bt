@@ -4,8 +4,7 @@ import { supabase } from '../lib/supabase'
 import { BADGE_INFO } from '../lib/badges'
 import { buscarVitoriasGerais, buscarClassificacaoTemporadaAtual, buscarRodadaIdsLigaAtual, listarLigas } from '../lib/temporada'
 import { acessivelClique } from '../lib/a11y'
-
-const HISTORICO_TOTAL = '__total__'
+import SeletorLiga, { HISTORICO_TOTAL } from '../components/SeletorLiga'
 
 // Agrega jogos por jogador (jogos/vitórias/saldo), casando preferencialmente
 // por dupla_x_id (ver migration 20260816120000_jogos_jogador_id.sql) e caindo
@@ -53,7 +52,7 @@ export default function Stats() {
   const [jogadores, setJogadores] = useState([])
   const [vitoriasGerais, setVitoriasGerais] = useState([])
   const [ligas, setLigas] = useState([]) // mais recente primeiro; ligas[0] = atual
-  const [relatorioLiga, setRelatorioLiga] = useState(null) // nome da liga, ou HISTORICO_TOTAL
+  const [selecao, setSelecao] = useState(null) // nome da liga, ou HISTORICO_TOTAL — vale pra página inteira, não só o Relatório
   const [classificacaoRelatorio, setClassificacaoRelatorio] = useState([])
   const [rodadaIdsRelatorio, setRodadaIdsRelatorio] = useState(new Set())
   const [carregandoRelatorio, setCarregandoRelatorio] = useState(true)
@@ -66,7 +65,7 @@ export default function Stats() {
     async function carregar() {
       const { data: b } = await supabase
         .from('badges')
-        .select('tipo, jogadores(nome, foto_url)')
+        .select('tipo, rodada_id, jogadores(nome, foto_url)')
       setBadges(b || [])
 
       const { data: jogos } = await supabase
@@ -78,54 +77,65 @@ export default function Stats() {
 
       const { data: p } = await supabase
         .from('pontuacao')
-        .select('pontos, jogador_id, jogadores(nome)')
+        .select('pontos, jogador_id, rodada_id, jogadores(nome)')
       setPontuacao(p || [])
 
       const { data: jogs } = await supabase.from('jogadores').select('id, nome, foto_url, chave')
       setJogadores(jogs || [])
 
-      const [vitGerais, ls] = await Promise.all([
-        buscarVitoriasGerais(),
-        listarLigas(),
-      ])
-      setVitoriasGerais(vitGerais)
+      const ls = await listarLigas()
       setLigas(ls)
-      setRelatorioLiga(ls[0] || HISTORICO_TOTAL)
+      setSelecao(ls[0] || HISTORICO_TOTAL)
 
       setLoading(false)
     }
     carregar()
   }, [])
 
+  // Reage à liga selecionada — escopa classificação, vitórias gerais e o
+  // conjunto de rodada_ids usado pra filtrar jogos/pontuação/badges de TODAS
+  // as abas (não só o Relatório).
   useEffect(() => {
-    if (!relatorioLiga) return
-    async function carregarRelatorio() {
+    if (!selecao) return
+    async function carregarEscopo() {
       setCarregandoRelatorio(true)
-      if (relatorioLiga === HISTORICO_TOTAL) {
-        const { data } = await supabase.from('classificacao').select('*').order('posicao', { ascending: true })
+      if (selecao === HISTORICO_TOTAL) {
+        const [{ data }, vitGerais] = await Promise.all([
+          supabase.from('classificacao').select('*').order('posicao', { ascending: true }),
+          buscarVitoriasGerais(),
+        ])
         setClassificacaoRelatorio(data || [])
         setRodadaIdsRelatorio(null) // null = sem filtro, considera todas as rodadas
+        setVitoriasGerais(vitGerais)
       } else {
-        const [{ lista }, rodIds] = await Promise.all([
-          buscarClassificacaoTemporadaAtual({ liga: relatorioLiga }),
-          buscarRodadaIdsLigaAtual(relatorioLiga),
+        const [{ lista }, rodIds, vitGerais] = await Promise.all([
+          buscarClassificacaoTemporadaAtual({ liga: selecao }),
+          buscarRodadaIdsLigaAtual(selecao),
+          buscarVitoriasGerais(selecao),
         ])
         setClassificacaoRelatorio(lista)
         setRodadaIdsRelatorio(rodIds)
+        setVitoriasGerais(vitGerais)
       }
       setCarregandoRelatorio(false)
     }
-    carregarRelatorio()
-  }, [relatorioLiga])
+    carregarEscopo()
+  }, [selecao])
 
   function toggleExpandido(key) {
     setExpandido(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
+  // Escopo pela liga selecionada — rodadaIdsRelatorio null = Histórico Total
+  // (sem filtro); usado por todas as abas, não só o Relatório.
+  const jogosEscopo = rodadaIdsRelatorio ? jogos.filter(j => rodadaIdsRelatorio.has(j.rodada_id)) : jogos
+  const pontuacaoEscopo = rodadaIdsRelatorio ? pontuacao.filter(p => rodadaIdsRelatorio.has(p.rodada_id)) : pontuacao
+  const badgesEscopo = rodadaIdsRelatorio ? badges.filter(b => rodadaIdsRelatorio.has(b.rodada_id)) : badges
+
   // Agrupa badges por tipo
   const rankingBadges = Object.entries(BADGE_INFO).map(([tipo, info]) => {
     const jogadoresComBadge = {}
-    badges.filter(b => b.tipo === tipo).forEach(b => {
+    badgesEscopo.filter(b => b.tipo === tipo).forEach(b => {
       const nome = b.jogadores?.nome
       if (!nome) return
       if (!jogadoresComBadge[nome]) jogadoresComBadge[nome] = { nome, foto: b.jogadores?.foto_url, count: 0 }
@@ -145,7 +155,7 @@ export default function Stats() {
   // equivalente em `pontuacao`/`ranking_rodada`, então continua vindo de
   // `jogos`, agora protegido pela correção da substituição de jogador)
   const calcPorChave = (chave) => {
-    const jogosChave = chave === 'todos' ? jogos : jogos.filter(j => j.chave === chave)
+    const jogosChave = chave === 'todos' ? jogosEscopo : jogosEscopo.filter(j => j.chave === chave)
 
     // % de vitórias
     const pctMap = {}
@@ -223,7 +233,7 @@ export default function Stats() {
 
   // Média de pontos por rodada (da tabela pontuacao — sempre por jogador_id)
   const mediaPontos = {}
-  pontuacao.forEach(p => {
+  pontuacaoEscopo.forEach(p => {
     const nome = p.jogadores?.nome
     if (!nome || !p.jogador_id) return
     if (!mediaPontos[p.jogador_id]) mediaPontos[p.jogador_id] = { nome, total: 0, rodadas: 0 }
@@ -238,7 +248,7 @@ export default function Stats() {
 
   // Pneu — conta quantas vezes cada jogador tomou 6x0
   const pneuCount = {}
-  jogos.forEach(j => {
+  jogosEscopo.forEach(j => {
     const perdeuA = j.placar_a === 0 && j.placar_b === 6
     const perdeuB = j.placar_b === 0 && j.placar_a === 6
     if (perdeuA) [j.dupla_a_1, j.dupla_a_2].filter(Boolean).forEach(n => { pneuCount[n] = (pneuCount[n] || 0) + 1 })
@@ -252,10 +262,7 @@ export default function Stats() {
   jogadores.forEach(j => { nomeParaId[j.nome] = j.id })
 
   const baseRelatorio = classificacaoRelatorio
-  const jogosEscopoRelatorio = relatorioLiga === HISTORICO_TOTAL
-    ? jogos
-    : jogos.filter(j => rodadaIdsRelatorio?.has(j.rodada_id))
-  const porJogadorRelatorio = calcJogosPorJogador(jogosEscopoRelatorio, nomeParaId)
+  const porJogadorRelatorio = calcJogosPorJogador(jogosEscopo, nomeParaId)
 
   const relatorioLista = baseRelatorio.map(j => {
     const extra = porJogadorRelatorio[j.id] || { jogos: 0, vitorias: 0, saldo: 0 }
@@ -284,7 +291,7 @@ export default function Stats() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    const sufixo = relatorioLiga === HISTORICO_TOTAL ? 'historico_total' : relatorioLiga
+    const sufixo = selecao === HISTORICO_TOTAL ? 'historico_total' : selecao
     a.download = `relatorio_estatisticas_${sufixo.replace(/\s+/g, '_')}.csv`
     a.click()
     URL.revokeObjectURL(url)
@@ -304,6 +311,9 @@ export default function Stats() {
           📊 ESTATÍSTICAS
         </div>
       </div>
+
+      {/* Seletor de liga — vale pra todas as abas abaixo */}
+      <SeletorLiga ligas={ligas} selecao={selecao} onSelecionar={setSelecao} />
 
       {/* Abas */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -449,7 +459,9 @@ export default function Stats() {
           {/* Média de pontos — sempre geral */}
           <div className="card" style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#c9a227', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>📈 Média de Pontos por Rodada (mín. 3)</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 10 }}>Considera todas as rodadas disputadas</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 10 }}>
+              {selecao === HISTORICO_TOTAL ? 'Considera todas as rodadas disputadas' : `Rodadas de "${selecao}"`}
+            </div>
             {rankingMedia.map((j, idx) => (
               <div key={j.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: idx < rankingMedia.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                 <div style={{ width: 20, fontSize: 12, color: idx < 3 ? '#c9a227' : 'rgba(255,255,255,0.3)', textAlign: 'center' }}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx+1}</div>
@@ -494,20 +506,7 @@ export default function Stats() {
 
       {aba === 'relatorio' && (
         <div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: 8, flex: 1, overflowX: 'auto' }}>
-              {[
-                ...ligas.map((l, i) => ({ key: l, label: i === 0 ? `📅 ${l}` : `📜 ${l}` })),
-                { key: HISTORICO_TOTAL, label: '🏆 Histórico Total' },
-              ].map(({ key, label }) => (
-                <button key={key} onClick={() => setRelatorioLiga(key)} style={{
-                  flex: '0 0 auto', padding: '9px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-                  whiteSpace: 'nowrap',
-                  background: relatorioLiga === key ? '#c9a227' : 'rgba(255,255,255,0.06)',
-                  color: relatorioLiga === key ? '#0d2b1a' : 'rgba(255,255,255,0.5)',
-                }}>{label}</button>
-              ))}
-            </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button onClick={exportarRelatorioCSV} disabled={relatorioLista.length === 0} style={{
               background: '#c9a227', border: 'none', color: '#0d2b1a', borderRadius: 8, padding: '9px 14px',
               cursor: relatorioLista.length === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700,

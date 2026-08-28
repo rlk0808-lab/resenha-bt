@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { acessivelClique } from '../lib/a11y'
-import { buscarLigaAtual } from '../lib/temporada'
+import { listarLigas } from '../lib/temporada'
+import SeletorLiga from '../components/SeletorLiga'
 
 const CORES = [
   '#f5c518', '#2ecc71', '#3498db', '#e74c3c', '#9b59b6',
@@ -25,18 +26,21 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
   const [loading, setLoading] = useState(true)
   const [tooltip, setTooltip] = useState(null)
   const [modo, setModo] = useState('pontos')
+  const [ligas, setLigas] = useState([]) // mais recente primeiro; ligas[0] = atual
+  const [selecao, setSelecao] = useState(null) // nome da liga (sem opção Histórico Total — ver abaixo)
 
-  async function carregar() {
+  async function carregar(liga) {
     setLoading(true)
 
-    // Escopado à liga atual: o número da rodada reinicia em 1 a cada temporada
-    // nova, então sem esse filtro uma "Rodada 1" da liga nova sobrescreveria
-    // os dados da "Rodada 1" da liga anterior no gráfico (mesma chave de mapa).
-    const ligaAtual = await buscarLigaAtual()
+    // Escopado à liga selecionada: o número da rodada reinicia em 1 a cada
+    // temporada nova, então sem esse filtro uma "Rodada 1" de uma liga
+    // sobrescreveria os dados da "Rodada 1" de outra no gráfico (mesma chave
+    // de mapa) — por isso não existe opção "Histórico Total" aqui, só liga
+    // atual ou uma liga passada específica por vez.
     const { data: rods } = await supabase
       .from('rodadas').select('id, numero, tipo')
       .eq('status', 'finalizada')
-      .eq('liga', ligaAtual)
+      .eq('liga', liga)
       .neq('tipo', 'qualify') // qualify não grava pontuacao — só poluiria o gráfico com um ponto zerado
       .order('numero', { ascending: true })
     setRodadas(rods || [])
@@ -133,8 +137,17 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
     setLoading(false)
   }
 
+  useEffect(() => {
+    async function initLigas() {
+      const ls = await listarLigas()
+      setLigas(ls)
+      setSelecao(ls[0] || null)
+    }
+    initLigas()
+  }, [])
+
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
-  useEffect(() => { carregar() }, [])
+  useEffect(() => { if (selecao) carregar(selecao) }, [selecao])
 
   function toggleJogador(id) {
     setSelecionados(prev =>
@@ -181,6 +194,9 @@ export default function Evolucao({ onFechar, jogadorAtualId }) {
           <div style={{ fontSize: 11, color: '#7fb89a', marginTop: 1 }}>Selecione até 6 atletas para comparar</div>
         </div>
       </div>
+
+      {/* Seletor de liga — sem "Histórico Total" (número de rodada reinicia por liga) */}
+      <SeletorLiga ligas={ligas} selecao={selecao} onSelecionar={setSelecao} incluirHistoricoTotal={false} />
 
       {/* Toggle de modo */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
