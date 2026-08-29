@@ -81,22 +81,14 @@ export default function Confirmacao({ session }) {
       }
     }
 
-    // Verifica se jogador jogou a ÚLTIMA rodada (normal ou especial)
+    // Verifica se jogador jogou a ÚLTIMA rodada (normal, especial ou qualify)
     if (jog && ultimaRodada) {
-      const { data: rankJog } = await supabase.from("ranking_rodada").select("id")
-        .eq("rodada_id", ultimaRodada.id).eq("jogador_id", jog.id).limit(1);
-      const jogouUltima = !!(rankJog && rankJog.length > 0);
+      const jogouUltima = await jogouRodada(jog.id, ultimaRodada);
       if (!jogouUltima && ultimaRodada.tipo === "especial") {
         // Não jogou a especial — verifica se jogou a normal anterior
         const rodAntNormal = anteriores?.find(r => r.tipo !== "especial") || null;
-        if (rodAntNormal) {
-          const { data: rankNormal } = await supabase.from("ranking_rodada").select("id")
-            .eq("rodada_id", rodAntNormal.id).eq("jogador_id", jog.id).limit(1);
-          const jogouNormal = !!(rankNormal && rankNormal.length > 0);
-          setJogouUltimaRodada(jogouNormal ? "especial" : false);
-        } else {
-          setJogouUltimaRodada(false);
-        }
+        const jogouNormal = rodAntNormal ? await jogouRodada(jog.id, rodAntNormal) : false;
+        setJogouUltimaRodada(jogouNormal ? "especial" : false);
       } else {
         setJogouUltimaRodada(jogouUltima);
       }
@@ -107,6 +99,25 @@ export default function Confirmacao({ session }) {
     }
 
     await carregarConfirmacoes(rodada.id, jog);
+  }
+
+  // Se jogou a rodada. O Qualify não grava ranking_rodada (não vale ponto,
+  // só define chave Ouro/Prata — ver processarQualify em Admin.jsx), então
+  // pra ele a participação é checada pelos jogos sorteados. Sem isso, todo
+  // mundo que jogou o Qualify aparecia como "não jogou a última rodada" e
+  // caía na lista de espera da Rodada 1 (bug relatado).
+  async function jogouRodada(jogadorId, rodada) {
+    if (!rodada) return false;
+    if (rodada.tipo === "qualify") {
+      const { data } = await supabase.from("jogos").select("id")
+        .eq("rodada_id", rodada.id)
+        .or(`dupla_a_1_id.eq.${jogadorId},dupla_a_2_id.eq.${jogadorId},dupla_b_1_id.eq.${jogadorId},dupla_b_2_id.eq.${jogadorId}`)
+        .limit(1);
+      return !!(data && data.length > 0);
+    }
+    const { data } = await supabase.from("ranking_rodada").select("id")
+      .eq("rodada_id", rodada.id).eq("jogador_id", jogadorId).limit(1);
+    return !!(data && data.length > 0);
   }
 
   async function carregarConfirmacoes(rodadaId, jog) {
