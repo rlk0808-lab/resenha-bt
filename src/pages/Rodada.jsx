@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { baixarIcs } from '../lib/calendario'
 import { acessivelClique } from '../lib/a11y'
 import { enviarPush } from '../lib/notificar'
-import { nomeRodada } from '../lib/rodada'
+import { nomeRodada, calcularRankingQualify, alvoOuroPorTotal } from '../lib/rodada'
 
 const ouro = '#c9a227'
 const prata = '#8e9eab'
@@ -149,6 +149,24 @@ export default function Rodada() {
       .order('chave', { ascending: true })
       .order('created_at', { ascending: true })
     setDetalheJogos(j || [])
+
+    if (rodada.tipo === 'qualify') {
+      // Qualify não grava ranking_rodada (não vale ponto de liga) — recalcula
+      // a classificação final a partir dos jogos, com os mesmos critérios de
+      // pontos/desempate de uma rodada normal, e separa Ouro/Prata do mesmo
+      // jeito que processarQualify() fez no Admin (ver lib/rodada.js).
+      const ranking = calcularRankingQualify(j || [])
+      const ouroAlvo = alvoOuroPorTotal(ranking.length)
+      setDetalheRanking({
+        ouro: ranking.slice(0, ouroAlvo).map((r, idx) => ({
+          nome: r.nome, pontos: null, pontosDia: r.pts, vitorias: r.vitorias, posicao: idx + 1, movimento: null,
+        })),
+        prata: ranking.slice(ouroAlvo).map((r, idx) => ({
+          nome: r.nome, pontos: null, pontosDia: r.pts, vitorias: r.vitorias, posicao: ouroAlvo + idx + 1, movimento: null,
+        })),
+      })
+      return
+    }
 
     const { data: rank } = await supabase
       .from('ranking_rodada')
@@ -558,7 +576,7 @@ export default function Rodada() {
                 <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 1 }}>
                   {j.vitorias}V · {j.pontosDia} pts dia
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: cor }}>{j.pontos} pts liga</div>
+                {j.pontos != null && <div style={{ fontSize: 15, fontWeight: 700, color: cor }}>{j.pontos} pts liga</div>}
               </div>
             </div>
           )

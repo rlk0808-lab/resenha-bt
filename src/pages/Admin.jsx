@@ -5,7 +5,7 @@
   import { acessivelClique } from "../lib/a11y";
   import { gerarSorteioQualify } from "../lib/sorteioQualify";
   import { proximoSabadoISO } from "../lib/prazo";
-  import { nomeRodada } from "../lib/rodada";
+  import { nomeRodada, calcularRankingQualify, alvoOuroPorTotal } from "../lib/rodada";
   import { enviarPush } from "../lib/notificar";
   import { buscarPunicoesLiga, contarAtrasos, suspensaoAtiva } from "../lib/punicoes";
 
@@ -379,13 +379,14 @@
       // (sem esse filtro, a 1a rodada de uma liga nova herdaria a Ouro/Prata da liga anterior)
       const { data: rodadasFinalizadas } = await supabase.from("rodadas").select("*")
         .eq("status", "finalizada").eq("liga", rodadaAlvo.liga).order("numero", { ascending: false });
-      // Especial E Qualify não geram ranking_rodada com chave ouro/prata — usá-los como
-      // referência faz rankOuro/rankPrata virem vazios e jogadoresOuro zerar, o que reseta a
-      // chave de todo mundo confirmado pra prata antes mesmo do "Ouro com 0 confirmados" abortar.
-      // Sem fallback pra rodadasFinalizadas[0]: se não achar nenhuma rodada normal anterior
-      // (ex: Rodada 1 logo após o Qualify), cai no branch "primeira rodada" (usa chave do banco,
-      // que o Qualify já deixou correta).
-      const rodAntNormal = rodadasFinalizadas?.find(r => r.tipo !== "especial" && r.tipo !== "qualify");
+      // Especial não separa por Ouro/Prata (times fixos, ver draft) — não serve de
+      // referência pra subida/descida. Qualify serve sim: essa é a Rodada 1 tratando o
+      // Qualify como se fosse uma rodada normal de verdade — quem da Ouro não confirma dá
+      // lugar ao próximo melhor colocado da Prata NO PRÓPRIO QUALIFY (ver rankAnt abaixo,
+      // que recalcula essa classificação porque o Qualify não grava ranking_rodada). Sem
+      // fallback pra rodadasFinalizadas[0] quando nada foi achado: cai no branch "primeira
+      // rodada" (usa chave do banco, que o Qualify já deixou correta).
+      const rodAntRef = rodadasFinalizadas?.find(r => r.tipo !== "especial");
 
       const nomeConfirmados = new Set(confirmacoes.map(c => c.jogadores?.nome));
       // Formato 24/28 -> Ouro sempre com 12; formato 32 -> Ouro expande para 16.
@@ -394,18 +395,34 @@
       let jogadoresOuro;
       let jogadoresPrata = [];
 
-      if (!rodAntNormal) {
+      if (!rodAntRef) {
         // Primeira rodada: usa chave do banco
         jogadoresOuro = confirmacoes.filter(c => c.jogadores?.chave === "ouro").map(c => c.jogadores?.nome);
         jogadoresPrata = confirmacoes.filter(c => c.jogadores?.chave === "prata").map(c => c.jogadores?.nome);
       } else {
-        const { data: rankAnt } = await supabase.from("ranking_rodada")
-          .select("*, jogadores(id, nome)")
-          .eq("rodada_id", rodAntNormal.id)
-          .order("posicao", { ascending: true });
+        let rankAnt;
+        if (rodAntRef.tipo === "qualify") {
+          // Qualify não grava ranking_rodada (não vale ponto de liga) — recalcula a
+          // classificação final a partir dos jogos, com os mesmos critérios de
+          // pontos/desempate de uma rodada normal (ver calcularRankingQualify).
+          const { data: jogosQualify } = await supabase.from("jogos").select("*").eq("rodada_id", rodAntRef.id);
+          const rankingQualify = calcularRankingQualify(jogosQualify || []);
+          const ouroAlvoQualify = alvoOuroPorTotal(rankingQualify.length);
+          rankAnt = rankingQualify.map((j, idx) => ({
+            posicao: idx + 1,
+            chave: idx < ouroAlvoQualify ? "ouro" : "prata",
+            jogadores: { nome: j.nome },
+          }));
+        } else {
+          const { data } = await supabase.from("ranking_rodada")
+            .select("*, jogadores(id, nome)")
+            .eq("rodada_id", rodAntRef.id)
+            .order("posicao", { ascending: true });
+          rankAnt = data || [];
+        }
 
-        const rankOuro = (rankAnt || []).filter(r => r.chave === "ouro");
-        const rankPrata = (rankAnt || []).filter(r => r.chave === "prata");
+        const rankOuro = rankAnt.filter(r => r.chave === "ouro");
+        const rankPrata = rankAnt.filter(r => r.chave === "prata");
 
         // Os 3 últimos da Ouro descem
         const ultimosOuro = rankOuro.slice(-3);
@@ -493,7 +510,7 @@
       // Confere se bateu exatamente no alvo do formato selecionado (12/12, 12/16 ou 16/16).
       // O sorteio só sabe montar chaves com exatamente 12 ou 16 jogadores — se não bateu,
       // é melhor avisar aqui do que travar mais adiante com "Erro ao gerar sorteio".
-      if (rodAntNormal && (jogadoresOuro.length !== ouroAlvo || jogadoresPrata.length !== prataAlvo)) {
+      if (rodAntRef && (jogadoresOuro.length !== ouroAlvo || jogadoresPrata.length !== prataAlvo)) {
         mostrarMensagem(
           `Formato ${formatoRodada.label} atletas esperava ${ouroAlvo} na Ouro e ${prataAlvo} na Prata, mas ficou ${jogadoresOuro.length}/${jogadoresPrata.length}. Ajuste as confirmações ou promova/substitua manualmente antes de fechar.`,
           "erro"
@@ -968,11 +985,24 @@
         else mostrarMensagem(`✅ ${substAusente} substituído por ${substReserva}.`);
       } else if (jogadorAusente.chave === "ouro") {
         const { data: rodAntData } = await supabase.from("rodadas").select("id,tipo").eq("status","finalizada").eq("liga", rodadaSelecionada.liga).order("numero",{ascending:false});
-        const rodAntNormal = rodAntData?.find(r => r.tipo !== "especial" && r.tipo !== "qualify");
-        if (!rodAntNormal) { mostrarMensagem("Rodada anterior não encontrada.", "erro"); setSubstProcessando(false); return; }
-        const { data: rankPrata } = await supabase.from("ranking_rodada")
-          .select("posicao, jogadores(nome)").eq("rodada_id", rodAntNormal.id).eq("chave", "prata")
-          .order("posicao", {ascending: true});
+        const rodAntRef = rodAntData?.find(r => r.tipo !== "especial");
+        if (!rodAntRef) { mostrarMensagem("Rodada anterior não encontrada.", "erro"); setSubstProcessando(false); return; }
+        let rankPrata;
+        if (rodAntRef.tipo === "qualify") {
+          // Qualify não grava ranking_rodada — recalcula a classificação final
+          // pra achar quem ficou na Prata (mesmos critérios de uma rodada normal).
+          const { data: jogosQualify } = await supabase.from("jogos").select("*").eq("rodada_id", rodAntRef.id);
+          const rankingQualify = calcularRankingQualify(jogosQualify || []);
+          const ouroAlvoQualify = alvoOuroPorTotal(rankingQualify.length);
+          rankPrata = rankingQualify.slice(ouroAlvoQualify).map((j, idx) => ({
+            posicao: ouroAlvoQualify + idx + 1, jogadores: { nome: j.nome },
+          }));
+        } else {
+          const { data } = await supabase.from("ranking_rodada")
+            .select("posicao, jogadores(nome)").eq("rodada_id", rodAntRef.id).eq("chave", "prata")
+            .order("posicao", {ascending: true});
+          rankPrata = data || [];
+        }
         const nomesNaPrata = new Set(jogosRodada.filter(j => j.chave === "prata").flatMap(j => [j.dupla_a_1,j.dupla_a_2,j.dupla_b_1,j.dupla_b_2].filter(Boolean)));
         const proximoQueSubiria = rankPrata?.find(r => {
           const nome = r.jogadores?.nome;
@@ -1258,35 +1288,12 @@
       setEncerrandoTemporada(false);
     }
 
-    // Tamanho da chave Ouro conforme o total de confirmados no qualify
-    // (24 -> 12, 28 -> 12, 32 -> 16 — igual aos formatos do fechamento normal)
-    function alvoOuroPorTotal(total) {
-      return total >= 32 ? 16 : 12;
-    }
-
-    // Ranking do qualify: chave única, sem times — soma vitórias + saldo de
-    // games (mesmo critério das rodadas especiais), só pra ordenar.
-    function calcularRankingQualify(jogosQualify) {
-      const stats = {};
-      const addJogador = (nome) => { if (nome && !stats[nome]) stats[nome] = { nome, vitorias: 0, saldo: 0 }; };
-      for (const jogo of jogosQualify) {
-        if (jogo.placar_a === null || jogo.placar_b === null) continue;
-        const { dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2, placar_a, placar_b } = jogo;
-        [dupla_a_1, dupla_a_2, dupla_b_1, dupla_b_2].forEach(addJogador);
-        const venceuA = placar_a > placar_b;
-        const saldo = Math.abs(placar_a - placar_b);
-        const vencedores = venceuA ? [dupla_a_1, dupla_a_2] : [dupla_b_1, dupla_b_2];
-        const perdedores = venceuA ? [dupla_b_1, dupla_b_2] : [dupla_a_1, dupla_a_2];
-        vencedores.filter(Boolean).forEach(n => { stats[n].vitorias += 1; stats[n].saldo += saldo; });
-        perdedores.filter(Boolean).forEach(n => { stats[n].saldo -= saldo; });
-      }
-      return Object.values(stats).sort((a, b) => b.vitorias !== a.vitorias ? b.vitorias - a.vitorias : b.saldo - a.saldo);
-    }
-
     // Processa o resultado do qualify: define chave Ouro/Prata de cada
-    // jogador pelo ranking (vitórias+saldo) e cria a Rodada 1 de verdade.
-    // Não grava nada em pontuacao/ranking_rodada/badges — o qualify não
-    // conta pra pontuação da temporada, só decide a chave inicial.
+    // jogador pelo ranking (mesmos critérios de pontos/desempate de uma
+    // rodada normal — ver calcularRankingQualify) e cria a Rodada 1 de
+    // verdade. Não grava nada em pontuacao/ranking_rodada/badges — o
+    // qualify não conta pra pontuação da temporada, só decide a chave
+    // inicial.
     async function processarQualify() {
       if (!rodadaSelecionada || rodadaSelecionada.tipo !== "qualify") return;
       setFechandoLista(true);
