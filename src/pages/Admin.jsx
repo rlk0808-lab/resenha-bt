@@ -1044,31 +1044,26 @@
         mostrarMensagem("Selecione um jogador existente ou informe o apelido para criar novo.", "erro");
         return;
       }
-      setAprovando(pendente.id);
-      let jogadorId = vinc.jogadorId;
-
-      if (vinc.tipo === "novo") {
-        if (!vinc.apelido?.trim()) { mostrarMensagem("Informe o apelido do novo jogador.", "erro"); setAprovando(null); return; }
-        const { error: erroNovo } = await supabase
-          .from("jogadores")
-          .insert({ nome: vinc.apelido.trim(), apelido: pendente.nome, chave: "prata", ativo: true, user_id: pendente.user_id });
-        if (erroNovo) {
-          const mensagemErro = erroNovo.code === "23505"
-            ? `Já existe um jogador chamado "${vinc.apelido.trim()}". Escolha outro apelido ou vincule ao jogador existente.`
-            : "Erro ao criar jogador: " + erroNovo.message;
-          mostrarMensagem(mensagemErro, "erro"); setAprovando(null); return;
-        }
-      } else {
-        const { error: erroVinculo } = await supabase
-          .from("jogadores")
-          .update({ user_id: pendente.user_id, apelido: pendente.nome })
-          .eq("id", jogadorId);
-        if (erroVinculo) { mostrarMensagem("Erro ao vincular: " + erroVinculo.message, "erro"); setAprovando(null); return; }
+      if (vinc.tipo === "novo" && !vinc.apelido?.trim()) {
+        mostrarMensagem("Informe o apelido do novo jogador.", "erro");
+        return;
       }
+      setAprovando(pendente.id);
 
-      const { error } = await supabase.from("cadastros_pendentes").update({ status: "aprovado" }).eq("id", pendente.id);
-      if (error) mostrarMensagem("Erro ao aprovar: " + error.message, "erro");
-      else {
+      const { error } = await supabase.rpc("aprovar_cadastro", {
+        p_pendente_id: pendente.id,
+        p_jogador_id: vinc.tipo === "novo" ? null : vinc.jogadorId,
+        p_novo_nome: vinc.tipo === "novo" ? vinc.apelido.trim() : null,
+      });
+
+      if (error) {
+        const mensagemErro = error.code === "23505"
+          ? `Já existe um jogador chamado "${vinc.apelido?.trim()}". Escolha outro apelido ou vincule ao jogador existente.`
+          : error.message === "cadastro_ja_processado"
+          ? "Esse cadastro já foi aprovado ou rejeitado (provavelmente por outro admin agora há pouco)."
+          : "Erro ao aprovar: " + error.message;
+        mostrarMensagem(mensagemErro, "erro");
+      } else {
         mostrarMensagem(`✅ ${pendente.nome} aprovado e vinculado!`);
         setVinculacoes(v => { const n = { ...v }; delete n[pendente.id]; return n; });
         carregarPendentes();
