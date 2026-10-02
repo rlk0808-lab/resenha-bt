@@ -4,6 +4,13 @@
 // divergir silenciosamente. Se o formato da liga mudar, atualize só aqui.
 export const VAGAS_LISTA_PRINCIPAL = 24
 
+// Toda liga da E2... (resenha-bt) tem sempre 12 rodadas. Home.jsx usava a
+// contagem de rodadas já criadas no banco como "total" (ex: "3/5"), o que
+// mostra quantas rodadas já existem, não quantas a temporada vai ter —
+// confuso pra quem acompanha o progresso da liga. Fixo aqui porque é
+// sempre 12, não um dado por liga.
+export const TOTAL_RODADAS_LIGA = 12
+
 // Formatos de rodada disponíveis. Admin.jsx usa isso pra fechar a lista de
 // verdade (prepararFechamento); Confirmacao.jsx usa pra mostrar a prévia de
 // chaves pro jogador (calcularPrevia). Antes vivia só dentro de Admin.jsx e

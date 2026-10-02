@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import Regulamento from './Regulamento'
 import { Calendar, Trophy, Users, CheckCircle } from 'lucide-react'
-import { VAGAS_LISTA_PRINCIPAL } from '../lib/constants'
+import { VAGAS_LISTA_PRINCIPAL, TOTAL_RODADAS_LIGA } from '../lib/constants'
 import { BADGE_INFO, BADGE_LEGENDA } from '../lib/badges'
 import { calcularPrazoConfirmacao } from '../lib/prazo'
 import { useCountdown, formatarRestante } from '../lib/useCountdown'
@@ -17,7 +17,6 @@ export default function Home() {
   const [proximaRodada, setProximaRodada] = useState(null)
   const [rodadaAtual, setRodadaAtual] = useState(null)
   const [ligaAtualNome, setLigaAtualNome] = useState(null)
-  const [totalRodadasLiga, setTotalRodadasLiga] = useState(0)
   const [confirmado, setConfirmado] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [confirmacaoId, setConfirmacaoId] = useState(null)
@@ -58,7 +57,6 @@ export default function Home() {
         const liga = maisRecente?.liga || null
         setLigaAtualNome(liga)
         const rodadasDaLiga = liga ? todasRodadas.filter(r => r.liga === liga) : []
-        setTotalRodadasLiga(rodadasDaLiga.length)
 
         // Suspensões ativas da liga atual (visíveis pra todos, não só o
         // suspenso) — bloqueio de "rodadaNumero" é o mesmo cálculo usado em
@@ -178,7 +176,7 @@ export default function Home() {
   }
 
   const rodadasFinalizadas = rodadaAtual?.numero || 0
-  const progresso = totalRodadasLiga > 0 ? (rodadasFinalizadas / totalRodadasLiga) * 100 : 0
+  const progresso = (rodadasFinalizadas / TOTAL_RODADAS_LIGA) * 100
   const restantePrazo = useCountdown(calcularPrazoConfirmacao(proximaRodada))
 
   if (loading) return (
@@ -366,7 +364,7 @@ export default function Home() {
               fontSize: '12px', color: 'rgba(255,255,255,0.4)',
               letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px'
             }}>Rodadas</div>
-            <div style={{ fontWeight: 700 }}>{rodadaAtual?.numero || 0} / {totalRodadasLiga || '—'}</div>
+            <div style={{ fontWeight: 700 }}>{rodadaAtual?.numero || 0} / {TOTAL_RODADAS_LIGA}</div>
           </div>
         </div>
         <div style={{
