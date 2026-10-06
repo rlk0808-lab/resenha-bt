@@ -10,6 +10,10 @@ export function calcularPrazoConfirmacao(rodada) {
   return quartaAntes
 }
 
+// Sábados (YYYY-MM-DD) em que não haverá rodada — proximoSabadoISO() pula
+// essas datas ao criar a próxima rodada.
+const DATAS_SEM_RODADA = ['2026-10-31']
+
 // Data (YYYY-MM-DD) do próximo sábado a partir de agora. Ancorado em meio-dia
 // local antes de calcular: se usasse a hora atual direto, uma ação feita à
 // noite (ex: perto da meia-noite) podia virar o dia seguinte ao converter
@@ -19,5 +23,8 @@ export function proximoSabadoISO() {
   const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 12, 0, 0)
   const diasParaSabado = (6 - hoje.getDay() + 7) % 7 || 7
   hoje.setDate(hoje.getDate() + diasParaSabado)
+  while (DATAS_SEM_RODADA.includes(hoje.toISOString().split('T')[0])) {
+    hoje.setDate(hoje.getDate() + 7)
+  }
   return hoje.toISOString().split('T')[0]
 }
