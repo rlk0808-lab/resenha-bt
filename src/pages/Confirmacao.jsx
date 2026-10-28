@@ -4,7 +4,7 @@ import { VAGAS_LISTA_PRINCIPAL, FORMATOS_RODADA } from "../lib/constants";
 import { calcularPrazoConfirmacao } from "../lib/prazo";
 import { useCountdown, formatarRestante } from "../lib/useCountdown";
 import { baixarIcs } from "../lib/calendario";
-import { enviarPush } from "../lib/notificar";
+import { enviarPush, avisarAdminsSaidaLista } from "../lib/notificar";
 import { nomeRodada } from "../lib/rodada";
 import { buscarPunicoesLiga, suspensaoAtiva } from "../lib/punicoes";
 
@@ -346,6 +346,9 @@ export default function Confirmacao({ session }) {
     if (error) {
       mostrarMensagem("Erro ao cancelar: " + error.message, "erro");
     } else {
+      if (confirmacao.status === "confirmado") {
+        await avisarAdminsSaidaLista({ rodada: rodadaAtual, promovidoJogadorId });
+      }
       if (promovidoJogadorId) {
         await notificarPromovido(promovidoJogadorId);
         mostrarMensagem("Confirmação cancelada. O próximo da espera foi promovido.", "info");

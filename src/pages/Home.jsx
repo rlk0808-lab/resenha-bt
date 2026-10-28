@@ -9,7 +9,7 @@ import { calcularPrazoConfirmacao } from '../lib/prazo'
 import { useCountdown, formatarRestante } from '../lib/useCountdown'
 import { acessivelClique } from '../lib/a11y'
 import { nomeRodada } from '../lib/rodada'
-import { enviarPush } from '../lib/notificar'
+import { enviarPush, avisarAdminsSaidaLista } from '../lib/notificar'
 import { buscarPunicoesLiga, suspensaoAtiva } from '../lib/punicoes'
 
 export default function Home() {
@@ -161,6 +161,8 @@ export default function Home() {
       setConfirmado(false)
       setConfirmacaoId(null)
       setTotalConfirmados(t => Math.max(0, t - 1))
+      // Esse botão só aparece pra quem está na lista principal (confirmado).
+      await avisarAdminsSaidaLista({ rodada: proximaRodada, promovidoJogadorId })
       if (promovidoJogadorId) {
         try {
           await enviarPush({
